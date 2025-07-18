@@ -11,12 +11,10 @@ import Accelerate
 import Combine
 import MediaPlayer
 
-@MainActor
 class AudioEngineManager: ObservableObject {
-  private var engine: AVAudioEngine = AVAudioEngine()
-  private var playerNode: AVAudioPlayerNode = AVAudioPlayerNode()
-  private var analyzer: AVAudioMixerNode = AVAudioMixerNode()
-
+  private var engine: AVAudioEngine?
+  private var player: AVAudioPlayerNode?
+  
   @Published var audioLevels: [Float] = Array(repeating: 0, count: 64)
   @Published var isPlaying = false
   @Published var currentTime: TimeInterval = 0
@@ -37,43 +35,45 @@ class AudioEngineManager: ObservableObject {
       print("Audio session error: \(error)")
     }
     
-    engine.attach(playerNode)
-    engine.attach(analyzer)
+    engine = AVAudioEngine()
     
-    engine.connect(playerNode, to: analyzer, format: nil)
-    engine.connect(analyzer, to: engine.mainMixerNode, format: nil)
+    guard let engine else { return }
     
-    analyzer.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-      self?.processAudioBuffer(buffer)
-    }
+    _ = engine.mainMixerNode
   }
   
   func play(_ mediaItem: MPMediaItem) {
-    guard let assetURL = mediaItem.assetURL else {
+    guard let url = mediaItem.assetURL else {
       print("No asset URL for media item")
       return
     }
     
-    stop()
+    player = AVAudioPlayerNode()
+    
+    guard let engine,
+          let player else { return }
     
     do {
-      audioFile = try AVAudioFile(forReading: assetURL)
+      audioFile = try AVAudioFile(forReading: url)
+      
       guard let audioFile else {
         print("Failed to create audio file")
         return
       }
       
+      engine.attach(player)
+      engine.connect(player, to: engine.mainMixerNode, format: audioFile.processingFormat)
+      
       duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+      
+      engine.prepare()
       
       if !engine.isRunning {
         try engine.start()
       }
       
-
-      playerNode.scheduleFile(audioFile, at: nil)
+      player.scheduleFile(audioFile, at: nil)
       
-      playerNode.play()
-
       DispatchQueue.main.async { [weak self] in
         self?.isPlaying = true
         self?.startDisplayLink()
@@ -85,22 +85,28 @@ class AudioEngineManager: ObservableObject {
         self?.stopDisplayLink()
       }
     }
+    
+    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: engine.mainMixerNode.outputFormat(forBus: 0)) { [weak self] buffer, _ in
+      self?.processAudioBuffer(buffer)
+    }
+    
+    player.play()
   }
   
   func pause() {
-    playerNode.pause()
+    player?.pause()
     isPlaying = false
     stopDisplayLink()
   }
   
   func resume() {
-    playerNode.play()
+    player?.play()
     isPlaying = true
     startDisplayLink()
   }
   
   func stop() {
-    playerNode.stop()
+    player?.stop()
     isPlaying = false
     currentTime = 0
     stopDisplayLink()
@@ -117,8 +123,8 @@ class AudioEngineManager: ObservableObject {
   }
   
   @objc func updateTime() {
-    guard let nodeTime = playerNode.lastRenderTime,
-          let playerTime = playerNode.playerTime(forNodeTime: nodeTime),
+    guard let nodeTime = player?.lastRenderTime,
+          let playerTime = player?.playerTime(forNodeTime: nodeTime),
           let audioFile else { return }
     
     currentTime = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
@@ -204,7 +210,7 @@ class AudioEngineManager: ObservableObject {
               for i in 0..<self.audioLevels.count {
                 self.audioLevels[i] = (smoothingFactor * normalizedBands[i]) + ((1.0 - smoothingFactor) * self.audioLevels[i])
               }
-              
+              print(audioLevels)
             }
           }
         }
@@ -212,4 +218,5 @@ class AudioEngineManager: ObservableObject {
     }
     vDSP_destroy_fftsetup(fftSetup)
   }
+  
 }
