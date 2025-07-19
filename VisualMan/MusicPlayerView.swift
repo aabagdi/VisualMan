@@ -9,11 +9,15 @@ import SwiftUI
 import MediaPlayer
 
 struct MusicPlayerView: View {
-  var song: MPMediaItem
-  @StateObject private var audioManager = AudioEngineManager()
+  let audioSource: any AudioSource
+  @ObservedObject private var audioManager = AudioEngineManager.shared
   
-  init(_ song: MPMediaItem) {
-   self.song = song
+  init(_ audioSource: AudioSource) {
+   self.audioSource = audioSource
+  }
+  
+  init(fileURL: URL, title: String? = nil) {
+    self.audioSource = FileAudioSource(url: fileURL, title: title)
   }
   
   var body: some View {
@@ -42,7 +46,10 @@ struct MusicPlayerView: View {
     }
     .padding()
     .onAppear {
-     audioManager.play(song)
+     audioManager.play(audioSource)
+    }
+    .onDisappear {
+      audioManager.stop()
     }
   }
 }

@@ -12,6 +12,8 @@ import Combine
 import MediaPlayer
 
 class AudioEngineManager: ObservableObject {
+  static let shared = AudioEngineManager()
+  
   private var engine: AVAudioEngine?
   private var player: AVAudioPlayerNode?
   
@@ -22,9 +24,15 @@ class AudioEngineManager: ObservableObject {
   
   private var audioFile: AVAudioFile?
   private var displayLink: CADisplayLink?
+  private var securityScopedURL: URL?
   
   init() {
     setupAudioEngine()
+  }
+  
+  isolated deinit {
+    stopDisplayLink()
+    stopSecurityScopedAccess()
   }
   
   private func setupAudioEngine() {
@@ -52,12 +60,28 @@ class AudioEngineManager: ObservableObject {
     engine.connect(player, to: engine.mainMixerNode, format: format)
   }
   
-  func play(_ mediaItem: MPMediaItem) {
-    guard let url = mediaItem.assetURL else {
-      print("No asset URL for media item")
+  
+  func play(_ source: AudioSource) {
+    guard let url = source.getPlaybackURL() else {
+      print("No playback URL available for audio source")
       return
     }
     
+    play(from: url)
+  }
+  
+  private func play(from url: URL) {
+    stopSecurityScopedAccess()
+    
+    let accessing = url.startAccessingSecurityScopedResource()
+    
+    if accessing {
+      securityScopedURL = url
+    }
+    playAudioFromURL(url)
+  }
+  
+  private func playAudioFromURL(_ url: URL) {
     guard let engine,
           let player else {
       print("engine or player node is nil")
@@ -93,14 +117,22 @@ class AudioEngineManager: ObservableObject {
         self?.stopDisplayLink()
       }
     }
-    
+    /*
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
-    
-    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+   
+   engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
       self?.processAudioBuffer(buffer)
     }
+    */
     
     player.play()
+  }
+  
+  private func stopSecurityScopedAccess() {
+    if let url = securityScopedURL {
+      url.stopAccessingSecurityScopedResource()
+      securityScopedURL = nil
+    }
   }
   
   func pause() {
@@ -122,6 +154,7 @@ class AudioEngineManager: ObservableObject {
     isPlaying = false
     currentTime = 0
     stopDisplayLink()
+    stopSecurityScopedAccess()
   }
   
   func startDisplayLink() {
@@ -143,6 +176,7 @@ class AudioEngineManager: ObservableObject {
   }
   
   private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+    /*
     guard let channelData = buffer.floatChannelData else { return }
     
     let frameLength = Int(buffer.frameLength)
@@ -229,6 +263,6 @@ class AudioEngineManager: ObservableObject {
       }
     }
     vDSP_destroy_fftsetup(fftSetup)
+     */
   }
-  
 }
