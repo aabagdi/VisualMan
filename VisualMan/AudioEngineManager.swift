@@ -37,9 +37,19 @@ class AudioEngineManager: ObservableObject {
     
     engine = AVAudioEngine()
     
-    guard let engine else { return }
+    player = AVAudioPlayerNode()
+    
+    guard let engine,
+          let player else { return }
     
     _ = engine.mainMixerNode
+    
+    let format = engine.mainMixerNode.outputFormat(forBus: 0)
+    
+    engine.stop()
+    
+    engine.attach(player)
+    engine.connect(player, to: engine.mainMixerNode, format: format)
   }
   
   func play(_ mediaItem: MPMediaItem) {
@@ -48,10 +58,11 @@ class AudioEngineManager: ObservableObject {
       return
     }
     
-    player = AVAudioPlayerNode()
-    
     guard let engine,
-          let player else { return }
+          let player else {
+      print("engine or player node is nil")
+      return
+    }
     
     do {
       audioFile = try AVAudioFile(forReading: url)
@@ -60,9 +71,6 @@ class AudioEngineManager: ObservableObject {
         print("Failed to create audio file")
         return
       }
-      
-      engine.attach(player)
-      engine.connect(player, to: engine.mainMixerNode, format: audioFile.processingFormat)
       
       duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
       
@@ -86,7 +94,9 @@ class AudioEngineManager: ObservableObject {
       }
     }
     
-    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: engine.mainMixerNode.outputFormat(forBus: 0)) { [weak self] buffer, _ in
+    let format = engine.mainMixerNode.outputFormat(forBus: 0)
+    
+    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
       self?.processAudioBuffer(buffer)
     }
     
@@ -107,6 +117,8 @@ class AudioEngineManager: ObservableObject {
   
   func stop() {
     player?.stop()
+    engine?.mainMixerNode.removeTap(onBus: 0)
+    engine?.stop()
     isPlaying = false
     currentTime = 0
     stopDisplayLink()
