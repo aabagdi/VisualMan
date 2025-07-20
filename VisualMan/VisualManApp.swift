@@ -11,7 +11,7 @@ import SwiftUI
 struct VisualManApp: App {
   var body: some Scene {
     WindowGroup {
-      MusicLibraryView()
+      HomeScreenView()
     }
   }
 }

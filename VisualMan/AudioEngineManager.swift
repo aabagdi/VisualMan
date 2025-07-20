@@ -117,13 +117,13 @@ class AudioEngineManager: ObservableObject {
         self?.stopDisplayLink()
       }
     }
-    /*
+    
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
    
    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
       self?.processAudioBuffer(buffer)
     }
-    */
+    
     
     player.play()
   }
