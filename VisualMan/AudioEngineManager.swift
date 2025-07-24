@@ -119,9 +119,17 @@ class AudioEngineManager: ObservableObject {
     }
     
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
-   
-   engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-      self?.processAudioBuffer(buffer)
+    
+    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable [weak self] buffer, _ in
+      guard let channelData = buffer.floatChannelData?[0] else { return }
+      
+      let frameLength = Int(buffer.frameLength)
+      let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
+      let sampleRate = format.sampleRate
+      
+      Task { @MainActor in
+        self?.processAudioBuffer(samples, frameLength, sampleRate)
+      }
     }
     
     
@@ -175,14 +183,7 @@ class AudioEngineManager: ObservableObject {
     currentTime = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
   }
   
-  private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-    /*
-    guard let channelData = buffer.floatChannelData else { return }
-    
-    let frameLength = Int(buffer.frameLength)
-    
-    let samples = channelData[0]
-    
+  private func processAudioBuffer(_ samples: [Float], _ frameLength: Int, _ sampleRate: Double) {
     let log2n = vDSP_Length(log2(Float(frameLength)))
     let fftSetup = vDSP_create_fftsetup(log2n, Int32(kFFTRadix2))
     
@@ -217,7 +218,7 @@ class AudioEngineManager: ObservableObject {
             let bandCount = audioLevels.count
             var bands = [Float](repeating: 0, count: bandCount)
             
-            let nyquist = Float(buffer.format.sampleRate) / 2.0
+            let nyquist = Float(sampleRate) / 2.0
             let minFreq: Float = 20.0
             let maxFreq = nyquist
             let logMinFreq = log10(minFreq)
@@ -256,13 +257,11 @@ class AudioEngineManager: ObservableObject {
               for i in 0..<self.audioLevels.count {
                 self.audioLevels[i] = (smoothingFactor * normalizedBands[i]) + ((1.0 - smoothingFactor) * self.audioLevels[i])
               }
-              print(audioLevels)
             }
           }
         }
       }
     }
     vDSP_destroy_fftsetup(fftSetup)
-     */
   }
 }
