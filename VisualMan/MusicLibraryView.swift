@@ -22,7 +22,6 @@ struct MusicLibraryView: View {
           .toolbarVisibility(.hidden, for: .tabBar)
       }
     }
-    .padding()
     .onAppear {
       libraryManager.requestMusicLibraryAccess()
     }

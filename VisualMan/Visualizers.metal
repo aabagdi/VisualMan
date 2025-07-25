@@ -54,3 +54,13 @@ using namespace metal;
     return half4(finalColor, 1.0);
 }
 
+
+[[ stitchable ]] half4 circles(float2 position,
+                               half4 color,
+                               float time,
+                               float bassLevel,
+                               float midLevel,
+                               float highLevel,
+                               float peakLevel) {
+  
+}

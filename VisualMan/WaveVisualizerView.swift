@@ -58,6 +58,7 @@ struct WaveVisualizerView: View {
           
           time += 0.016 * (1.0 + smoothedBass * 2.0)
         }
+        .ignoresSafeArea()
     }
   }
 }
