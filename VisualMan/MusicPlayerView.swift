@@ -21,35 +21,38 @@ struct MusicPlayerView: View {
   }
   
   var body: some View {
-    HStack {
-      Button {
-        
-      } label: {
-        Image(systemName: "backward.fill")
-      }
-      Spacer()
-      Button {
-        if audioManager.isPlaying {
-          audioManager.pause()
-        } else {
-          audioManager.resume()
+    ZStack {
+      WaveVisualizerView(audioLevels: audioManager.audioLevels)
+      HStack {
+        Button {
+          
+        } label: {
+          Image(systemName: "backward.fill")
         }
-      } label: {
-        Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
+        Spacer()
+        Button {
+          if audioManager.isPlaying {
+            audioManager.pause()
+          } else {
+            audioManager.resume()
+          }
+        } label: {
+          Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
+        }
+        Spacer()
+        Button {
+          
+        } label: {
+          Image(systemName: "forward.fill")
+        }
       }
-      Spacer()
-      Button {
-        
-      } label: {
-        Image(systemName: "forward.fill")
+      .padding()
+      .onAppear {
+        audioManager.play(audioSource)
       }
-    }
-    .padding()
-    .onAppear {
-     audioManager.play(audioSource)
-    }
-    .onDisappear {
-      audioManager.stop()
+      .onDisappear {
+        audioManager.stop()
+      }
     }
   }
 }
