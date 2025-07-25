@@ -19,6 +19,7 @@ struct MusicLibraryView: View {
       }
       .navigationDestination(for: MPMediaItem.self) { song in
         MusicPlayerView(song)
+          .toolbarVisibility(.hidden, for: .tabBar)
       }
     }
     .padding()

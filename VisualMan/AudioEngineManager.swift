@@ -128,7 +128,7 @@ class AudioEngineManager: ObservableObject {
       let sampleRate = format.sampleRate
       
       Task { @MainActor in
-        self?.processAudioBuffer(samples, frameLength, sampleRate)
+        self?.processAudioBuffer(frameLength, samples, sampleRate)
       }
     }
     
@@ -183,7 +183,7 @@ class AudioEngineManager: ObservableObject {
     currentTime = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
   }
   
-  private func processAudioBuffer(_ samples: [Float], _ frameLength: Int, _ sampleRate: Double) {
+  private func processAudioBuffer( _ frameLength: Int, _ samples: [Float], _ sampleRate: Double) {
     let log2n = vDSP_Length(log2(Float(frameLength)))
     let fftSetup = vDSP_create_fftsetup(log2n, Int32(kFFTRadix2))
     

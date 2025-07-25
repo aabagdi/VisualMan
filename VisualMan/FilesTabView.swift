@@ -16,15 +16,14 @@ struct FilesTabView: View {
   var body: some View {
     NavigationStack {
       VStack {
-        Text("Select an audio file to play")
-          .foregroundColor(.secondary)
-          .padding()
+        Button("Select an audio file to play") {
+          showingFilePicker.toggle()
+        }
+        .buttonStyle(.borderedProminent)
+        .padding()
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(Color(UIColor.systemGroupedBackground))
-      .onAppear {
-        showingFilePicker = true
-      }
       .fileImporter(
         isPresented: $showingFilePicker,
         allowedContentTypes: [.audio],
@@ -40,6 +39,7 @@ struct FilesTabView: View {
       .navigationDestination(isPresented: $showingPlayer) {
         if let audioSource = selectedAudioSource {
           MusicPlayerView(audioSource)
+            .toolbarVisibility(.hidden, for: .tabBar)
         }
       }
     }
