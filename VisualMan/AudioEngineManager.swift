@@ -21,26 +21,35 @@ class AudioEngineManager: ObservableObject {
   @Published var isPlaying = false
   @Published var currentTime: TimeInterval = 0
   @Published var duration: TimeInterval = 0
+  @Published var isInitialized = false
+  @Published var initializationError: Error?
   
   private var audioFile: AVAudioFile?
   private var displayLink: CADisplayLink?
   private var securityScopedURL: URL?
   
   init() {
-    setupAudioEngine()
+    do {
+      try setupAudioEngine()
+      isInitialized = true
+    } catch {
+      initializationError = error
+      isInitialized = false
+      print("Failed to setup audio engine: \(error)")
+    }
   }
-  
+   
   isolated deinit {
     stopDisplayLink()
     stopSecurityScopedAccess()
   }
   
-  private func setupAudioEngine() {
+  private func setupAudioEngine() throws {
     do {
       try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
       try AVAudioSession.sharedInstance().setActive(true)
     } catch {
-      print("Audio session error: \(error)")
+      throw Errors.invalidSession
     }
     
     engine = AVAudioEngine()
@@ -61,16 +70,15 @@ class AudioEngineManager: ObservableObject {
   }
   
   
-  func play(_ source: AudioSource) {
+  func play(_ source: AudioSource) throws {
     guard let url = source.getPlaybackURL() else {
-      print("No playback URL available for audio source")
-      return
+      throw Errors.invalidURL
     }
     
-    play(from: url)
+    try play(from: url)
   }
   
-  private func play(from url: URL) {
+  private func play(from url: URL) throws {
     stopSecurityScopedAccess()
     
     let accessing = url.startAccessingSecurityScopedResource()
@@ -78,22 +86,20 @@ class AudioEngineManager: ObservableObject {
     if accessing {
       securityScopedURL = url
     }
-    playAudioFromURL(url)
+    try playAudioFromURL(url)
   }
   
-  private func playAudioFromURL(_ url: URL) {
+  private func playAudioFromURL(_ url: URL) throws {
     guard let engine,
           let player else {
-      print("engine or player node is nil")
-      return
+      throw Errors.nilEngineOrPlayer
     }
     
     do {
       audioFile = try AVAudioFile(forReading: url)
       
       guard let audioFile else {
-        print("Failed to create audio file")
-        return
+        throw Errors.failedToCreateFile
       }
       
       duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
@@ -192,9 +198,9 @@ class AudioEngineManager: ObservableObject {
       realIn[i] = samples[i] * window
     }
     
-    guard let fftSetup = vDSP_DFT_zop_CreateSetup(nil, 1024, vDSP_DFT_Direction.FORWARD) else { return }
+    guard let dftSetup = vDSP_DFT_zop_CreateSetup(nil, 1024, vDSP_DFT_Direction.FORWARD) else { return }
     
-    vDSP_DFT_Execute(fftSetup, &realIn, &imagIn, &realOut, &imagOut)
+    vDSP_DFT_Execute(dftSetup, &realIn, &imagIn, &realOut, &imagOut)
     
     var magnitudes = [Float](repeating: 0.0, count: 512)
     
@@ -209,27 +215,53 @@ class AudioEngineManager: ObservableObject {
       }
     }
     
+    // Normalize by the FFT size
     var scaleFactor: Float = 1.0 / Float(1024)
     vDSP_vsmul(magnitudes, 1, &scaleFactor, &magnitudes, 1, 512)
     
+    // Apply logarithmic scaling with A-weighting
     var logMagnitudes = [Float](repeating: 0.0, count: 512)
+    
+    // Sample rate assumptions for frequency calculation
+    let sampleRate: Float = 44100.0
+    let binFrequencyWidth = sampleRate / Float(1024)
+    
     for i in 0..<512 {
-      let magnitude = magnitudes[i] + 1e-10
+      let frequency = Float(i) * binFrequencyWidth
       
-      let db = 20.0 * log10(magnitude)
+      let f2 = frequency * frequency
+      let f4 = f2 * f2
       
-      let frequencyWeight: Float
-      if i < 10 {
-        frequencyWeight = 0.8
-      } else if i < 50 {
-        frequencyWeight = 1.2
-      } else if i < 150 {
-        frequencyWeight = 1.5
-      } else {
-        frequencyWeight = 2.0
+      let c1: Float = 12194.217 * 12194.217
+      let c2: Float = 20.598997 * 20.598997
+      let c3: Float = 107.65265 * 107.65265
+      let c4: Float = 737.86223 * 737.86223
+      
+      let num = c1 * f4
+      
+      let term1 = f2 + c2
+      let term2 = f2 + c3
+      let term3 = f2 + c4
+      let term4 = f2 + c1
+      let sqrtTerm = sqrt(term2 * term3)
+      let den = term1 * sqrtTerm * term4
+      
+      var aWeight: Float = 0.0
+      if den > 0 && frequency > 10 {
+        aWeight = 2.0 + 20.0 * log10(num / den)
+      } else if frequency <= 10 {
+        aWeight = -50.0
       }
       
-      let normalized = ((db + 60.0) / 60.0) * frequencyWeight
+      let aWeightLinear = pow(10.0, aWeight / 20.0)
+      
+      let magnitude = magnitudes[i] + 1e-10
+      
+      let weightedMagnitude = magnitude * aWeightLinear
+      
+      let db = 20.0 * log10(weightedMagnitude)
+      
+      let normalized = (db + 80.0) / 70.0
       
       logMagnitudes[i] = max(0.0, min(1.0, normalized))
     }
@@ -238,6 +270,5 @@ class AudioEngineManager: ObservableObject {
       audioLevels[i] = audioLevels[i] * 0.8 + logMagnitudes[i] * 0.2
     }
     
-    vDSP_DFT_DestroySetup(fftSetup)
-  }
-}
+    vDSP_DFT_DestroySetup(dftSetup)
+  }}

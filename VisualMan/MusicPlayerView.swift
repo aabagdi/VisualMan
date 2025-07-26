@@ -9,8 +9,11 @@ import SwiftUI
 import MediaPlayer
 
 struct MusicPlayerView: View {
-  let audioSource: any AudioSource
+  @State private var failedPlaying: Bool = false
+  
   @ObservedObject private var audioManager = AudioEngineManager.shared
+  
+  let audioSource: any AudioSource
   
   init(_ audioSource: AudioSource) {
    self.audioSource = audioSource
@@ -51,7 +54,11 @@ struct MusicPlayerView: View {
         }
         .padding()
         .onAppear {
-          audioManager.play(audioSource)
+          do {
+            try audioManager.play(audioSource)
+          } catch {
+            failedPlaying.toggle()
+          }
         }
         .onDisappear {
           audioManager.stop()
