@@ -117,11 +117,11 @@ class AudioEngineManager: ObservableObject {
         self?.startDisplayLink()
       }
     } catch {
-      print("Error playing audio: \(error)")
       DispatchQueue.main.async { [weak self] in
         self?.isPlaying = false
         self?.stopDisplayLink()
       }
+      throw Errors.failedToPlay
     }
     
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
@@ -215,14 +215,11 @@ class AudioEngineManager: ObservableObject {
       }
     }
     
-    // Normalize by the FFT size
     var scaleFactor: Float = 1.0 / Float(1024)
     vDSP_vsmul(magnitudes, 1, &scaleFactor, &magnitudes, 1, 512)
     
-    // Apply logarithmic scaling with A-weighting
     var logMagnitudes = [Float](repeating: 0.0, count: 512)
     
-    // Sample rate assumptions for frequency calculation
     let sampleRate: Float = 44100.0
     let binFrequencyWidth = sampleRate / Float(1024)
     

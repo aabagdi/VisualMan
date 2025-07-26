@@ -8,81 +8,111 @@
 #include <metal_stdlib>
 using namespace metal;
 
-[[ stitchable ]] half4 wave(float2 position,
-                            half4 color,
-                            float time,
-                            float bassLevel,
-                            float midLevel,
-                            float highLevel,
-                            float peakLevel) {
-  float2 uv = position / 400.0;
+[[ stitchable ]] half4 julia(float2 position,
+                             half4 color,
+                             float time,
+                             float bassLevel,
+                             float midLevel,
+                             float trebleLevel,
+                             float2 viewSize
+                             ) {
+  half3 finalColor = half3(0.0);
+  float aa = 2.0;
   
-  // Scale up the normalized levels for visual impact
-  // Adjusted for A-weighted response
-  float scaledBass = min(bassLevel * 8.0, 1.0);   // Increased due to A-weighting reduction
-  float scaledMid = min(midLevel * 6.0, 1.0);     // Reduced due to A-weighting boost
-  float scaledHigh = min(highLevel * 8.0, 1.0);   // Moderate scaling
-  
-  // Create dynamic waves with scaled intensities
-  float bassWave1 = sin(uv.x * 3.0 + time * 0.8 + scaledBass * 5.0) * scaledBass * 0.5;
-  float bassWave2 = sin(uv.y * 2.5 - time * 0.6 + scaledBass * 4.0) * scaledBass * 0.5;
-  
-  float midWave1 = sin((uv.x + uv.y) * 8.0 + time * 2.0) * scaledMid * 0.4;
-  float midWave2 = sin((uv.x - uv.y) * 6.0 - time * 1.5) * scaledMid * 0.4;
-  
-  float highWave1 = sin(uv.x * 20.0 + time * 3.0) * scaledHigh * 0.2;
-  float highWave2 = sin(uv.y * 18.0 - time * 2.5) * scaledHigh * 0.2;
-  
-  float plasma = bassWave1 + bassWave2 + midWave1 + midWave2 + highWave1 + highWave2;
-  
-  // Center ripple effect with peak
-  float2 center = float2(0.5, 0.5);
-  float dist = length(uv - center);
-  float peakWave = sin(dist * 15.0 - time * 5.0 * (1.0 + peakLevel * 2.0)) * peakLevel * 0.3;
-  plasma += peakWave;
-  
-  // Normalize plasma to 0-1 range
-  plasma = plasma * 0.5 + 0.5;
-  
-  // Define frequency colors - softer, more pastel tones
-  half3 bassColor = half3(0.8, 0.4, 0.3);   // Softer coral for bass
-  half3 midColor = half3(0.3, 0.7, 0.5);    // Softer teal for mids
-  half3 highColor = half3(0.5, 0.6, 0.9);   // Softer periwinkle for highs
-  
-  // Base ambient color - darker and more muted
-  half3 ambientColor = half3(0.05, 0.05, 0.08);
-  
-  // Mix colors based on scaled frequency levels with smoother blending
-  half3 finalColor = ambientColor +
-  bassColor * scaledBass * 0.6 +
-  midColor * scaledMid * 0.6 +
-  highColor * scaledHigh * 0.6;
-  
-  // Apply plasma effect with less intensity
-  finalColor *= (0.7 + plasma * 0.3);
-  
-  // Add overall brightness based on audio energy - more subtle
-  float energy = (scaledBass + scaledMid + scaledHigh) / 3.0;
-  finalColor *= (0.85 + energy * 0.3);
-  
-  // Peak flash effect - much more subtle
-  if (peakLevel > 0.6) {
-    finalColor += half3(0.15, 0.15, 0.18) * (peakLevel - 0.6) * 0.5;
+  for (float sx = 0.0; sx < aa; sx++) {
+    for (float sy = 0.0; sy < aa; sy++) {
+      float2 offset = float2(sx, sy) / aa - 0.5;
+      float2 samplePos = position + offset;
+      
+      float2 uv = (samplePos - viewSize * 0.5) / min(viewSize.x, viewSize.y) * 4.0;
+      
+      float audioEnergy = (bassLevel + midLevel + trebleLevel) / 3.0;
+      float cReal = -0.4 + bassLevel * 0.3 * sin(time * 0.5);
+      float cImag = 0.6 + trebleLevel * 0.2 * cos(time * 0.7);
+      
+      float rotation = midLevel * time * 0.2;
+      float cosR = cos(rotation);
+      float sinR = sin(rotation);
+      float2 rotatedUV = float2(
+                                uv.x * cosR - uv.y * sinR,
+                                uv.x * sinR + uv.y * cosR
+                                );
+      
+      float2 z = rotatedUV;
+      float minDist = 1000.0;
+      float orbitTrap = 1000.0;
+      
+      int maxIterations = int(50 + audioEnergy * 50);
+      int iterations = 0;
+      
+      for (int i = 0; i < 100; i++) {
+        if (i >= maxIterations) break;
+        
+        float x = z.x * z.x - z.y * z.y + cReal;
+        float y = 2.0 * z.x * z.y + cImag;
+        z = float2(x, y);
+        
+        float dist = length(z);
+        minDist = min(minDist, dist);
+        orbitTrap = min(orbitTrap, length(z - float2(0.25, 0.5)));
+        
+        if (dist > 4.0) break;
+        iterations++;
+      }
+      
+      half3 sampleColor;
+      
+      if (iterations == maxIterations) {
+        float interior = 1.0 - minDist;
+        sampleColor = half3(0.0, interior * 0.1, interior * 0.2 + bassLevel * 0.3);
+      } else {
+        float dist = length(z);
+        float smoothIter = float(iterations) - log2(log2(dist));
+        smoothIter = max(0.0, smoothIter);
+        
+        float t = smoothIter / float(maxIterations);
+        
+        float phase1 = t * 6.28318 + time * 0.1;
+        float phase2 = t * 4.0 + time * 0.05;
+        float phase3 = orbitTrap * 2.0 + time * 0.15;
+        
+        half3 gradient1 = half3(
+                                sin(phase1 * (1.0 + bassLevel * 0.5)) * 0.5 + 0.5,
+                                sin(phase1 + 2.094) * 0.5 + 0.5,
+                                sin(phase1 + 4.189) * 0.5 + 0.5
+                                );
+        
+        half3 gradient2 = half3(
+                                sin(phase2) * 0.5 + 0.5,
+                                sin(phase2 + 1.571) * 0.5 + 0.5,
+                                sin(phase2 + 3.142) * 0.5 + 0.5
+                                );
+        
+        half3 gradient3 = half3(
+                                sin(phase3) * 0.3 + 0.5,
+                                sin(phase3 + 2.618) * 0.3 + 0.5,
+                                sin(phase3 + 5.236) * 0.3 + 0.5
+                                );
+        
+        sampleColor = gradient1 * (0.5 + bassLevel * 0.5);
+        sampleColor = mix(sampleColor, gradient2, midLevel * 0.7);
+        sampleColor = mix(sampleColor, gradient3, trebleLevel * 0.5);
+        
+        float edgeFactor = exp(-smoothIter * 0.1);
+        half3 glowColor = half3(0.4, 0.6, 1.0) * edgeFactor * audioEnergy;
+        sampleColor += glowColor;
+        
+        float noise = fract(sin(dot(samplePos, float2(12.9898, 78.233))) * 43758.5453);
+        sampleColor += (noise - 0.5) * 0.02;
+      }
+      
+      finalColor += sampleColor;
+    }
   }
   
-  // Clamp to valid range
-  finalColor = clamp(finalColor, 0.0, 1.0);
+  finalColor /= (aa * aa);
+  
+  finalColor = pow(finalColor, half3(0.9));
   
   return half4(finalColor, 1.0);
 }
-
-
-/*[[ stitchable ]] half4 circles(float2 position,
- half4 color,
- float time,
- float bassLevel,
- float midLevel,
- float highLevel,
- float peakLevel) {
- 
- }*/

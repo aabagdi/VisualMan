@@ -13,4 +13,5 @@ enum Errors: Error {
   case nilEngineOrPlayer
   case failedToCreateFile
   case invalidBuffer
+  case failedToPlay
 }

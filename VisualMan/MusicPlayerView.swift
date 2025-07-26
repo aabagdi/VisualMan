@@ -25,7 +25,7 @@ struct MusicPlayerView: View {
   
   var body: some View {
     ZStack {
-      WaveVisualizerView(audioLevels: audioManager.audioLevels)
+      CircleVisualizerView(audioLevels: audioManager.audioLevels)
         .ignoresSafeArea()
       VStack {
         Spacer()

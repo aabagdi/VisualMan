@@ -1,18 +1,24 @@
 //
-//  WaveVisualizerView.swift
+//  CircleVisualizerView.swift
 //  VisualMan
 //
-//  Created by Aadit Bagdi on 7/24/25.
+//  Created by Aadit Bagdi on 7/26/25.
 //
 
 import SwiftUI
 
-struct WaveVisualizerView: View {
+struct CircleVisualizerView: View {
   @State private var time: Float = 0
   @State private var smoothedBass: Float = 0
   @State private var smoothedMid: Float = 0
   @State private var smoothedHigh: Float = 0
-  @State private var peakLevel: Float = 0
+  
+  private var rainbow: some View {
+    Image(systemName: "rainbow")
+      .resizable()
+      .aspectRatio(contentMode: .fit)
+      .symbolRenderingMode(.multicolor)
+  }
   
   let audioLevels: [Float]
   
@@ -39,33 +45,18 @@ struct WaveVisualizerView: View {
   }
   
   var body: some View {
-    TimelineView(.animation) { timeline in
-      Rectangle()
-        .fill(.black)
-        .colorEffect(
-          ShaderLibrary.wave(
-            .float(time),
-            .float(smoothedBass),
-            .float(smoothedMid),
-            .float(smoothedHigh),
-            .float(peakLevel)
-          )
-        )
-        .onChange(of: timeline.date) {
-          smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
-          smoothedMid = smoothedMid * 0.6 + midLevel * 0.4
-          smoothedHigh = smoothedHigh * 0.4 + highLevel * 0.6
-          
-          let currentPeak = max(bassLevel, midLevel, highLevel)
-          if currentPeak > peakLevel {
-            peakLevel = currentPeak
-          } else {
-            peakLevel *= 0.92
+    GeometryReader { g in
+      TimelineView(.animation) { timeline in
+        Rectangle()
+          .juliaShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, width: Float(g.size.width), height: Float(g.size.height))
+          .onChange(of: timeline.date) {
+            smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
+            smoothedMid = smoothedMid * 0.6 + midLevel * 0.4
+            smoothedHigh = smoothedHigh * 0.4 + highLevel * 0.6
+            time += 0.016 * (1.0 + smoothedBass * 0.5)
           }
-          
-          time += 0.016 * (1.0 + smoothedBass * 0.5)
-        }
-        .ignoresSafeArea()
+          .ignoresSafeArea()
+      }
     }
     .overlay(alignment: .topTrailing) {
       // Debug overlay
@@ -73,7 +64,6 @@ struct WaveVisualizerView: View {
         Text("Bass: \(smoothedBass, specifier: "%.3f")")
         Text("Mid: \(smoothedMid, specifier: "%.3f")")
         Text("High: \(smoothedHigh, specifier: "%.3f")")
-        Text("Peak: \(peakLevel, specifier: "%.3f")")
       }
       .padding()
       .background(.black.opacity(0.5))
