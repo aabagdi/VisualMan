@@ -17,7 +17,7 @@ class AudioEngineManager: ObservableObject {
   private var engine: AVAudioEngine?
   private var player: AVAudioPlayerNode?
   
-  @Published var audioLevels: [Float] = Array(repeating: 0, count: 64)
+  @Published var audioLevels: [Float] = Array(repeating: 0, count: 512)
   @Published var isPlaying = false
   @Published var currentTime: TimeInterval = 0
   @Published var duration: TimeInterval = 0
@@ -125,13 +125,11 @@ class AudioEngineManager: ObservableObject {
       
       let frameLength = Int(buffer.frameLength)
       let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
-      let sampleRate = format.sampleRate
       
       Task { @MainActor in
-        self?.processAudioBuffer(frameLength, samples, sampleRate)
+        self?.processAudioBuffer(samples)
       }
     }
-    
     
     player.play()
   }
@@ -183,85 +181,63 @@ class AudioEngineManager: ObservableObject {
     currentTime = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
   }
   
-  private func processAudioBuffer( _ frameLength: Int, _ samples: [Float], _ sampleRate: Double) {
-    let log2n = vDSP_Length(log2(Float(frameLength)))
-    let fftSetup = vDSP_create_fftsetup(log2n, Int32(kFFTRadix2))
+  private func processAudioBuffer(_ samples: [Float]) {
+    var realIn = [Float](repeating: 0, count: 1024)
+    var imagIn = [Float](repeating: 0, count: 1024)
+    var realOut = [Float](repeating: 0, count: 1024)
+    var imagOut = [Float](repeating: 0, count: 1024)
     
-    var realp = [Float](repeating: 0, count: frameLength/2)
-    var imagp = [Float](repeating: 0, count: frameLength/2)
+    for i in 0..<min(samples.count, 1024) {
+      let window = 0.54 - 0.46 * cos(2.0 * .pi * Float(i) / 1023.0)
+      realIn[i] = samples[i] * window
+    }
     
-    let windowSize = frameLength
-    var window = [Float](repeating: 0, count: windowSize)
-    var windowedSamples = [Float](repeating: 0, count: frameLength)
+    guard let fftSetup = vDSP_DFT_zop_CreateSetup(nil, 1024, vDSP_DFT_Direction.FORWARD) else { return }
     
-    vDSP_hann_window(&window, vDSP_Length(windowSize), Int32(vDSP_HANN_NORM))
-    vDSP_vmul(samples, 1, window, 1, &windowedSamples, 1, vDSP_Length(windowSize))
+    vDSP_DFT_Execute(fftSetup, &realIn, &imagIn, &realOut, &imagOut)
     
-    windowedSamples.withUnsafeBufferPointer { samplesPtr in
-      samplesPtr.baseAddress?.withMemoryRebound(to: DSPComplex.self, capacity: frameLength/2) { complexPtr in
-        realp.withUnsafeMutableBufferPointer { realPtr in
-          imagp.withUnsafeMutableBufferPointer { imagPtr in
-            guard let realBase = realPtr.baseAddress,
-                  let imagBase = imagPtr.baseAddress,
-                  let fftSetup else { return }
-            var output = DSPSplitComplex(realp: realBase, imagp: imagBase)
-            vDSP_ctoz(complexPtr, 2, &output, 1, vDSP_Length(frameLength/2))
-            vDSP_fft_zrip(fftSetup, &output, 1, log2n, Int32(FFT_FORWARD))
-            
-            var magnitudes = [Float](repeating: 0, count: frameLength/2)
-            vDSP_zvmags(&output, 1, &magnitudes, 1, vDSP_Length(frameLength/2))
-            
-            var dbs = [Float](repeating: 0, count: frameLength/2)
-            var zero: Float = 1e-9
-            vDSP_vdbcon(magnitudes, 1, &zero, &dbs, 1, vDSP_Length(frameLength/2), 1)
-            
-            let bandCount = audioLevels.count
-            var bands = [Float](repeating: 0, count: bandCount)
-            
-            let nyquist = Float(sampleRate) / 2.0
-            let minFreq: Float = 20.0
-            let maxFreq = nyquist
-            let logMinFreq = log10(minFreq)
-            let logMaxFreq = log10(maxFreq)
-            
-            for i in 0..<bandCount {
-              let logFreqStart = logMinFreq + (Float(i) / Float(bandCount)) * (logMaxFreq - logMinFreq)
-              let logFreqEnd = logMinFreq + (Float(i + 1) / Float(bandCount)) * (logMaxFreq - logMinFreq)
-              
-              let freqStart = pow(10, logFreqStart)
-              let freqEnd = pow(10, logFreqEnd)
-              
-              let binStart = Int((freqStart / nyquist) * Float(frameLength/2))
-              let binEnd = Int((freqEnd / nyquist) * Float(frameLength/2))
-              
-              if binStart < frameLength/2 && binEnd <= frameLength/2 && binStart < binEnd {
-                let range = binStart..<binEnd
-                let sum = dbs[range].reduce(0, +)
-                bands[i] = sum / Float(binEnd - binStart)
-              }
-            }
-            
-            var normalizedBands = [Float](repeating: 0, count: bandCount)
-            let minDB: Float = -60.0
-            let maxDB: Float = 0.0
-            
-            for i in 0..<bandCount {
-              let clampedValue = max(minDB, min(maxDB, bands[i]))
-              normalizedBands[i] = (clampedValue - minDB) / (maxDB - minDB)
-            }
-            
-            DispatchQueue.main.async { [weak self] in
-              guard let self else { return }
-              
-              let smoothingFactor: Float = 0.3
-              for i in 0..<self.audioLevels.count {
-                self.audioLevels[i] = (smoothingFactor * normalizedBands[i]) + ((1.0 - smoothingFactor) * self.audioLevels[i])
-              }
-            }
-          }
-        }
+    var magnitudes = [Float](repeating: 0.0, count: 512)
+    
+    realOut.withUnsafeBufferPointer { realPtr in
+      imagOut.withUnsafeBufferPointer { imagPtr in
+        guard let realBase = realPtr.baseAddress,
+              let imagBase = imagPtr.baseAddress else { return }
+        
+        var complex = DSPSplitComplex(realp: UnsafeMutablePointer(mutating: realBase),
+                                      imagp: UnsafeMutablePointer(mutating: imagBase))
+        vDSP_zvabs(&complex, 1, &magnitudes, 1, 512)
       }
     }
-    vDSP_destroy_fftsetup(fftSetup)
+    
+    var scaleFactor: Float = 1.0 / Float(1024)
+    vDSP_vsmul(magnitudes, 1, &scaleFactor, &magnitudes, 1, 512)
+    
+    var logMagnitudes = [Float](repeating: 0.0, count: 512)
+    for i in 0..<512 {
+      let magnitude = magnitudes[i] + 1e-10
+      
+      let db = 20.0 * log10(magnitude)
+      
+      let frequencyWeight: Float
+      if i < 10 {
+        frequencyWeight = 0.8
+      } else if i < 50 {
+        frequencyWeight = 1.2
+      } else if i < 150 {
+        frequencyWeight = 1.5
+      } else {
+        frequencyWeight = 2.0
+      }
+      
+      let normalized = ((db + 60.0) / 60.0) * frequencyWeight
+      
+      logMagnitudes[i] = max(0.0, min(1.0, normalized))
+    }
+    
+    for i in 0..<512 {
+      audioLevels[i] = audioLevels[i] * 0.8 + logMagnitudes[i] * 0.2
+    }
+    
+    vDSP_DFT_DestroySetup(fftSetup)
   }
 }

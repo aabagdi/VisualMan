@@ -17,24 +17,31 @@ struct WaveVisualizerView: View {
   let audioLevels: [Float]
   
   private var bassLevel: Float {
-    guard audioLevels.count >= 8 else { return 0 }
-    return audioLevels[0..<8].reduce(0, +) / 8.0
+    guard audioLevels.count >= 512 else { return 0 }
+    let bassRange = audioLevels[1..<10]
+    return bassRange.reduce(0, +) / Float(bassRange.count)
   }
   
   private var midLevel: Float {
-    guard audioLevels.count >= 32 else { return 0 }
-    return audioLevels[8..<24].reduce(0, +) / 16.0
+    guard audioLevels.count >= 512 else { return 0 }
+    let midRange = audioLevels[10..<50]
+    let midAvg = midRange.reduce(0, +) / Float(midRange.count)
+    let midMax = midRange.max() ?? 0
+    return midAvg * 0.5 + midMax * 0.5
   }
   
   private var highLevel: Float {
-    guard audioLevels.count >= 32 else { return 0 }
-    return audioLevels[24..<32].reduce(0, +) / 8.0
+    guard audioLevels.count >= 512 else { return 0 }
+    let highRange = audioLevels[50..<150]
+    let highMax = highRange.max() ?? 0
+    let highAvg = highRange.reduce(0, +) / Float(highRange.count)
+    return highMax * 0.7 + highAvg * 0.3
   }
   
   var body: some View {
     TimelineView(.animation) { timeline in
       Rectangle()
-        .fill(.white)
+        .fill(.black)
         .colorEffect(
           ShaderLibrary.wave(
             .float(time),
@@ -45,20 +52,33 @@ struct WaveVisualizerView: View {
           )
         )
         .onChange(of: timeline.date) {
-          smoothedBass = smoothedBass * 0.7 + bassLevel * 0.3
-          smoothedMid = smoothedMid * 0.8 + midLevel * 0.2
-          smoothedHigh = smoothedHigh * 0.6 + highLevel * 0.4
-
+          smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
+          smoothedMid = smoothedMid * 0.6 + midLevel * 0.4
+          smoothedHigh = smoothedHigh * 0.4 + highLevel * 0.6
+          
           let currentPeak = max(bassLevel, midLevel, highLevel)
           if currentPeak > peakLevel {
             peakLevel = currentPeak
           } else {
-            peakLevel *= 0.95
+            peakLevel *= 0.92
           }
           
-          time += 0.016 * (1.0 + smoothedBass * 2.0)
+          time += 0.016 * (1.0 + smoothedBass * 0.5)
         }
         .ignoresSafeArea()
+    }
+    .overlay(alignment: .topTrailing) {
+      // Debug overlay
+      VStack(alignment: .leading) {
+        Text("Bass: \(smoothedBass, specifier: "%.3f")")
+        Text("Mid: \(smoothedMid, specifier: "%.3f")")
+        Text("High: \(smoothedHigh, specifier: "%.3f")")
+        Text("Peak: \(peakLevel, specifier: "%.3f")")
+      }
+      .padding()
+      .background(.black.opacity(0.5))
+      .foregroundColor(.white)
+      .font(.caption)
     }
   }
 }
