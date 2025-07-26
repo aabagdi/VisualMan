@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct CircleVisualizerView: View {
+struct JuliaVisualizerView: View {
   @State private var time: Float = 0
   @State private var smoothedBass: Float = 0
   @State private var smoothedMid: Float = 0
