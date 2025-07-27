@@ -12,6 +12,7 @@ struct MusicPlayerView: View {
   enum Visualizers: String, CaseIterable {
     case julia = "Julia Set"
     case fireworks = "Fireworks"
+    case interference = "Interference Pattern"
   }
   
   @State private var currentVisualizer = Visualizers.julia
@@ -74,9 +75,11 @@ struct MusicPlayerView: View {
     .toolbar {
       Picker("Current Visualizer", selection: $currentVisualizer) {
         ForEach(Visualizers.allCases, id: \.self) { type in
-          Text(type.rawValue).tag(type)
+          Text(type.rawValue)
+            .tag(type)
         }
       }
+      .fixedSize()
     }
   }
   
@@ -87,6 +90,8 @@ struct MusicPlayerView: View {
       JuliaVisualizerView(audioLevels: audioLevels)
     case .fireworks:
       FireworksVisualizerView(audioLevels: audioLevels)
+    case .interference:
+      InterferenceVisualizerView(audioLevels: audioLevels)
     }
   }
 }

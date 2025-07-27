@@ -1,5 +1,5 @@
 //
-//  FireworksVisualizerView.swift
+//  InterferenceVisualizerView.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 7/26/25.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct FireworksVisualizerView: View {
+struct InterferenceVisualizerView: View {
   @State private var time: Float = 0
   @State private var smoothedBass: Float = 0
   @State private var smoothedMid: Float = 0
@@ -36,17 +36,12 @@ struct FireworksVisualizerView: View {
     let highAvg = highRange.reduce(0, +) / Float(highRange.count)
     return highMax * 0.7 + highAvg * 0.3
   }
-  
-  private var peakLevel: Float {
-    let overall = (bassLevel + midLevel + highLevel) / 3.0
-    return min(overall * 1.2, 1.0)
-  }
-  
+
   var body: some View {
     GeometryReader { g in
       TimelineView(.animation) { timeline in
         Rectangle()
-          .fireworksShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, peakLevel: peakLevel, width: Float(g.size.width), height: Float(g.size.height))
+          .interferenceShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, width: Float(g.size.width), height: Float(g.size.height))
           .onChange(of: timeline.date) {
             withAnimation(.smooth) {
               smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5

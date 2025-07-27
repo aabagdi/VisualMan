@@ -175,7 +175,7 @@ float3 rand3(float seed) {
         
         float r1 = explosionPhase * rScale1;
         float2 sparkPos1 = origin + float2(r1 * cos(a1), r1 * sin(a1));
-
+        
         sparkPos1.y += r1 * r1 * 0.03;
         
         float dist = length(uv - sparkPos1);
@@ -187,7 +187,7 @@ float3 rand3(float seed) {
         }
       }
     }
-
+    
     if (midLevel > 0.1) {
       for (uint m = 0; m < midParticles; m += 3) {
         float3 rand = rand3(float(i) * 753.31 + float(m) + 297.8943);
@@ -237,4 +237,131 @@ float3 rand3(float seed) {
   col = clamp(col, 0.0, 3.0);
   
   return half4(col.r, col.g, col.b, 1.0);
+}
+
+float calculateWave(float2 position,
+                    float2 sourcePos,
+                    float time,
+                    float amplitude,
+                    float frequency,
+                    float audioLevel,
+                    float modIndex
+                    ) {
+  float distance = length(position - sourcePos);
+  
+  float falloffRate = 0.3;
+  float distanceFalloff = exp(-distance * falloffRate);
+  
+  float audioScale = 0.3 + audioLevel * 0.7;
+  
+  float tremoloRate = 2.0;
+  float tremoloDepth = 0.1;
+  float tremolo = 1.0 + tremoloDepth * sin(time * tremoloRate);
+  
+  float modulatedAmplitude = amplitude * distanceFalloff * audioScale * tremolo;
+  
+  float carrierFreq = frequency;
+  
+  float modFreq = 0.5 + audioLevel * 2.0;
+  
+  float effectiveModIndex = modIndex * audioLevel;
+  
+  float freqModulation = effectiveModIndex * sin(modFreq * time);
+  
+  float modulatedFrequency = carrierFreq * (1.0 + freqModulation);
+  
+  float waveSpeed = 2.0;
+  
+  float phase = distance * modulatedFrequency - time * waveSpeed;
+  
+  float wave = modulatedAmplitude * sin(phase);
+  
+  wave = sign(wave) * pow(abs(wave), 0.7);
+  
+  float reflection = modulatedAmplitude * 0.3 * sin(phase + PI);
+  wave += reflection;
+  
+  wave = sign(wave) * pow(abs(wave), 0.8);
+  
+  return wave;
+}
+
+float calculateParallaxLayer(float2 uv,
+                             float time,
+                             float bassLevel,
+                             float midLevel,
+                             float trebleLevel,
+                             float layerDepth,
+                             float2 scrollOffset
+                             ) {
+  float2 parallaxUV = uv + scrollOffset * layerDepth;
+  
+  float depthScale = 1.0 + layerDepth * 2.0;
+  parallaxUV *= depthScale;
+  
+  float angleOffset = layerDepth * 1.5708;
+  float2x2 rotation = float2x2(cos(angleOffset), -sin(angleOffset),
+                               sin(angleOffset), cos(angleOffset));
+  
+  float2 source1 = rotation * float2(0.0, 0.5);
+  float2 source2 = rotation * float2(-0.5, -0.5);
+  float2 source3 = rotation * float2(0.5, -0.5);
+  
+  float ampScale = 1.0 - layerDepth * 0.5;
+  float freqScale = 1.0 + layerDepth * 0.5;
+  
+  float wave1 = calculateWave(parallaxUV, source1, time,
+                              bassLevel * 0.5 * ampScale,
+                              10.0 * freqScale,
+                              bassLevel, 0.5);
+  
+  float wave2 = calculateWave(parallaxUV, source2, time,
+                              midLevel * 0.4 * ampScale,
+                              20.0 * freqScale,
+                              midLevel, 0.75);
+  
+  float wave3 = calculateWave(parallaxUV, source3, time,
+                              trebleLevel * 0.3 * ampScale,
+                              30.0 * freqScale,
+                              trebleLevel, 1.0);
+  
+  return wave1 + wave2 + wave3;
+}
+
+[[ stitchable ]] half4 interference(float2 position,
+                                    half4 inputColor,
+                                    float time,
+                                    float bassLevel,
+                                    float midLevel,
+                                    float trebleLevel,
+                                    float2 viewSize
+                                    ) {
+  float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
+  
+  float2 scrollBase = float2(sin(time * 0.1), cos(time * 0.15));
+  float audioIntensity = (bassLevel + midLevel + trebleLevel) / 3.0;
+  
+  half3 finalColor = half3(0.0);
+  
+  const int numLayers = 5;
+  for (int i = 0; i < numLayers; i++) {
+    float depth = float(i) / float(numLayers - 1);
+    float2 parallaxOffset = scrollBase * depth * (1.0 + audioIntensity);
+    
+    float layerWave = calculateParallaxLayer(uv, time, bassLevel, midLevel, trebleLevel, depth, parallaxOffset);
+    
+    layerWave = tanh(layerWave * (0.6 - depth * 0.3));
+    
+    half3 layerColor = mix(half3(0.1, 0.4, 0.9),
+                           half3(0.6, 0.4, 0.7),
+                           depth);
+    
+    float fogFactor = exp(-depth * 2.0);
+    
+    finalColor += layerColor * abs(layerWave) * fogFactor * 0.4;
+  }
+  
+  finalColor += half3(0.05, 0.05, 0.1) * (1.0 - length(uv) * 0.3);
+  
+  return half4(finalColor, 1.0);
 }
