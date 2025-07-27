@@ -15,28 +15,16 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				"View+JuliaShader.swift",
 			);
 			target = 39CA34462E1C75EA00F3017E /* VisualMan */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-		398296452E359BD100BB924A /* Exceptions for "VisualMan" folder in "Compile Sources" phase from "VisualMan" target */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = 39CA34432E1C75EA00F3017E /* Sources */;
-			membershipExceptions = (
-				"View+JuliaShader.swift",
-			);
-		};
-/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		39CA34492E1C75EA00F3017E /* VisualMan */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				39CA34562E249FD900F3017E /* Exceptions for "VisualMan" folder in "VisualMan" target */,
-				398296452E359BD100BB924A /* Exceptions for "VisualMan" folder in "Compile Sources" phase from "VisualMan" target */,
 			);
 			path = VisualMan;
 			sourceTree = "<group>";

@@ -9,6 +9,12 @@ import SwiftUI
 import MediaPlayer
 
 struct MusicPlayerView: View {
+  enum Visualizers: String, CaseIterable {
+    case julia = "Julia Set"
+    case fireworks = "Fireworks"
+  }
+  
+  @State private var currentVisualizer = Visualizers.julia
   @State private var failedPlaying: Bool = false
   
   @ObservedObject private var audioManager = AudioEngineManager.shared
@@ -16,7 +22,7 @@ struct MusicPlayerView: View {
   let audioSource: any AudioSource
   
   init(_ audioSource: AudioSource) {
-   self.audioSource = audioSource
+    self.audioSource = audioSource
   }
   
   init(fileURL: URL, title: String? = nil) {
@@ -25,7 +31,7 @@ struct MusicPlayerView: View {
   
   var body: some View {
     ZStack {
-      JuliaVisualizerView(audioLevels: audioManager.audioLevels)
+      currentShader(currentVisualizer: currentVisualizer, audioLevels: audioManager.audioLevels)
         .ignoresSafeArea()
       VStack {
         Spacer()
@@ -64,6 +70,23 @@ struct MusicPlayerView: View {
           audioManager.stop()
         }
       }
+    }
+    .toolbar {
+      Picker("Current Visualizer", selection: $currentVisualizer) {
+        ForEach(Visualizers.allCases, id: \.self) { type in
+          Text(type.rawValue).tag(type)
+        }
+      }
+    }
+  }
+  
+  @ViewBuilder
+  private func currentShader(currentVisualizer: Visualizers, audioLevels: [Float]) -> some View {
+    switch currentVisualizer {
+    case .julia:
+      JuliaVisualizerView(audioLevels: audioLevels)
+    case .fireworks:
+      FireworksVisualizerView(audioLevels: audioLevels)
     }
   }
 }
