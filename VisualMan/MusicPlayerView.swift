@@ -59,7 +59,8 @@ struct MusicPlayerView: View {
           Button {
             
           } label: {
-            Image(systemName: "backward.fill")
+            Image(systemName: "backward")
+              .foregroundStyle(normalFillColor)
           }
           Spacer()
           Button {
@@ -69,13 +70,15 @@ struct MusicPlayerView: View {
               audioManager.resume()
             }
           } label: {
-            Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
+            Image(systemName: audioManager.isPlaying ? "pause" : "play")
+              .foregroundStyle(normalFillColor)
           }
           Spacer()
           Button {
             
           } label: {
-            Image(systemName: "forward.fill")
+            Image(systemName: "forward")
+              .foregroundStyle(normalFillColor)
           }
         }
         .padding()

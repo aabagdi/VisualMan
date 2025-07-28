@@ -171,26 +171,34 @@ class AudioEngineManager: ObservableObject {
   
   func seek(to time: TimeInterval) {
     guard let player,
-          let audioFile,
-          let engine else { return }
+          let audioFile else {
+      return
+    }
     
-    let wasPlaying = isPlaying
+    // Ensure time is within bounds
+    let clampedTime = max(0, min(time, duration))
     
+    // Stop the display link temporarily to prevent conflicts
+    stopDisplayLink()
+    
+    // Check if we're currently playing
+    let wasPlaying = player.isPlaying
+    
+    // Stop current playback
     player.stop()
     
-    engine.mainMixerNode.removeTap(onBus: 0)
-    
+    // Calculate the frame position
     let sampleRate = audioFile.fileFormat.sampleRate
-    let newSampleTime = AVAudioFramePosition(time * sampleRate)
+    let newSampleTime = AVAudioFramePosition(clampedTime * sampleRate)
     
-    let clampedPosition = max(0, min(newSampleTime, audioFile.length))
-    
+    // Schedule the file from the new position
     player.scheduleSegment(
       audioFile,
-      startingFrame: clampedPosition,
-      frameCount: AVAudioFrameCount(audioFile.length - clampedPosition),
+      startingFrame: newSampleTime,
+      frameCount: AVAudioFrameCount(audioFile.length - newSampleTime),
       at: nil
     ) { [weak self] in
+      // This completion handler is called when playback reaches the end
       DispatchQueue.main.async {
         self?.isPlaying = false
         self?.currentTime = self?.duration ?? 0
@@ -198,27 +206,24 @@ class AudioEngineManager: ObservableObject {
       }
     }
     
-    let format = engine.mainMixerNode.outputFormat(forBus: 0)
-    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable [weak self] buffer, _ in
-      guard let channelData = buffer.floatChannelData?[0] else { return }
-      
-      let frameLength = Int(buffer.frameLength)
-      let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
-      
-      Task { @MainActor in
-        self?.processAudioBuffer(samples)
-      }
-    }
+    // Update current time immediately
+    currentTime = clampedTime
     
-    currentTime = time
-    
+    // Resume playback if it was playing
     if wasPlaying {
       player.play()
-      startDisplayLink()
+      // Re-start display link after a small delay to ensure player has started
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        if self?.isPlaying == true {
+          self?.startDisplayLink()
+        }
+      }
     }
   }
   
+  // Also update the startDisplayLink method to be more robust:
   func startDisplayLink() {
+    stopDisplayLink()
     displayLink = CADisplayLink(target: self, selector: #selector(updateTime))
     displayLink?.add(to: .current, forMode: .common)
   }
@@ -229,11 +234,27 @@ class AudioEngineManager: ObservableObject {
   }
   
   @objc func updateTime() {
-    guard let nodeTime = player?.lastRenderTime,
-          let playerTime = player?.playerTime(forNodeTime: nodeTime),
+    guard let player,
           let audioFile else { return }
     
-    currentTime = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
+    if let nodeTime = player.lastRenderTime,
+       let playerTime = player.playerTime(forNodeTime: nodeTime) {
+      let newTime = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
+      
+      // Only update if the time has actually changed to reduce UI updates
+      if abs(newTime - currentTime) > 0.01 {
+        currentTime = newTime
+      }
+      
+      // Check if we've reached the end
+      if currentTime >= duration - 0.1 {
+        DispatchQueue.main.async { [weak self] in
+          self?.isPlaying = false
+          self?.currentTime = self?.duration ?? 0
+          self?.stopDisplayLink()
+        }
+      }
+    }
   }
   
   private func processAudioBuffer(_ samples: [Float]) {
