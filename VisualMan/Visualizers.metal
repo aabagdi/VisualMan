@@ -25,8 +25,7 @@ float3 rand3(float seed) {
                              float bassLevel,
                              float midLevel,
                              float trebleLevel,
-                             float2 viewSize
-                             ) {
+                             float2 viewSize) {
   half3 finalColor = half3(0.0);
   float aa = 2.0;
   
@@ -245,8 +244,7 @@ float calculateWave(float2 position,
                     float amplitude,
                     float frequency,
                     float audioLevel,
-                    float modIndex
-                    ) {
+                    float modIndex) {
   float distance = length(position - sourcePos);
   
   float falloffRate = 0.3;
@@ -292,8 +290,7 @@ float calculateParallaxLayer(float2 uv,
                              float midLevel,
                              float trebleLevel,
                              float layerDepth,
-                             float2 scrollOffset
-                             ) {
+                             float2 scrollOffset) {
   float2 parallaxUV = uv + scrollOffset * layerDepth;
   
   float depthScale = 1.0 + layerDepth * 2.0;
@@ -329,39 +326,76 @@ float calculateParallaxLayer(float2 uv,
 }
 
 [[ stitchable ]] half4 interference(float2 position,
-                                    half4 inputColor,
-                                    float time,
-                                    float bassLevel,
-                                    float midLevel,
-                                    float trebleLevel,
-                                    float2 viewSize
-                                    ) {
+                                       half4 inputColor,
+                                       float time,
+                                       float bassLevel,
+                                       float midLevel,
+                                       float trebleLevel,
+                                       float2 viewSize) {
   float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
   
   float2 scrollBase = float2(sin(time * 0.1), cos(time * 0.15));
   float audioIntensity = (bassLevel + midLevel + trebleLevel) / 3.0;
   
-  half3 finalColor = half3(0.0);
+  half3 finalColor = half3(0.05, 0.05, 0.1);
   
-  const int numLayers = 5;
+  const int numLayers = 6;
   for (int i = 0; i < numLayers; i++) {
     float depth = float(i) / float(numLayers - 1);
-    float2 parallaxOffset = scrollBase * depth * (1.0 + audioIntensity);
+    
+    float2 parallaxOffset = scrollBase * depth * (1.0 + audioIntensity * 2.0);
     
     float layerWave = calculateParallaxLayer(uv, time, bassLevel, midLevel, trebleLevel, depth, parallaxOffset);
     
-    layerWave = tanh(layerWave * (0.6 - depth * 0.3));
+    layerWave = tanh(layerWave * (0.8 - depth * 0.2));
     
-    half3 layerColor = mix(half3(0.1, 0.4, 0.9),
-                           half3(0.6, 0.4, 0.7),
-                           depth);
+    half3 layerColor;
     
-    float fogFactor = exp(-depth * 2.0);
+    if (depth < 0.33) {
+      layerColor = mix(half3(0.0, 1.0, 1.0),
+                       half3(0.2, 0.4, 1.0),
+                       depth * 3.0
+                       );
+    } else if (depth < 0.66) {
+      layerColor = mix(half3(0.6, 0.2, 1.0),
+                       half3(1.0, 0.0, 0.8),
+                       (depth - 0.33) * 3.0
+                       );
+    } else {
+      layerColor = mix(half3(1.0, 0.4, 0.7),
+                       half3(1.0, 0.7, 0.2),
+                       (depth - 0.66) * 3.0
+                       );
+    }
     
-    finalColor += layerColor * abs(layerWave) * fogFactor * 0.4;
+    float shimmer = sin(layerWave * 10.0 + time * 3.0) * 0.2;
+    layerColor *= 1.0 + shimmer;
+    
+    float fogFactor = 1.0 - depth * 0.5;
+    
+    if (i < 3) {
+      finalColor += layerColor * abs(layerWave) * fogFactor * 0.5;
+    } else {
+      finalColor = mix(finalColor, layerColor, abs(layerWave) * fogFactor * 0.6);
+    }
+    
+    float edgeGlow = max(0.0, layerWave - 0.5) * 2.0;
+    finalColor += layerColor * edgeGlow * fogFactor * 0.3;
   }
   
-  finalColor += half3(0.05, 0.05, 0.1) * (1.0 - length(uv) * 0.3);
+  float vignette = 1.0 - length(uv) * 0.5;
+  half3 vignetteColor = half3(0.1, 0.15, 0.3) * vignette;
+  finalColor += vignetteColor;
+  
+  float audioGlow = (bassLevel + midLevel + trebleLevel) / 3.0;
+  
+  finalColor.r *= 1.0 + bassLevel * 0.5;
+  finalColor.g *= 1.0 + midLevel * 0.4;
+  finalColor.b *= 1.0 + trebleLevel * 0.6;
+  
+  finalColor *= 1.2 + audioGlow * 0.6;
+  
+  finalColor = tanh(finalColor * 0.7) * 1.4;
   
   return half4(finalColor, 1.0);
 }
