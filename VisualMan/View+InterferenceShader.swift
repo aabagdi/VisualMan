@@ -1,5 +1,5 @@
 //
-//  View+JuliaShader.swift
+//  View+InterferenceShader.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 7/26/25.

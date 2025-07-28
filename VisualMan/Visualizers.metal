@@ -333,9 +333,12 @@ float calculateParallaxLayer(float2 uv,
                                        float trebleLevel,
                                        float2 viewSize) {
   float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
-  
-  float2 scrollBase = float2(sin(time * 0.1), cos(time * 0.15));
+ 
   float audioIntensity = (bassLevel + midLevel + trebleLevel) / 3.0;
+  
+  audioIntensity = pow(audioIntensity, 1.5);
+  
+  float2 scrollBase = float2(sin(time * 0.05), cos(time * 0.07));
   
   half3 finalColor = half3(0.05, 0.05, 0.1);
   
@@ -343,59 +346,63 @@ float calculateParallaxLayer(float2 uv,
   for (int i = 0; i < numLayers; i++) {
     float depth = float(i) / float(numLayers - 1);
     
-    float2 parallaxOffset = scrollBase * depth * (1.0 + audioIntensity * 2.0);
+    float2 parallaxOffset = scrollBase * depth * (0.5 + audioIntensity * 0.5);
     
     float layerWave = calculateParallaxLayer(uv, time, bassLevel, midLevel, trebleLevel, depth, parallaxOffset);
     
-    layerWave = tanh(layerWave * (0.8 - depth * 0.2));
-    
+    layerWave = tanh(layerWave * (0.5 - depth * 0.1));
+
     half3 layerColor;
     
     if (depth < 0.33) {
       layerColor = mix(half3(0.0, 1.0, 1.0),
                        half3(0.2, 0.4, 1.0),
-                       depth * 3.0
-                       );
+                       depth * 3.0);
     } else if (depth < 0.66) {
       layerColor = mix(half3(0.6, 0.2, 1.0),
                        half3(1.0, 0.0, 0.8),
-                       (depth - 0.33) * 3.0
-                       );
+                       (depth - 0.33) * 3.0);
     } else {
       layerColor = mix(half3(1.0, 0.4, 0.7),
                        half3(1.0, 0.7, 0.2),
-                       (depth - 0.66) * 3.0
-                       );
+                       (depth - 0.66) * 3.0);
     }
     
-    float shimmer = sin(layerWave * 10.0 + time * 3.0) * 0.2;
+    float shimmer = sin(layerWave * 5.0 + time * 1.5) * 0.1;
     layerColor *= 1.0 + shimmer;
     
     float fogFactor = 1.0 - depth * 0.5;
     
+    float waveContribution = abs(layerWave);
+
+    waveContribution = pow(waveContribution, 1.2);
+    
     if (i < 3) {
-      finalColor += layerColor * abs(layerWave) * fogFactor * 0.5;
+      finalColor += layerColor * waveContribution * fogFactor * 0.4;
     } else {
-      finalColor = mix(finalColor, layerColor, abs(layerWave) * fogFactor * 0.6);
+      finalColor = mix(finalColor, layerColor, waveContribution * fogFactor * 0.5);
     }
     
-    float edgeGlow = max(0.0, layerWave - 0.5) * 2.0;
-    finalColor += layerColor * edgeGlow * fogFactor * 0.3;
+    float edgeGlow = max(0.0, layerWave - 0.6) * 1.5;
+    finalColor += layerColor * edgeGlow * fogFactor * 0.2;
   }
   
   float vignette = 1.0 - length(uv) * 0.5;
   half3 vignetteColor = half3(0.1, 0.15, 0.3) * vignette;
   finalColor += vignetteColor;
   
-  float audioGlow = (bassLevel + midLevel + trebleLevel) / 3.0;
+  float smoothBass = pow(bassLevel, 1.5);
+  float smoothMid = pow(midLevel, 1.5);
+  float smoothTreble = pow(trebleLevel, 1.5);
   
-  finalColor.r *= 1.0 + bassLevel * 0.5;
-  finalColor.g *= 1.0 + midLevel * 0.4;
-  finalColor.b *= 1.0 + trebleLevel * 0.6;
+  finalColor.r *= 1.0 + smoothBass * 0.3;
+  finalColor.g *= 1.0 + smoothMid * 0.25;
+  finalColor.b *= 1.0 + smoothTreble * 0.35;
   
-  finalColor *= 1.2 + audioGlow * 0.6;
+  float audioGlow = pow(audioIntensity, 1.2);
+  finalColor *= 1.1 + audioGlow * 0.3;
   
-  finalColor = tanh(finalColor * 0.7) * 1.4;
+  finalColor = tanh(finalColor * 0.8) * 1.25;
   
   return half4(finalColor, 1.0);
 }
