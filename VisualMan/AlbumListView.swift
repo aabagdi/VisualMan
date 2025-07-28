@@ -25,17 +25,13 @@ struct AlbumListView: View {
             Spacer()
             VStack {
               Text(album.representativeItem?.albumTitle ?? "Unknown")
-                .minimumScaleFactor(0.05)
-                .lineLimit(1)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
               Text(album.representativeItem?.albumArtist ?? "Unknown")
                 .font(.caption)
-                .minimumScaleFactor(0.05)
-                .lineLimit(1)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
             }
+            .minimumScaleFactor(0.05)
+            .lineLimit(1)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
           }
           .padding()
         }
