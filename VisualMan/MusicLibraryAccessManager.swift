@@ -15,6 +15,7 @@ class MusicLibraryAccessManager: ObservableObject {
   @Published var playlists: [MPMediaItemCollection] = []
   @Published var albums: [MPMediaItemCollection] = []
   @Published var artists: [MPMediaItemCollection] = []
+  @Published var compilations: [MPMediaItemCollection] = []
   @Published var genres: [MPMediaItemCollection] = []
   @Published var authorizationStatus: MPMediaLibraryAuthorizationStatus = .notDetermined
   @Published var isLoading = false
@@ -36,8 +37,13 @@ class MusicLibraryAccessManager: ObservableObject {
     songs = MPMediaQuery.songs().items ?? []
     playlists = MPMediaQuery.playlists().collections ?? []
     albums = MPMediaQuery.albums().collections ?? []
+    compilations = MPMediaQuery.compilations().collections ?? []
     artists = MPMediaQuery.artists().collections ?? []
     genres = MPMediaQuery.genres().collections ?? []
+    
+    albums.sort {
+      $0.representativeItem?.albumArtist ?? "Unknown" < $1.representativeItem?.albumArtist ?? "Unknown"
+    }
     
     isLoading = false
   }
