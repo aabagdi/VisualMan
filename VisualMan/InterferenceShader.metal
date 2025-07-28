@@ -178,4 +178,3 @@ float calculateParallaxLayer(float2 uv,
   
   return half4(finalColor, 1.0);
 }
-

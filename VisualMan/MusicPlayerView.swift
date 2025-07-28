@@ -9,6 +9,14 @@ import SwiftUI
 import MediaPlayer
 
 struct MusicPlayerView: View {
+  private var sliderColor: Color = .white
+  private var normalFillColor: Color {
+    sliderColor.opacity(0.5)
+  }
+  private var emptyColor: Color {
+    sliderColor.opacity(0.3)
+  }
+  
   enum Visualizers: String, CaseIterable {
     case julia = "Julia Set"
     case fireworks = "Fireworks"
@@ -36,6 +44,17 @@ struct MusicPlayerView: View {
         .ignoresSafeArea()
       VStack {
         Spacer()
+        ProgressSliderView(value: $audioManager.currentTime,
+                           inRange: TimeInterval.zero...max(audioManager.duration, 0.1),
+                           activeFillColor: sliderColor,
+                           fillColor: normalFillColor,
+                           emptyColor: emptyColor,
+                           height: 8) { started in
+          if !started {
+            audioManager.seek(to: audioManager.currentTime)
+          }
+        }
+        .padding()
         HStack {
           Button {
             

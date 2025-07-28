@@ -38,7 +38,7 @@ class AudioEngineManager: ObservableObject {
       print("Failed to setup audio engine: \(error)")
     }
   }
-   
+  
   isolated deinit {
     stopDisplayLink()
     stopSecurityScopedAccess()
@@ -169,6 +169,55 @@ class AudioEngineManager: ObservableObject {
     stopSecurityScopedAccess()
   }
   
+  func seek(to time: TimeInterval) {
+    guard let player,
+          let audioFile,
+          let engine else { return }
+    
+    let wasPlaying = isPlaying
+    
+    player.stop()
+    
+    engine.mainMixerNode.removeTap(onBus: 0)
+    
+    let sampleRate = audioFile.fileFormat.sampleRate
+    let newSampleTime = AVAudioFramePosition(time * sampleRate)
+    
+    let clampedPosition = max(0, min(newSampleTime, audioFile.length))
+    
+    player.scheduleSegment(
+      audioFile,
+      startingFrame: clampedPosition,
+      frameCount: AVAudioFrameCount(audioFile.length - clampedPosition),
+      at: nil
+    ) { [weak self] in
+      DispatchQueue.main.async {
+        self?.isPlaying = false
+        self?.currentTime = self?.duration ?? 0
+        self?.stopDisplayLink()
+      }
+    }
+    
+    let format = engine.mainMixerNode.outputFormat(forBus: 0)
+    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable [weak self] buffer, _ in
+      guard let channelData = buffer.floatChannelData?[0] else { return }
+      
+      let frameLength = Int(buffer.frameLength)
+      let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
+      
+      Task { @MainActor in
+        self?.processAudioBuffer(samples)
+      }
+    }
+    
+    currentTime = time
+    
+    if wasPlaying {
+      player.play()
+      startDisplayLink()
+    }
+  }
+  
   func startDisplayLink() {
     displayLink = CADisplayLink(target: self, selector: #selector(updateTime))
     displayLink?.add(to: .current, forMode: .common)
@@ -268,4 +317,5 @@ class AudioEngineManager: ObservableObject {
     }
     
     vDSP_DFT_DestroySetup(dftSetup)
-  }}
+  }
+}
