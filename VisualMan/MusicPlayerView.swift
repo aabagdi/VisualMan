@@ -49,11 +49,13 @@ struct MusicPlayerView: View {
                            activeFillColor: sliderColor,
                            fillColor: normalFillColor,
                            emptyColor: emptyColor,
-                           height: 8) { started in
-          if !started {
+                           height: 8
+        ) { isDragging in
+          if !isDragging {
             audioManager.seek(to: audioManager.currentTime)
           }
         }
+        .frame(height: 60)
         .padding()
         HStack {
           Button {

@@ -13,7 +13,7 @@ extension Double {
     formatter.allowedUnits = [.minute, .second]
     formatter.unitsStyle = style
     formatter.zeroFormattingBehavior = .pad
-    return formatter.string(from: self) ?? ""
+    return formatter.string(from: self) ?? "0:00"
   }
 }
 

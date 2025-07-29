@@ -16,6 +16,7 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
   let height: CGFloat
   let onEditingChanged: (Bool) -> Void
   
+  @State private var localRealProgress: T = 0
   @State private var localTempProgress: T = 0
   @GestureState private var isActive: Bool = false
   
@@ -37,81 +38,104 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     self.onEditingChanged = onEditingChanged
   }
   
-  private var progress: T {
-    let range = inRange.upperBound - inRange.lowerBound
-    guard range > 0 else { return 0 }
-    let correctedValue = value - inRange.lowerBound
-    return max(0, min(1, correctedValue / range))
+  private var currentProgress: T {
+    if isActive {
+      return max(min(localRealProgress + localTempProgress, 1), 0)
+    } else {
+      return getPrgPercentage(value)
+    }
   }
   
-  private var displayProgress: T {
-    return max(0, min(1, progress + localTempProgress))
+  private var displayTime: T {
+    if isActive {
+      return currentProgress * inRange.upperBound
+    }
+    return value
   }
   
-  private var currentPosition: T {
-    return inRange.lowerBound + (displayProgress * (inRange.upperBound - inRange.lowerBound))
+  private var remainingTime: T {
+    return inRange.upperBound - displayTime
   }
   
   var body: some View {
     GeometryReader { bounds in
       ZStack {
-        VStack {
-          ZStack(alignment: .center) {
+        VStack(spacing: 4) {
+          ZStack(alignment: .leading) {
             Capsule()
               .fill(emptyColor)
+              .frame(height: height)
+            
             Capsule()
               .fill(isActive ? activeFillColor : fillColor)
-              .mask({
-                HStack {
-                  Rectangle()
-                    .frame(width: max(bounds.size.width * CGFloat(displayProgress), 0), alignment: .leading)
-                  Spacer(minLength: 0)
-                }
-              })
+              .frame(width: max(bounds.size.width * CGFloat(currentProgress), 0), height: height)
           }
-          .frame(height: height)  // Explicit height
+          .frame(height: height)
           
           HStack {
-            Text(currentPosition.asTimeString(style: .positional))
+            Text(displayTime.asTimeString(style: .positional))
+              .font(.caption)
+              .monospacedDigit()
+              .foregroundColor(isActive ? fillColor : emptyColor)
+            
             Spacer(minLength: 0)
-            Text("-" + (inRange.upperBound - currentPosition).asTimeString(style: .positional))
+            
+            Text("-" + remainingTime.asTimeString(style: .positional))
+              .font(.caption)
+              .monospacedDigit()
+              .foregroundColor(isActive ? fillColor : emptyColor)
           }
-          .font(.system(.headline, design: .rounded))
-          .monospacedDigit()
-          .foregroundColor(isActive ? fillColor : emptyColor)
         }
-        .frame(width: isActive ? bounds.size.width * 1.04 : bounds.size.width, alignment: .center)
-        .animation(animation, value: isActive)
+        .frame(width: isActive ? bounds.size.width * 1.04 : bounds.size.width)
+        .scaleEffect(isActive ? 1.02 : 1.0)
+        .shadow(color: .black.opacity(isActive ? 0.2 : 0), radius: isActive ? 10 : 0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
       }
       .frame(width: bounds.size.width, height: bounds.size.height, alignment: .center)
-      .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
-        .updating($isActive) { value, state, transaction in
-          state = true
-        }
-        .onChanged { gesture in
-          localTempProgress = T(gesture.translation.width / bounds.size.width)
-          // Update the binding with the new position
-          let newPosition = inRange.lowerBound + (displayProgress * (inRange.upperBound - inRange.lowerBound))
-          value = max(inRange.lowerBound, min(inRange.upperBound, newPosition))
-        }
-        .onEnded { _ in
-          // Commit the drag by updating the actual value
-          let newPosition = inRange.lowerBound + (displayProgress * (inRange.upperBound - inRange.lowerBound))
-          value = max(inRange.lowerBound, min(inRange.upperBound, newPosition))
-          localTempProgress = 0
-        })
+      .contentShape(Rectangle())
+      .gesture(
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+          .updating($isActive) { _, state, _ in
+            state = true
+          }
+          .onChanged { gesture in
+            let dragProgress = T(gesture.location.x / bounds.size.width)
+            let clampedProgress = max(min(dragProgress, 1), 0)
+            
+            if !isActive {
+              localRealProgress = getPrgPercentage(value)
+            }
+            
+            localTempProgress = clampedProgress - localRealProgress
+            
+            let newValue = clampedProgress * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
+            value = max(min(newValue, inRange.upperBound), inRange.lowerBound)
+          }
+          .onEnded { _ in
+            localRealProgress = max(min(localRealProgress + localTempProgress, 1), 0)
+            localTempProgress = 0
+          }
+      )
       .onChange(of: isActive) { _, newValue in
         onEditingChanged(newValue)
       }
+      .onChange(of: value) { _, _ in
+        if !isActive {
+          localRealProgress = getPrgPercentage(value)
+        }
+      }
+      .onAppear {
+        localRealProgress = getPrgPercentage(value)
+      }
     }
-    .frame(height: isActive ? height * 1.25 : height, alignment: .center)
+    .frame(height: 30)
   }
   
-  private var animation: Animation {
-    if isActive {
-      return .spring()
-    } else {
-      return .spring(response: 0.5, dampingFraction: 0.5, blendDuration: 0.6)
-    }
+  private func getPrgPercentage(_ value: T) -> T {
+    let range = inRange.upperBound - inRange.lowerBound
+    if range == 0 { return 0 }
+    let correctedStartValue = value - inRange.lowerBound
+    let percentage = correctedStartValue / range
+    return max(min(percentage, 1), 0)
   }
 }

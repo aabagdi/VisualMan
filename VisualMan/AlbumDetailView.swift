@@ -11,6 +11,14 @@ import MediaPlayer
 struct AlbumDetailView: View {
   let album: MPMediaItemCollection
   
+  private var year: String {
+    if let year = album.representativeItem?.value(forProperty: "year") as? Int {
+      return String(year)
+    } else {
+      return "Unknown"
+    }
+  }
+  
   var body: some View {
     VStack {
       Image(uiImage: album.representativeItem?.albumArt ?? UIImage(named: "Art Placeholder")!)
@@ -20,12 +28,17 @@ struct AlbumDetailView: View {
         .padding()
       Text(album.representativeItem?.albumTitle ?? "Unknown")
         .font(.headline)
-      Text(album.representativeItem?.albumArtist ?? "Unknown")
-        .font(.subheadline)
+      if album.representativeItem?.isCompilation == true {
+        Text("Various Artists")
+          .font(.subheadline)
+      } else {
+        Text(album.representativeItem?.albumArtist ?? "Unknown")
+          .font(.subheadline)
+      }
       HStack {
         Text(album.representativeItem?.genre ?? "Unknown")
         Text("-")
-        Text(String(album.representativeItem?.value(forProperty: "year") as? Int ?? 0))
+        Text(year)
       }
       .font(.footnote)
       NavigationStack {

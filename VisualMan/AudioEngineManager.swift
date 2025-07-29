@@ -175,53 +175,50 @@ class AudioEngineManager: ObservableObject {
       return
     }
     
-    // Ensure time is within bounds
     let clampedTime = max(0, min(time, duration))
     
-    // Stop the display link temporarily to prevent conflicts
-    stopDisplayLink()
-    
-    // Check if we're currently playing
     let wasPlaying = player.isPlaying
     
-    // Stop current playback
+    stopDisplayLink()
+    
     player.stop()
     
-    // Calculate the frame position
+    currentTime = clampedTime
+    
     let sampleRate = audioFile.fileFormat.sampleRate
     let newSampleTime = AVAudioFramePosition(clampedTime * sampleRate)
     
-    // Schedule the file from the new position
-    player.scheduleSegment(
-      audioFile,
-      startingFrame: newSampleTime,
-      frameCount: AVAudioFrameCount(audioFile.length - newSampleTime),
-      at: nil
-    ) { [weak self] in
-      // This completion handler is called when playback reaches the end
-      DispatchQueue.main.async {
-        self?.isPlaying = false
-        self?.currentTime = self?.duration ?? 0
-        self?.stopDisplayLink()
-      }
-    }
+    let remainingFrames = audioFile.length - newSampleTime
     
-    // Update current time immediately
-    currentTime = clampedTime
-    
-    // Resume playback if it was playing
-    if wasPlaying {
-      player.play()
-      // Re-start display link after a small delay to ensure player has started
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-        if self?.isPlaying == true {
-          self?.startDisplayLink()
+    if remainingFrames > 0 {
+      player.scheduleSegment(
+        audioFile,
+        startingFrame: newSampleTime,
+        frameCount: AVAudioFrameCount(remainingFrames),
+        at: nil
+      ) { [weak self] in
+        DispatchQueue.main.async {
+          self?.isPlaying = false
+          self?.currentTime = self?.duration ?? 0
+          self?.stopDisplayLink()
         }
       }
+      
+      if wasPlaying {
+        player.play()
+        isPlaying = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+          if self?.isPlaying == true {
+            self?.startDisplayLink()
+          }
+        }
+      }
+    } else {
+      isPlaying = false
+      currentTime = duration
     }
   }
   
-  // Also update the startDisplayLink method to be more robust:
   func startDisplayLink() {
     stopDisplayLink()
     displayLink = CADisplayLink(target: self, selector: #selector(updateTime))
@@ -235,18 +232,21 @@ class AudioEngineManager: ObservableObject {
   
   @objc func updateTime() {
     guard let player,
-          let audioFile else { return }
+          let audioFile,
+          player.isPlaying else { return }
     
     if let nodeTime = player.lastRenderTime,
        let playerTime = player.playerTime(forNodeTime: nodeTime) {
+      let sampleTime = playerTime.sampleTime
+      
+      guard sampleTime >= 0 else { return }
+      
       let newTime = Double(playerTime.sampleTime) / audioFile.fileFormat.sampleRate
       
-      // Only update if the time has actually changed to reduce UI updates
-      if abs(newTime - currentTime) > 0.01 {
+      if newTime >= 0 && newTime <= duration && abs(newTime - currentTime) > 0.01 {
         currentTime = newTime
       }
       
-      // Check if we've reached the end
       if currentTime >= duration - 0.1 {
         DispatchQueue.main.async { [weak self] in
           self?.isPlaying = false
