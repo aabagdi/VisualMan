@@ -189,7 +189,7 @@ class AudioEngineManager: ObservableObject {
   
   func seek(to time: TimeInterval) {
     guard let player,
-          let audioFile else{ return }
+          let audioFile else { return }
     
     let sampleRate = audioFile.fileFormat.sampleRate
     let newFrame = AVAudioFramePosition(time * sampleRate)
