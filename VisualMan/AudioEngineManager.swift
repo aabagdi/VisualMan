@@ -356,7 +356,7 @@ class AudioEngineManager: ObservableObject {
     
     for i in 0..<numberOfBars {
       let currentLevel = visualizerBars[i]
-      let targetLevel = newBars[i] * currentGain  // Apply gain
+      let targetLevel = newBars[i] * currentGain
       
       if targetLevel > currentLevel {
         visualizerBars[i] = currentLevel + (targetLevel - currentLevel) * (1.0 - attackTime)
