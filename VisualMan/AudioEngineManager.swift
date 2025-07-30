@@ -32,6 +32,14 @@ class AudioEngineManager: ObservableObject {
   private var isSeekingInProgress = false
   private var numberOfBars = 32
   private let smoothingFactor: Float = 0.8
+  private let attackTime: Float = 0.1
+  private let releaseTime: Float = 0.6
+  private var peakLevels: [Float] = Array(repeating: 0.0, count: 32)
+  private var peakHoldTime: [Int] = Array(repeating: 0, count: 32)
+  private let peakHoldDuration = 10
+  private var gainHistory: [Float] = []
+  private let gainHistorySize = 30
+  private var currentGain: Float = 1.0
   
   init() {
     do {
@@ -269,7 +277,7 @@ class AudioEngineManager: ObservableObject {
     var imagOut = [Float](repeating: 0, count: 1024)
     
     for i in 0..<min(samples.count, 1024) {
-      let window = 0.54 - 0.46 * cos(2.0 * .pi * Float(i) / 1023.0)
+      let window = 0.5 - 0.5 * cos(2.0 * .pi * Float(i) / Float(1023))
       realIn[i] = samples[i] * window
     }
     
@@ -290,7 +298,7 @@ class AudioEngineManager: ObservableObject {
       }
     }
     
-    var scaleFactor: Float = 1.0 / Float(1024)
+    var scaleFactor: Float = 2.0 / Float(1024)
     vDSP_vsmul(magnitudes, 1, &scaleFactor, &magnitudes, 1, 512)
     
     var logMagnitudes = [Float](repeating: 0.0, count: 512)
@@ -333,7 +341,7 @@ class AudioEngineManager: ObservableObject {
       
       let db = 20.0 * log10(weightedMagnitude)
       
-      let normalized = (db + 80.0) / 70.0
+      let normalized = (db + 60.0) / 80.0
       
       logMagnitudes[i] = max(0.0, min(1.0, normalized))
     }
@@ -344,52 +352,105 @@ class AudioEngineManager: ObservableObject {
     
     let newBars = createVisualizerBars(from: audioLevels)
     
+    updateAutomaticGainControl(bars: newBars)
+    
     for i in 0..<numberOfBars {
-      visualizerBars[i] = visualizerBars[i] * smoothingFactor + newBars[i] * (1.0 - smoothingFactor)
+      let currentLevel = visualizerBars[i]
+      let targetLevel = newBars[i] * currentGain  // Apply gain
+      
+      if targetLevel > currentLevel {
+        visualizerBars[i] = currentLevel + (targetLevel - currentLevel) * (1.0 - attackTime)
+      } else {
+        visualizerBars[i] = currentLevel + (targetLevel - currentLevel) * (1.0 - releaseTime)
+      }
+      
+      visualizerBars[i] = min(1.0, visualizerBars[i])
+      
+      if visualizerBars[i] > peakLevels[i] {
+        peakLevels[i] = visualizerBars[i]
+        peakHoldTime[i] = peakHoldDuration
+      } else if peakHoldTime[i] > 0 {
+        peakHoldTime[i] -= 1
+      } else {
+        peakLevels[i] *= 0.95
+      }
     }
     
     vDSP_DFT_DestroySetup(dftSetup)
   }
   
+  private func updateAutomaticGainControl(bars: [Float]) {
+    let maxBar = bars.max() ?? 0.0
+    
+    gainHistory.append(maxBar)
+    if gainHistory.count > gainHistorySize {
+      gainHistory.removeFirst()
+    }
+    
+    let averagePeak = gainHistory.reduce(0, +) / Float(gainHistory.count)
+    
+    let targetPeak: Float = 0.75
+    var desiredGain: Float = 1.0
+    
+    if averagePeak > 0.01 {
+      desiredGain = targetPeak / averagePeak
+    }
+    
+    desiredGain = max(0.3, min(2.0, desiredGain))
+    
+    currentGain = currentGain * 0.95 + desiredGain * 0.05
+  }
+  
   private func createVisualizerBars(from fftData: [Float]) -> [Float] {
     var bars = [Float](repeating: 0, count: numberOfBars)
-
-    let minFreq: Float = 20.0
-    let maxFreq: Float = 20000.0
+    
+    let minFreq: Float = 60.0
+    let maxFreq: Float = 16000.0
     let sampleRate: Float = 44100.0
     
     let logMinFreq = log10(minFreq)
     let logMaxFreq = log10(maxFreq)
-    let logFreqStep = (logMaxFreq - logMinFreq) / Float(numberOfBars)
     
     for i in 0..<numberOfBars {
-      let logFreqLow = logMinFreq + Float(i) * logFreqStep
-      let logFreqHigh = logMinFreq + Float(i + 1) * logFreqStep
+      let logFreqLow = logMinFreq + (logMaxFreq - logMinFreq) * Float(i) / Float(numberOfBars)
+      let logFreqHigh = logMinFreq + (logMaxFreq - logMinFreq) * Float(i + 1) / Float(numberOfBars)
       
       let freqLow = pow(10, logFreqLow)
       let freqHigh = pow(10, logFreqHigh)
       
-      let binLow = Int((freqLow / (sampleRate / 2.0)) * Float(fftData.count))
-      let binHigh = Int((freqHigh / (sampleRate / 2.0)) * Float(fftData.count))
+      let binWidth = sampleRate / Float(fftData.count * 2)
+      let binLow = Int(freqLow / binWidth)
+      let binHigh = Int(freqHigh / binWidth)
       
       let startBin = max(0, min(binLow, fftData.count - 1))
       let endBin = max(startBin + 1, min(binHigh, fftData.count))
       
-      var sum: Float = 0
+      var maxMag: Float = 0
+      var avgMag: Float = 0
       var count = 0
       
       for j in startBin..<endBin {
-        sum += fftData[j]
+        let mag = fftData[j]
+        avgMag += mag
+        maxMag = max(maxMag, mag)
         count += 1
       }
       
       if count > 0 {
-        bars[i] = sum / Float(count)
+        avgMag /= Float(count)
+        bars[i] = avgMag * 0.7 + maxMag * 0.3
         
-        let frequencyScaling = 1.0 + (1.0 - Float(i) / Float(numberOfBars)) * 0.5
-        bars[i] *= frequencyScaling
+        let freqCenter = (freqLow + freqHigh) / 2.0
         
-        bars[i] = min(1.0, bars[i])
+        if freqCenter < 200 {
+          bars[i] *= 1.5
+        } else if freqCenter < 500 {
+          bars[i] *= 1.2
+        }
+        
+        bars[i] = tanh(bars[i] * 2.0) / 2.0
+        
+        bars[i] = max(0, min(1, bars[i]))
       }
     }
     
