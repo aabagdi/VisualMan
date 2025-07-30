@@ -17,7 +17,8 @@ class AudioEngineManager: ObservableObject {
   private var engine: AVAudioEngine?
   private var player: AVAudioPlayerNode?
   
-  @Published var audioLevels: [Float] = Array(repeating: 0, count: 512)
+  @Published var audioLevels: [Float] = Array(repeating: 0.0, count: 512)
+  @Published var visualizerBars: [Float] = Array(repeating: 0.0, count: 32)
   @Published var isPlaying = false
   @Published var currentTime: TimeInterval = 0
   @Published var duration: TimeInterval = 0
@@ -29,6 +30,8 @@ class AudioEngineManager: ObservableObject {
   private var securityScopedURL: URL?
   private var seekTime: TimeInterval = 0
   private var isSeekingInProgress = false
+  private var numberOfBars = 32
+  private let smoothingFactor: Float = 0.8
   
   init() {
     do {
@@ -248,7 +251,7 @@ class AudioEngineManager: ObservableObject {
       
       let elapsedTime = Double(sampleTime) / audioFile.fileFormat.sampleRate
       let newTime = seekTime + elapsedTime
-            
+      
       if newTime >= 0 && newTime <= duration {
         currentTime = newTime
       }
@@ -339,6 +342,57 @@ class AudioEngineManager: ObservableObject {
       audioLevels[i] = audioLevels[i] * 0.8 + logMagnitudes[i] * 0.2
     }
     
+    let newBars = createVisualizerBars(from: audioLevels)
+    
+    for i in 0..<numberOfBars {
+      visualizerBars[i] = visualizerBars[i] * smoothingFactor + newBars[i] * (1.0 - smoothingFactor)
+    }
+    
     vDSP_DFT_DestroySetup(dftSetup)
+  }
+  
+  private func createVisualizerBars(from fftData: [Float]) -> [Float] {
+    var bars = [Float](repeating: 0, count: numberOfBars)
+
+    let minFreq: Float = 20.0
+    let maxFreq: Float = 20000.0
+    let sampleRate: Float = 44100.0
+    
+    let logMinFreq = log10(minFreq)
+    let logMaxFreq = log10(maxFreq)
+    let logFreqStep = (logMaxFreq - logMinFreq) / Float(numberOfBars)
+    
+    for i in 0..<numberOfBars {
+      let logFreqLow = logMinFreq + Float(i) * logFreqStep
+      let logFreqHigh = logMinFreq + Float(i + 1) * logFreqStep
+      
+      let freqLow = pow(10, logFreqLow)
+      let freqHigh = pow(10, logFreqHigh)
+      
+      let binLow = Int((freqLow / (sampleRate / 2.0)) * Float(fftData.count))
+      let binHigh = Int((freqHigh / (sampleRate / 2.0)) * Float(fftData.count))
+      
+      let startBin = max(0, min(binLow, fftData.count - 1))
+      let endBin = max(startBin + 1, min(binHigh, fftData.count))
+      
+      var sum: Float = 0
+      var count = 0
+      
+      for j in startBin..<endBin {
+        sum += fftData[j]
+        count += 1
+      }
+      
+      if count > 0 {
+        bars[i] = sum / Float(count)
+        
+        let frequencyScaling = 1.0 + (1.0 - Float(i) / Float(numberOfBars)) * 0.5
+        bars[i] *= frequencyScaling
+        
+        bars[i] = min(1.0, bars[i])
+      }
+    }
+    
+    return bars
   }
 }

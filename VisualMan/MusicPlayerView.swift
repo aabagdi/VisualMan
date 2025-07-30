@@ -18,13 +18,14 @@ struct MusicPlayerView: View {
   }
   
   enum Visualizers: String, CaseIterable {
+    case bars = "Bars"
     case julia = "Julia Set"
     case fireworks = "Fireworks"
     case interference = "Interference Pattern"
     case voronoi = "Voronoi Diagram"
   }
   
-  @State private var currentVisualizer = Visualizers.julia
+  @State private var currentVisualizer = Visualizers.bars
   @State private var failedPlaying: Bool = false
   
   @ObservedObject private var audioManager = AudioEngineManager.shared
@@ -111,6 +112,8 @@ struct MusicPlayerView: View {
   @ViewBuilder
   private func currentShader(currentVisualizer: Visualizers, audioLevels: [Float]) -> some View {
     switch currentVisualizer {
+    case .bars:
+      BarVisualizerView(audioLevels: audioLevels)
     case .julia:
       JuliaVisualizerView(audioLevels: audioLevels)
     case .fireworks:
