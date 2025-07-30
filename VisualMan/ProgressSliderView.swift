@@ -17,7 +17,7 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
   let onEditingChanged: (Bool) -> Void
   
   @State private var isDragging: Bool = false
-  @State private var dragLocation: T = 0
+  @State private var tempValue: T = 0
   
   init(
     value: Binding<T>,
@@ -39,7 +39,7 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
   
   private var currentProgress: T {
     if isDragging {
-      return dragLocation
+      return getPrgPercentage(tempValue)
     } else {
       return getPrgPercentage(value)
     }
@@ -98,13 +98,12 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
             }
             
             let progress = T(gesture.location.x / bounds.size.width)
-            dragLocation = max(min(progress, 1), 0)
+            let clampedProgress = max(min(progress, 1), 0)
             
-            // Update the bound value immediately during drag
-            let newValue = dragLocation * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
-            value = max(min(newValue, inRange.upperBound), inRange.lowerBound)
+            tempValue = clampedProgress * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
           }
           .onEnded { _ in
+            value = tempValue
             isDragging = false
             onEditingChanged(false)
           }

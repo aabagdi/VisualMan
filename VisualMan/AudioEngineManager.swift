@@ -28,8 +28,7 @@ class AudioEngineManager: ObservableObject {
   private var audioFile: AVAudioFile?
   private var displayLink: CADisplayLink?
   private var securityScopedURL: URL?
-  private var seekTime: TimeInterval = 0
-  private var isSeekingInProgress = false
+  private var lastSeekFrame: AVAudioFramePosition = 0
   private var numberOfBars = 32
   private let smoothingFactor: Float = 0.8
   private let attackTime: Float = 0.1
@@ -190,48 +189,31 @@ class AudioEngineManager: ObservableObject {
   
   func seek(to time: TimeInterval) {
     guard let player,
-          let audioFile else { return }
-    
-    isSeekingInProgress = true
-    
-    let clampedTime = max(0, min(time, duration))
-    
-    let wasPlaying = player.isPlaying
-    
-    player.stop()
-    stopDisplayLink()
-    
-    seekTime = clampedTime
-    currentTime = clampedTime
+          let audioFile else{ return }
     
     let sampleRate = audioFile.fileFormat.sampleRate
-    let newSampleTime = AVAudioFramePosition(clampedTime * sampleRate)
+    let newFrame = AVAudioFramePosition(time * sampleRate)
     
-    let remainingFrames = audioFile.length - newSampleTime
+    let clampedFrame = max(0, min(newFrame, audioFile.length))
     
-    if remainingFrames > 0 {
+    lastSeekFrame = clampedFrame
+    
+    player.stop()
+    
+    if clampedFrame < audioFile.length {
       player.scheduleSegment(
         audioFile,
-        startingFrame: newSampleTime,
-        frameCount: AVAudioFrameCount(remainingFrames),
+        startingFrame: clampedFrame,
+        frameCount: AVAudioFrameCount(audioFile.length - clampedFrame),
         at: nil
-      ) { [weak self] in
-        DispatchQueue.main.async {
-          self?.handlePlaybackCompleted()
-        }
-      }
+      )
       
-      if wasPlaying {
+      if isPlaying {
         player.play()
-        isPlaying = true
-        startDisplayLink()
       }
-    } else {
-      isPlaying = false
-      currentTime = duration
     }
     
-    isSeekingInProgress = false
+    currentTime = time
   }
   
   func startDisplayLink() {
@@ -248,8 +230,7 @@ class AudioEngineManager: ObservableObject {
   @objc func updateTime() {
     guard let player,
           let audioFile,
-          player.isPlaying,
-          !isSeekingInProgress else { return }
+          player.isPlaying else { return }
     
     if let nodeTime = player.lastRenderTime,
        let playerTime = player.playerTime(forNodeTime: nodeTime) {
@@ -257,8 +238,8 @@ class AudioEngineManager: ObservableObject {
       
       guard sampleTime >= 0 else { return }
       
-      let elapsedTime = Double(sampleTime) / audioFile.fileFormat.sampleRate
-      let newTime = seekTime + elapsedTime
+      let currentFrame = lastSeekFrame + sampleTime
+      let newTime = Double(currentFrame) / audioFile.fileFormat.sampleRate
       
       if newTime >= 0 && newTime <= duration {
         currentTime = newTime
