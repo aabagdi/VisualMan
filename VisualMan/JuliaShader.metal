@@ -1,5 +1,5 @@
 //
-//  Visualizers.metal
+//  JuliaShader.metal
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 7/24/25.
@@ -75,23 +75,17 @@ using namespace metal;
         float phase2 = t * 4.0 + time * 0.05;
         float phase3 = orbitTrap * 2.0 + time * 0.15;
         
-        half3 gradient1 = half3(
-                                sin(phase1 * (1.0 + bassLevel * 0.5)) * 0.5 + 0.5,
+        half3 gradient1 = half3(sin(phase1 * (1.0 + bassLevel * 0.5)) * 0.5 + 0.5,
                                 sin(phase1 + 2.094) * 0.5 + 0.5,
-                                sin(phase1 + 4.189) * 0.5 + 0.5
-                                );
+                                sin(phase1 + 4.189) * 0.5 + 0.5);
         
-        half3 gradient2 = half3(
-                                sin(phase2) * 0.5 + 0.5,
+        half3 gradient2 = half3(sin(phase2) * 0.5 + 0.5,
                                 sin(phase2 + 1.571) * 0.5 + 0.5,
-                                sin(phase2 + 3.142) * 0.5 + 0.5
-                                );
+                                sin(phase2 + 3.142) * 0.5 + 0.5);
         
-        half3 gradient3 = half3(
-                                sin(phase3) * 0.3 + 0.5,
+        half3 gradient3 = half3(sin(phase3) * 0.3 + 0.5,
                                 sin(phase3 + 2.618) * 0.3 + 0.5,
-                                sin(phase3 + 5.236) * 0.3 + 0.5
-                                );
+                                sin(phase3 + 5.236) * 0.3 + 0.5);
         
         sampleColor = gradient1 * (0.5 + bassLevel * 0.5);
         sampleColor = mix(sampleColor, gradient2, midLevel * 0.7);

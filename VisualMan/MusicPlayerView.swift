@@ -21,6 +21,7 @@ struct MusicPlayerView: View {
     case julia = "Julia Set"
     case fireworks = "Fireworks"
     case interference = "Interference Pattern"
+    case voronoi = "Voronoi Diagram"
   }
   
   @State private var currentVisualizer = Visualizers.julia
@@ -116,6 +117,8 @@ struct MusicPlayerView: View {
       FireworksVisualizerView(audioLevels: audioLevels)
     case .interference:
       InterferenceVisualizerView(audioLevels: audioLevels)
+    case .voronoi:
+      VoronoiShaderView(audioLevels: audioLevels)
     }
   }
 }

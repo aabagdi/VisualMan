@@ -16,9 +16,8 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
   let height: CGFloat
   let onEditingChanged: (Bool) -> Void
   
-  @State private var localRealProgress: T = 0
-  @State private var localTempProgress: T = 0
-  @GestureState private var isActive: Bool = false
+  @State private var isDragging: Bool = false
+  @State private var dragLocation: T = 0
   
   init(
     value: Binding<T>,
@@ -39,18 +38,15 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
   }
   
   private var currentProgress: T {
-    if isActive {
-      return max(min(localRealProgress + localTempProgress, 1), 0)
+    if isDragging {
+      return dragLocation
     } else {
       return getPrgPercentage(value)
     }
   }
   
   private var displayTime: T {
-    if isActive {
-      return currentProgress * inRange.upperBound
-    }
-    return value
+    return currentProgress * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
   }
   
   private var remainingTime: T {
@@ -67,7 +63,7 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
               .frame(height: height)
             
             Capsule()
-              .fill(isActive ? activeFillColor : fillColor)
+              .fill(isDragging ? activeFillColor : fillColor)
               .frame(width: max(bounds.size.width * CGFloat(currentProgress), 0), height: height)
           }
           .frame(height: height)
@@ -76,57 +72,43 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
             Text(displayTime.asTimeString(style: .positional))
               .font(.caption)
               .monospacedDigit()
-              .foregroundColor(isActive ? fillColor : emptyColor)
+              .foregroundColor(isDragging ? fillColor : emptyColor)
             
             Spacer(minLength: 0)
             
             Text("-" + remainingTime.asTimeString(style: .positional))
               .font(.caption)
               .monospacedDigit()
-              .foregroundColor(isActive ? fillColor : emptyColor)
+              .foregroundColor(isDragging ? fillColor : emptyColor)
           }
         }
-        .frame(width: isActive ? bounds.size.width * 1.04 : bounds.size.width)
-        .scaleEffect(isActive ? 1.02 : 1.0)
-        .shadow(color: .black.opacity(isActive ? 0.2 : 0), radius: isActive ? 10 : 0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
+        .frame(width: isDragging ? bounds.size.width * 1.04 : bounds.size.width)
+        .scaleEffect(isDragging ? 1.02 : 1.0)
+        .shadow(color: .black.opacity(isDragging ? 0.2 : 0), radius: isDragging ? 10 : 0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragging)
       }
       .frame(width: bounds.size.width, height: bounds.size.height, alignment: .center)
       .contentShape(Rectangle())
       .gesture(
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
-          .updating($isActive) { _, state, _ in
-            state = true
-          }
           .onChanged { gesture in
-            let dragProgress = T(gesture.location.x / bounds.size.width)
-            let clampedProgress = max(min(dragProgress, 1), 0)
-            
-            if !isActive {
-              localRealProgress = getPrgPercentage(value)
+            if !isDragging {
+              isDragging = true
+              onEditingChanged(true)
             }
             
-            localTempProgress = clampedProgress - localRealProgress
+            let progress = T(gesture.location.x / bounds.size.width)
+            dragLocation = max(min(progress, 1), 0)
             
-            let newValue = clampedProgress * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
+            // Update the bound value immediately during drag
+            let newValue = dragLocation * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
             value = max(min(newValue, inRange.upperBound), inRange.lowerBound)
           }
           .onEnded { _ in
-            localRealProgress = max(min(localRealProgress + localTempProgress, 1), 0)
-            localTempProgress = 0
+            isDragging = false
+            onEditingChanged(false)
           }
       )
-      .onChange(of: isActive) { _, newValue in
-        onEditingChanged(newValue)
-      }
-      .onChange(of: value) { _, _ in
-        if !isActive {
-          localRealProgress = getPrgPercentage(value)
-        }
-      }
-      .onAppear {
-        localRealProgress = getPrgPercentage(value)
-      }
     }
     .frame(height: 30)
   }
