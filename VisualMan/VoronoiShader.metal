@@ -18,26 +18,6 @@ float2 rand2(float2 p) {
   return fract(sin(p) * 43758.5453) * 2.0 - 1.0;
 }
 
-half3 hsv2rgb(float3 hsv) {
-  float h = fract(hsv.x) * 6.0;
-  float s = hsv.y;
-  float v = hsv.z;
-  
-  float c = v * s;
-  float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
-  float m = v - c;
-  
-  half3 rgb;
-  if (h < 1.0) rgb = half3(c, x, 0.0);
-  else if (h < 2.0) rgb = half3(x, c, 0.0);
-  else if (h < 3.0) rgb = half3(0.0, c, x);
-  else if (h < 4.0) rgb = half3(0.0, x, c);
-  else if (h < 5.0) rgb = half3(x, 0.0, c);
-  else rgb = half3(c, 0.0, x);
-  
-  return rgb + m;
-}
-
 float2 getSeedPosition(int index,
                        float time,
                        float bassLevel,
@@ -76,7 +56,14 @@ half3 getSeedColor(int index,
     color = half3(0.3, 0.5, 1.0) * (0.5 + trebleLevel * 0.5);
   }
   
-  return color;
+  half3 baseColor = color;
+  
+  float hueShift = time * 0.1;
+  half3 shiftedColor = half3(color.r * cos(hueShift) - color.g * sin(hueShift),
+                             color.r * sin(hueShift) + color.g * cos(hueShift),
+                             color.b);
+  
+  return mix(baseColor, shiftedColor, 0.3);
 }
 
 [[ stitchable ]] half4 voronoi(float2 position,
