@@ -41,6 +41,7 @@ struct MusicPlayerView: View {
   
   enum Visualizers: String, CaseIterable {
     case bars = "Bars"
+    case album = "Album Art Waves"
     case julia = "Julia Set"
     case fireworks = "Fireworks"
     case interference = "Interference Pattern"
@@ -74,7 +75,7 @@ struct MusicPlayerView: View {
   
   var body: some View {
     ZStack {
-      currentShader(currentVisualizer: currentVisualizer, visualizerBars: audioManager.visualizerBars, audioLevels: audioManager.audioLevels)
+      currentShader(currentVisualizer: currentVisualizer, visualizerBars: audioManager.visualizerBars, audioLevels: audioManager.audioLevels, albumArt: audioSources[currentIndex].albumArt)
         .ignoresSafeArea()
       VStack {
         Spacer()
@@ -241,10 +242,12 @@ struct MusicPlayerView: View {
   }
   
   @ViewBuilder
-  private func currentShader(currentVisualizer: Visualizers, visualizerBars: [Float], audioLevels: [Float]) -> some View {
+  private func currentShader(currentVisualizer: Visualizers, visualizerBars: [Float], audioLevels: [Float], albumArt: UIImage?) -> some View {
     switch currentVisualizer {
     case .bars:
       BarVisualizerView(visualizerBars: visualizerBars)
+    case .album:
+      AlbumArtWaveVisualizerView(audioLevels: audioLevels, albumArt: albumArt)
     case .julia:
       JuliaVisualizerView(audioLevels: audioLevels)
     case .fireworks:
