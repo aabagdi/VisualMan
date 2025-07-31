@@ -74,7 +74,7 @@ struct MusicPlayerView: View {
   
   var body: some View {
     ZStack {
-      currentShader(currentVisualizer: currentVisualizer, audioLevels: audioManager.audioLevels, visualizerBars: audioManager.visualizerBars)
+      currentShader(currentVisualizer: currentVisualizer, visualizerBars: audioManager.visualizerBars, audioLevels: audioManager.audioLevels)
         .ignoresSafeArea()
       VStack {
         Spacer()
@@ -241,7 +241,7 @@ struct MusicPlayerView: View {
   }
   
   @ViewBuilder
-  private func currentShader(currentVisualizer: Visualizers, audioLevels: [Float], visualizerBars: [Float]) -> some View {
+  private func currentShader(currentVisualizer: Visualizers, visualizerBars: [Float], audioLevels: [Float]) -> some View {
     switch currentVisualizer {
     case .bars:
       BarVisualizerView(visualizerBars: visualizerBars)
@@ -252,7 +252,7 @@ struct MusicPlayerView: View {
     case .interference:
       InterferenceVisualizerView(audioLevels: audioLevels)
     case .voronoi:
-      VoronoiShaderView(audioLevels: audioLevels)
+      VoronoiVisualizerView(audioLevels: audioLevels)
     }
   }
 }

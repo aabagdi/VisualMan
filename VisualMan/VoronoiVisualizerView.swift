@@ -1,5 +1,5 @@
 //
-//  VoronoiShaderView.swift
+//  VoronoiVisualizerView.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 7/29/25.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct VoronoiShaderView: View {
+struct VoronoiVisualizerView: View {
   @State private var time: Float = 0
   @State private var smoothedBass: Float = 0
   @State private var smoothedMid: Float = 0
