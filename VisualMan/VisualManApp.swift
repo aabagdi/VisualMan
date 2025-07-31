@@ -15,6 +15,9 @@ struct VisualManApp: App {
     WindowGroup {
       HomeScreenView()
         .environmentObject(musicLibraryManager)
+        .onAppear {
+          musicLibraryManager.requestMusicLibraryAccess()
+        }
     }
   }
 }

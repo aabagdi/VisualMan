@@ -18,7 +18,7 @@ struct AlbumListView: View {
     if searchText.isEmpty {
       return albums
     } else {
-      return albums.filter { $0.representativeItem?.albumTitle?.localizedCaseInsensitiveContains(searchText) ?? false }
+      return albums.filter { $0.representativeItem?.albumTitle?.localizedCaseInsensitiveContains(searchText) ?? false || $0.representativeItem?.artist?.localizedCaseInsensitiveContains(searchText) ?? false }
     }
   }
   

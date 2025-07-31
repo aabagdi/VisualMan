@@ -9,12 +9,9 @@ import SwiftUI
 import MediaPlayer
 
 struct MusicLibraryView: View {
-  @EnvironmentObject private var libraryManager: MusicLibraryAccessManager
+  @EnvironmentObject private var musicLibraryManager: MusicLibraryAccessManager
   
   var body: some View {
-    AlbumListView(albums: libraryManager.albums)
-    .onAppear {
-      libraryManager.requestMusicLibraryAccess()
-    }
+    AlbumListView(albums: musicLibraryManager.albums)
   }
 }
