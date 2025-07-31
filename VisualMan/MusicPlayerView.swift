@@ -223,9 +223,14 @@ struct MusicPlayerView: View {
   }
   
   private func skipBackwards() {
-    if currentIndex > 0 {
+    if audioManager.currentTime >= 3 {
+      audioManager.seek(to: 0)
+      return
+    } else if currentIndex > 0 {
       currentIndex -= 1
       playCurrentSong()
+    } else if currentIndex == 0 {
+      audioManager.seek(to: 0)
     }
   }
   
