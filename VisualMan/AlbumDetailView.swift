@@ -20,7 +20,7 @@ struct AlbumDetailView: View {
   }
   
   private var sortedSongs: [MPMediaItem] {
-    album.items.sorted { $0.albumTrackNumber < $1.albumTrackNumber }
+    album.items.sorted { ($0.discNumber, $0.albumTrackNumber) < ($1.discNumber, $1.albumTrackNumber) }
   }
   
   var body: some View {
@@ -50,6 +50,8 @@ struct AlbumDetailView: View {
           NavigationLink(destination: MusicPlayerView(sortedSongs, startingIndex: index)) {
             HStack {
               Text(String(song.albumTrackNumber))
+                .frame(width: 30, alignment: .trailing)
+              Divider()
               Spacer()
               Text(String(song.title ?? "Unknown"))
                 .minimumScaleFactor(0.05)

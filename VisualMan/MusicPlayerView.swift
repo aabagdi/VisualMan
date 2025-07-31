@@ -7,6 +7,7 @@
 
 import SwiftUI
 import MediaPlayer
+import Combine
 
 struct MusicPlayerView: View {
   @State private var currentVisualizer = Visualizers.bars
@@ -14,10 +15,22 @@ struct MusicPlayerView: View {
   @State private var failedPlaying: Bool = false
   @State private var playingError: Error?
   @State private var currentIndex: Int
+  @State private var scrollToEnd = false
+  @State private var textSize: CGSize = .zero
+  @State private var containerSize: CGSize = .zero
   
   @ObservedObject private var audioManager = AudioEngineManager.shared
   
   private var sliderColor: Color = .white
+  
+  private var shouldScroll: Bool {
+    textSize.width > containerSize.width
+  }
+  
+  private var scrollDuration: Double {
+    Double(textSize.width) / 20.0
+  }
+  
   private var normalFillColor: Color {
     sliderColor.opacity(0.5)
   }
@@ -65,12 +78,54 @@ struct MusicPlayerView: View {
       VStack {
         Spacer()
         if let current = currentAudioSource {
-          Text("\(current.title ?? "Unknown") • \(current.artist ?? "Unknown")")
-            .font(.title2)
-            .fontWeight(.semibold)
-            .foregroundColor(.white)
-            .lineLimit(1)
-            .multilineTextAlignment(.leading)
+          GeometryReader { g in
+            ScrollViewReader { _ in
+              ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: shouldScroll ? 100 : 0) {
+                  ForEach(0..<(shouldScroll ? 3 : 1), id: \.self) { _ in
+                    Text("\(current.title ?? "Unknown") • \(current.artist ?? "Unknown")")
+                      .font(.title2)
+                      .fontWeight(.semibold)
+                      .foregroundColor(.white)
+                      .lineLimit(1)
+                      .fixedSize()
+                      .background(
+                        GeometryReader { textGeometry in
+                          Color.clear
+                            .preference(key: SizePreferenceKey.self, value: textGeometry.size)
+                        }
+                      )
+                  }
+                }
+                .id(currentIndex)
+                .padding(.horizontal)
+                .offset(x: shouldScroll ? (scrollToEnd ? -textSize.width - 100 : 0) : 0)
+                .animation(shouldScroll ? .linear(duration: scrollDuration).repeatForever(autoreverses: false) : .none, value: scrollToEnd)
+              }
+              .disabled(true)
+              .onPreferenceChange(SizePreferenceKey.self) { size in
+                textSize = size
+                containerSize = g.size
+              }
+              .onChange(of: shouldScroll) { _, newValue in
+                if newValue {
+                  DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    scrollToEnd = true
+                  }
+                }
+              }
+              .onChange(of: currentIndex) {
+                scrollToEnd = false
+                textSize = .zero
+                if shouldScroll {
+                  DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    scrollToEnd = true
+                  }
+                }
+              }
+            }
+          }
+          .frame(height: 40)
         }
         ProgressSliderView(value: $audioManager.currentTime,
                            inRange: TimeInterval.zero...max(audioManager.duration, 0.1),

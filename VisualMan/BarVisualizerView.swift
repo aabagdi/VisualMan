@@ -16,14 +16,14 @@ struct BarVisualizerView: View {
   let minBarHeight: CGFloat = 4
   
   var body: some View {
-    GeometryReader { geometry in
+    GeometryReader { g in
       HStack(spacing: barSpacing) {
         ForEach(0..<barCount, id: \.self) { index in
           BarView(
             level: visualizerBars[safe: index] ?? 0.0,
             index: index,
             totalBars: barCount,
-            maxHeight: geometry.size.height,
+            maxHeight: g.size.height,
             minHeight: minBarHeight
           )
         }
