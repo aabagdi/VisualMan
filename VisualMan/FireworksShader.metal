@@ -32,7 +32,7 @@ float3 rand3(float seed) {
   float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
   float3 col = float3(0.0);
   
-  uint numExplosions = uint(clamp(floor(peakLevel * 10.0), 1.0, 10.0));
+  uint numExplosions = uint(clamp(floor(peakLevel * 10.0 + 5.0), 5.0, 15.0));
   uint bassParticles = uint(clamp(floor(bassLevel * 15.0), 1.0, 15.0));
   uint midParticles = uint(clamp(floor(midLevel * 12.0), 1.0, 12.0));
   uint trebleParticles = uint(clamp(floor(trebleLevel * 10.0), 1.0, 10.0));
