@@ -18,6 +18,7 @@ struct MusicPlayerView: View {
   @State private var scrollToEnd = false
   @State private var textSize: CGSize = .zero
   @State private var containerSize: CGSize = .zero
+  @State private var scrollAnimationKey = UUID()
   
   @ObservedObject private var audioManager = AudioEngineManager.shared
   
@@ -92,32 +93,43 @@ struct MusicPlayerView: View {
                       .background(
                         GeometryReader { textGeometry in
                           Color.clear
-                            .preference(key: SizePreferenceKey.self, value: textGeometry.size)
+                            .onAppear {
+                              let newSize = textGeometry.size
+                              if newSize != textSize {
+                                textSize = newSize
+                              }
+                            }
                         }
                       )
                   }
                 }
-                .id(currentIndex)
+                .id("\(currentIndex)-\(scrollAnimationKey)")
                 .padding(.horizontal)
                 .offset(x: shouldScroll ? (scrollToEnd ? -textSize.width - 100 : 0) : 0)
-                .animation(shouldScroll ? .linear(duration: scrollDuration).repeatForever(autoreverses: false) : .none, value: scrollToEnd)
+                .animation(scrollToEnd ? .linear(duration: scrollDuration).repeatForever(autoreverses: false) : .none, value: scrollToEnd)
               }
               .disabled(true)
-              .onPreferenceChange(SizePreferenceKey.self) { size in
-                textSize = size
+              .onAppear {
                 containerSize = g.size
               }
-              .onChange(of: shouldScroll) { _, newValue in
-                if newValue {
+              .onChange(of: textSize) { oldSize, newSize in
+                if oldSize == .zero && newSize.width > containerSize.width && !scrollToEnd {
                   DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     scrollToEnd = true
                   }
                 }
               }
-              .onChange(of: currentIndex) {
+              .onChange(of: currentIndex) { _, _ in
                 scrollToEnd = false
                 textSize = .zero
-                if shouldScroll {
+                scrollAnimationKey = UUID()
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                  scrollAnimationKey = UUID()
+                }
+              }
+              .onChange(of: scrollAnimationKey) { _, _ in
+                if textSize.width > containerSize.width {
                   DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     scrollToEnd = true
                   }
