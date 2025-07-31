@@ -37,8 +37,8 @@ struct FilesTabView: View {
         }
       }
       .navigationDestination(isPresented: $showingPlayer) {
-        if let audioSource = selectedAudioSource {
-          MusicPlayerView(audioSource)
+        if let audioSource = selectedAudioSource, let url = audioSource.getPlaybackURL() {
+          MusicPlayerView(fileURL: url)
             .toolbarVisibility(.hidden, for: .tabBar)
         }
       }

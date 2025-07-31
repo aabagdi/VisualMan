@@ -14,9 +14,6 @@ import MediaPlayer
 class AudioEngineManager: ObservableObject {
   static let shared = AudioEngineManager()
   
-  private var engine: AVAudioEngine?
-  private var player: AVAudioPlayerNode?
-  
   @Published var audioLevels: [Float] = Array(repeating: 0.0, count: 512)
   @Published var visualizerBars: [Float] = Array(repeating: 0.0, count: 32)
   @Published var isPlaying = false
@@ -25,20 +22,24 @@ class AudioEngineManager: ObservableObject {
   @Published var isInitialized = false
   @Published var initializationError: Error?
   
+  private var engine: AVAudioEngine?
+  private var player: AVAudioPlayerNode?
   private var audioFile: AVAudioFile?
   private var displayLink: CADisplayLink?
   private var securityScopedURL: URL?
   private var lastSeekFrame: AVAudioFramePosition = 0
+  private var isSeeking: Bool = false
   private var numberOfBars = 32
+  private var peakLevels: [Float] = Array(repeating: 0.0, count: 32)
+  private var peakHoldTime: [Int] = Array(repeating: 0, count: 32)
+  private var gainHistory: [Float] = []
+  private var currentGain: Float = 1.0
+  
   private let smoothingFactor: Float = 0.8
   private let attackTime: Float = 0.1
   private let releaseTime: Float = 0.6
-  private var peakLevels: [Float] = Array(repeating: 0.0, count: 32)
-  private var peakHoldTime: [Int] = Array(repeating: 0, count: 32)
   private let peakHoldDuration = 10
-  private var gainHistory: [Float] = []
   private let gainHistorySize = 30
-  private var currentGain: Float = 1.0
   
   init() {
     do {
@@ -185,11 +186,16 @@ class AudioEngineManager: ObservableObject {
     currentTime = 0
     stopDisplayLink()
     stopSecurityScopedAccess()
+    if !isSeeking {
+      lastSeekFrame = 0
+    }
   }
   
   func seek(to time: TimeInterval) {
     guard let player,
           let audioFile else { return }
+    
+    isSeeking = true
     
     let sampleRate = audioFile.fileFormat.sampleRate
     let newFrame = AVAudioFramePosition(time * sampleRate)
@@ -214,6 +220,8 @@ class AudioEngineManager: ObservableObject {
     }
     
     currentTime = time
+    
+    isSeeking = false
   }
   
   func startDisplayLink() {

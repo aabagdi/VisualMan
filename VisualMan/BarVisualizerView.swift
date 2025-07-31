@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct BarVisualizerView: View {
-  let audioLevels: [Float]
+  let visualizerBars: [Float]
   
   let barCount = 32
   let barSpacing: CGFloat = 2
@@ -20,7 +20,7 @@ struct BarVisualizerView: View {
       HStack(spacing: barSpacing) {
         ForEach(0..<barCount, id: \.self) { index in
           BarView(
-            level: audioLevels[safe: index] ?? 0.0,
+            level: visualizerBars[safe: index] ?? 0.0,
             index: index,
             totalBars: barCount,
             maxHeight: geometry.size.height,

@@ -9,6 +9,14 @@ import SwiftUI
 import MediaPlayer
 
 struct MusicPlayerView: View {
+  @State private var currentVisualizer = Visualizers.bars
+  @State private var isTapped: Bool = false
+  @State private var failedPlaying: Bool = false
+  @State private var playingError: Error?
+  @State private var currentIndex: Int
+  
+  @ObservedObject private var audioManager = AudioEngineManager.shared
+  
   private var sliderColor: Color = .white
   private var normalFillColor: Color {
     sliderColor.opacity(0.5)
@@ -25,19 +33,29 @@ struct MusicPlayerView: View {
     case voronoi = "Voronoi Diagram"
   }
   
-  @State private var currentVisualizer = Visualizers.bars
-  @State private var failedPlaying: Bool = false
+  let audioSources: [any AudioSource]
   
-  @ObservedObject private var audioManager = AudioEngineManager.shared
+  var currentAudioSource: (any AudioSource)? {
+    guard currentIndex >= 0 && currentIndex < audioSources.count else { return nil }
+    return audioSources[currentIndex]
+  }
   
-  let audioSource: any AudioSource
+  var hasNext: Bool {
+    currentIndex < audioSources.count - 1
+  }
   
-  init(_ audioSource: AudioSource) {
-    self.audioSource = audioSource
+  var hasPrevious: Bool {
+    currentIndex > 0
+  }
+  
+  init(_ audioSources: [AudioSource], startingIndex: Int) {
+    self.audioSources = audioSources
+    self._currentIndex = State(initialValue: startingIndex)
   }
   
   init(fileURL: URL, title: String? = nil) {
-    self.audioSource = FileAudioSource(url: fileURL, title: title)
+    self.audioSources = [FileAudioSource(url: fileURL, title: title)]
+    self._currentIndex = State(initialValue: 0)
   }
   
   var body: some View {
@@ -46,6 +64,14 @@ struct MusicPlayerView: View {
         .ignoresSafeArea()
       VStack {
         Spacer()
+        if let current = currentAudioSource {
+          Text("\(current.title ?? "Unknown") • \(current.artist ?? "Unknown")")
+            .font(.title2)
+            .fontWeight(.semibold)
+            .foregroundColor(.white)
+            .lineLimit(1)
+            .multilineTextAlignment(.leading)
+        }
         ProgressSliderView(value: $audioManager.currentTime,
                            inRange: TimeInterval.zero...max(audioManager.duration, 0.1),
                            activeFillColor: sliderColor,
@@ -61,7 +87,7 @@ struct MusicPlayerView: View {
         .padding()
         HStack {
           Button {
-            
+            skipBackwards()
           } label: {
             Image(systemName: "backward")
               .foregroundStyle(normalFillColor)
@@ -79,7 +105,7 @@ struct MusicPlayerView: View {
           }
           Spacer()
           Button {
-            
+            skipForwards()
           } label: {
             Image(systemName: "forward")
               .foregroundStyle(normalFillColor)
@@ -88,7 +114,7 @@ struct MusicPlayerView: View {
         .padding()
         .onAppear {
           do {
-            try audioManager.play(audioSource)
+            try audioManager.play(audioSources[currentIndex])
           } catch {
             failedPlaying.toggle()
           }
@@ -96,6 +122,13 @@ struct MusicPlayerView: View {
         .onDisappear {
           audioManager.stop()
         }
+      }
+      .zIndex(1)
+      .opacity(isTapped ? 0 : 1)
+    }
+    .onTapGesture {
+      withAnimation(.easeInOut) {
+        isTapped.toggle()
       }
     }
     .toolbar {
@@ -109,6 +142,32 @@ struct MusicPlayerView: View {
     }
   }
   
+  private func playCurrentSong() {
+    guard let source = currentAudioSource else { return }
+    
+    audioManager.stop()
+    
+    do {
+      try audioManager.play(source)
+    } catch {
+      failedPlaying = true
+      playingError = error
+    }
+  }
+  
+  private func skipBackwards() {
+    if currentIndex > 0 {
+      currentIndex -= 1
+      playCurrentSong()
+    }
+  }
+  
+  private func skipForwards() {
+    guard hasNext else { return }
+    currentIndex += 1
+    playCurrentSong()
+  }
+  
   @ViewBuilder
   private func currentShader(currentVisualizer: Visualizers, audioManager: AudioEngineManager) -> some View {
     let audioLevels = audioManager.audioLevels
@@ -116,7 +175,7 @@ struct MusicPlayerView: View {
     
     switch currentVisualizer {
     case .bars:
-      BarVisualizerView(audioLevels: visualizerBars)
+      BarVisualizerView(visualizerBars: visualizerBars)
     case .julia:
       JuliaVisualizerView(audioLevels: audioLevels)
     case .fireworks:

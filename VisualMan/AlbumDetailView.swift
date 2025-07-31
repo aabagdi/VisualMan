@@ -19,6 +19,10 @@ struct AlbumDetailView: View {
     }
   }
   
+  private var sortedSongs: [MPMediaItem] {
+    album.items.sorted { $0.albumTrackNumber < $1.albumTrackNumber }
+  }
+  
   var body: some View {
     VStack {
       Image(uiImage: album.representativeItem?.albumArt ?? UIImage(named: "Art Placeholder")!)
@@ -37,13 +41,13 @@ struct AlbumDetailView: View {
       }
       HStack {
         Text(album.representativeItem?.genre ?? "Unknown")
-        Text("-")
+        Text("•")
         Text(year)
       }
       .font(.footnote)
       NavigationStack {
-        List(album.items.sorted { $0.albumTrackNumber < $1.albumTrackNumber }, id: \.persistentID) { song in
-          NavigationLink(destination: MusicPlayerView(song)) {
+        List(sortedSongs.enumerated(), id: \.element.persistentID) { index, song in
+          NavigationLink(destination: MusicPlayerView(sortedSongs, startingIndex: index)) {
             HStack {
               Text(String(song.albumTrackNumber))
               Spacer()

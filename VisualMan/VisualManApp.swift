@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct VisualManApp: App {
+  @StateObject var musicLibraryManager = MusicLibraryAccessManager()
+  
   var body: some Scene {
     WindowGroup {
       HomeScreenView()
+        .environmentObject(musicLibraryManager)
     }
   }
 }
