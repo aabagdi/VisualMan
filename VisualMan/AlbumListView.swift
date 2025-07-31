@@ -51,6 +51,7 @@ struct AlbumListView: View {
           .padding()
         }
       }
+      .navigationTitle("Albums")
     }
     .searchable(text: $searchText)
   }
