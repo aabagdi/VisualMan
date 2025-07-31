@@ -1,5 +1,5 @@
 //
-//  AlbumArtWaveVisualizer.metal
+//  AlbumArtWaveShader.metal
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 7/31/25.
