@@ -41,6 +41,7 @@ struct MusicPlayerView: View {
   
   enum Visualizers: String, CaseIterable {
     case bars = "Bars"
+    case balls = "3D Balls"
     case album = "Album Art Waves"
     case julia = "Julia Set"
     case fireworks = "Fireworks"
@@ -246,6 +247,8 @@ struct MusicPlayerView: View {
     switch currentVisualizer {
     case .bars:
       BarVisualizerView(visualizerBars: visualizerBars)
+    case .balls:
+      BallsVisualizerView(visualizerBars: visualizerBars)
     case .album:
       AlbumArtWaveVisualizerView(audioLevels: audioLevels, albumArt: albumArt)
     case .julia:
