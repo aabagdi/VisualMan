@@ -8,8 +8,8 @@
 import SwiftUI
 
 extension View {
-  func fireworksShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float, peakLevel: Float, width: Float, height: Float) -> some View {
-    modifier(FireworksShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, peakLevel: peakLevel, width: width, height: height))
+  func fireworksShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float, peakLevel: Float) -> some View {
+    modifier(FireworksShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, peakLevel: peakLevel))
   }
 }
 
@@ -19,11 +19,9 @@ struct FireworksShader: ViewModifier {
   var smoothedMid: Float
   var smoothedHigh: Float
   var peakLevel: Float
-  var width: Float
-  var height: Float
   
   func body(content: Content) -> some View {
-    content.visualEffect { content, _ in
+    content.visualEffect { content, proxy in
       content
         .colorEffect(
           ShaderLibrary.fireworks(
@@ -32,7 +30,7 @@ struct FireworksShader: ViewModifier {
             .float(smoothedMid),
             .float(smoothedHigh),
             .float(peakLevel),
-            .float2(width, height)
+            .float2(proxy.size.width, proxy.size.height)
           )
         )
     }

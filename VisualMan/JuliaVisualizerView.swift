@@ -41,7 +41,7 @@ struct JuliaVisualizerView: View {
     GeometryReader { g in
       TimelineView(.animation) { timeline in
         Rectangle()
-          .juliaShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, width: Float(g.size.width), height: Float(g.size.height))
+          .juliaShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
           .onChange(of: timeline.date) {
             smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
             smoothedMid = smoothedMid * 0.6 + midLevel * 0.4

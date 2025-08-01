@@ -46,7 +46,7 @@ struct FireworksVisualizerView: View {
     GeometryReader { g in
       TimelineView(.animation) { timeline in
         Rectangle()
-          .fireworksShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, peakLevel: peakLevel, width: Float(g.size.width), height: Float(g.size.height))
+          .fireworksShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, peakLevel: peakLevel)
           .onChange(of: timeline.date) {
             withAnimation(.smooth) {
               smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5

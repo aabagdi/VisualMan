@@ -8,8 +8,8 @@
 import SwiftUI
 
 extension View {
-  func interferenceShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float, width: Float, height: Float) -> some View {
-    modifier(InterferenceShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, width: width, height: height))
+  func interferenceShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float) -> some View {
+    modifier(InterferenceShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh))
   }
 }
 
@@ -18,11 +18,9 @@ struct InterferenceShader: ViewModifier {
   var smoothedBass: Float
   var smoothedMid: Float
   var smoothedHigh: Float
-  var width: Float
-  var height: Float
   
   func body(content: Content) -> some View {
-    content.visualEffect { content, _ in
+    content.visualEffect { content, proxy in
       content
         .colorEffect(
           ShaderLibrary.interference(
@@ -30,7 +28,7 @@ struct InterferenceShader: ViewModifier {
             .float(smoothedBass),
             .float(smoothedMid),
             .float(smoothedHigh),
-            .float2(width, height)
+            .float2(proxy.size.width, proxy.size.height)
           )
         )
     }

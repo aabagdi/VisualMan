@@ -41,7 +41,7 @@ struct VoronoiVisualizerView: View {
     GeometryReader { g in
       TimelineView(.animation) { timeline in
         Rectangle()
-          .voronoiShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, width: Float(g.size.width), height: Float(g.size.height))
+          .voronoiShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
           .onChange(of: timeline.date) {
             withAnimation(.smooth) {
               smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
