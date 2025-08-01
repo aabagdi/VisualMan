@@ -33,4 +33,3 @@ struct BarVisualizerView: View {
     .background(Color.black)
   }
 }
-

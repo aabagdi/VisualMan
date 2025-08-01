@@ -28,7 +28,7 @@ struct AlbumArtWaveShader: ViewModifier {
             .float(smoothedBass),
             .float(smoothedMid),
             .float(smoothedHigh),
-            .float2(proxy.size.width, proxy.size.height)
+            .float2(proxy.size)
           ), maxSampleOffset: .zero
         )
     }

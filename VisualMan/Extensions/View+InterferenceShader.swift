@@ -1,5 +1,5 @@
 //
-//  View+JuliaShader.swift
+//  View+InterferenceShader.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 7/26/25.
@@ -8,12 +8,12 @@
 import SwiftUI
 
 extension View {
-  func juliaShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float) -> some View {
-    modifier(JuliaShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh))
+  func interferenceShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float) -> some View {
+    modifier(InterferenceShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh))
   }
 }
 
-struct JuliaShader: ViewModifier {
+struct InterferenceShader: ViewModifier {
   var time: Float
   var smoothedBass: Float
   var smoothedMid: Float
@@ -23,12 +23,12 @@ struct JuliaShader: ViewModifier {
     content.visualEffect { content, proxy in
       content
         .colorEffect(
-          ShaderLibrary.julia(
+          ShaderLibrary.interference(
             .float(time),
             .float(smoothedBass),
             .float(smoothedMid),
             .float(smoothedHigh),
-            .float2(proxy.size.width, proxy.size.height)
+            .float2(proxy.size)
           )
         )
     }
