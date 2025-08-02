@@ -34,6 +34,9 @@ class AudioEngineManager: ObservableObject {
   private var peakHoldTime: [Int] = Array(repeating: 0, count: 32)
   private var gainHistory: [Float] = []
   private var currentGain: Float = 1.0
+  private var hasHandledCompletion = false
+  private var isHandlingCompletion = false
+  private var currentPlaybackID = UUID()
   
   private let smoothingFactor: Float = 0.8
   private let attackTime: Float = 0.1
@@ -124,6 +127,12 @@ class AudioEngineManager: ObservableObject {
       throw Errors.nilEngineOrPlayer
     }
     
+    hasHandledCompletion = false
+    isHandlingCompletion = false
+    
+    let playbackID = UUID()
+    currentPlaybackID = playbackID
+    
     do {
       audioFile = try AVAudioFile(forReading: url)
       
@@ -139,7 +148,13 @@ class AudioEngineManager: ObservableObject {
         try engine.start()
       }
       
-      player.scheduleFile(audioFile, at: nil)
+      player.scheduleFile(audioFile, at: nil) { [weak self] in
+        DispatchQueue.main.async {
+          guard let self,
+                self.currentPlaybackID == playbackID else { return }
+          self.handlePlaybackCompleted()
+        }
+      }
       
       DispatchQueue.main.async { [weak self] in
         self?.isPlaying = true
@@ -177,14 +192,26 @@ class AudioEngineManager: ObservableObject {
   }
   
   private func handlePlaybackCompleted() {
+    guard !hasHandledCompletion && !isHandlingCompletion else { return }
+    
+    isHandlingCompletion = true
+    
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
       
-      self.isPlaying = false
-      self.currentTime = self.duration
-      self.stopDisplayLink()
+      self.hasHandledCompletion = true
       
       self.playbackCompleted.send()
+      
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        guard let self = self else { return }
+        if self.hasHandledCompletion && !(self.player?.isPlaying ?? true) {
+          self.isPlaying = false
+          self.currentTime = self.duration
+          self.stopDisplayLink()
+        }
+        self.isHandlingCompletion = false
+      }
     }
   }
   
@@ -201,6 +228,7 @@ class AudioEngineManager: ObservableObject {
   }
   
   func stop() {
+    currentPlaybackID = UUID()
     player?.stop()
     engine?.mainMixerNode.removeTap(onBus: 0)
     engine?.stop()
@@ -211,6 +239,8 @@ class AudioEngineManager: ObservableObject {
     if !isSeeking {
       lastSeekFrame = 0
     }
+    hasHandledCompletion = false
+    isHandlingCompletion = false
   }
   
   func seek(to time: TimeInterval) {
@@ -218,6 +248,8 @@ class AudioEngineManager: ObservableObject {
           let audioFile else { return }
     
     isSeeking = true
+    
+    currentPlaybackID = UUID()
     
     let sampleRate = audioFile.fileFormat.sampleRate
     let newFrame = AVAudioFramePosition(time * sampleRate)
@@ -275,8 +307,10 @@ class AudioEngineManager: ObservableObject {
         currentTime = newTime
       }
       
-      if currentTime >= duration - 0.1 {
-        handlePlaybackCompleted()
+      if currentTime >= duration - 0.05 && !isSeeking && !hasHandledCompletion {
+        if currentFrame >= audioFile.length - Int64(audioFile.fileFormat.sampleRate * 0.05) {
+          handlePlaybackCompleted()
+        }
       }
     }
   }

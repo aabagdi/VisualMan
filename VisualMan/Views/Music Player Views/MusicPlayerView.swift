@@ -196,8 +196,7 @@ struct MusicPlayerView: View {
     .onAppear {
       playbackCompletionCancellable = audioManager.playbackCompleted
         .receive(on: DispatchQueue.main)
-        .sink { [weak audioManager] in
-          guard audioManager != nil else { return }
+        .sink { _ in
           onSongCompleted()
         }
       do {
@@ -277,11 +276,13 @@ struct MusicPlayerView: View {
   }
   
   private func onSongCompleted() {
+    audioManager.stop()
+    
     if hasNext {
-      currentIndex += 1
-      playCurrentSong()
-    } else {
-      audioManager.stop()
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        currentIndex += 1
+        playCurrentSong()
+      }
     }
   }
 }
