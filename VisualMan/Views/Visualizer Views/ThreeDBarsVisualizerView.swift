@@ -64,7 +64,7 @@ struct ThreeDBarsVisualizerView: View {
     .gesture(
       DragGesture()
         .onChanged { value in
-          let sensitivity: Float = 0.003
+          let sensitivity: Float = 0.0003
           rotationAngle += Float(value.translation.width) * sensitivity
           verticalAngle -= Float(value.translation.height) * sensitivity
           verticalAngle = max(-1.2, min(1.2, verticalAngle))
@@ -77,7 +77,7 @@ struct ThreeDBarsVisualizerView: View {
           let zoomSensitivity: Float = 0.5
           let targetDistance = cameraDistance / Float(value)
           cameraDistance = cameraDistance + (targetDistance - cameraDistance) * zoomSensitivity
-          cameraDistance = max(5.0, min(30.0, cameraDistance))
+          cameraDistance = max(10.0, min(30.0, cameraDistance))
           updateCameraPosition()
         }
     )
