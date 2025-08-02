@@ -161,7 +161,10 @@ struct MusicPlayerView: View {
             Image(systemName: "backward")
               .foregroundStyle(normalFillColor)
           }
+          .padding()
+          
           Spacer()
+          
           Button {
             if audioManager.isPlaying {
               audioManager.pause()
@@ -172,13 +175,17 @@ struct MusicPlayerView: View {
             Image(systemName: audioManager.isPlaying ? "pause" : "play")
               .foregroundStyle(normalFillColor)
           }
+          .padding()
+          
           Spacer()
+          
           Button {
             skipForwards()
           } label: {
             Image(systemName: "forward")
               .foregroundStyle(normalFillColor)
           }
+          .padding()
         }
         .padding()
         .onAppear {
