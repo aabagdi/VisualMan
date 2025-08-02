@@ -44,8 +44,44 @@ struct AlbumListView: View {
             }
             .padding(.vertical, 4)
           }
+          
+          NavigationLink(destination: ArtistListView(artists: library.artists, albums: library.albums)) {
+            HStack {
+              Image(systemName: "music.microphone")
+                .font(.system(size: 20))
+                .frame(width: 30, height: 30)
+                .padding(.trailing, 8)
+              
+              Text("Artists")
+              
+              Spacer()
+              
+              Text("\(library.artists.count)")
+                .foregroundColor(.secondary)
+                .font(.system(size: 15))
+            }
+            .padding(.vertical, 4)
+          }
+          
+          
+          NavigationLink(destination: PlaylistListView(playlists: library.playlists)) {
+            HStack {
+              Image(systemName: "music.note.list")
+                .font(.system(size: 20))
+                .frame(width: 30, height: 30)
+                .padding(.trailing, 8)
+              
+              Text("Playlists")
+              
+              Spacer()
+              
+              Text("\(library.playlists.count)")
+                .foregroundColor(.secondary)
+                .font(.system(size: 15))
+            }
+            .padding(.vertical, 4)
+          }
         }
-        
         Section {
           ForEach(searchResults, id: \.persistentID) { album in
             NavigationLink(destination: AlbumDetailView(album: album)) {
@@ -79,6 +115,7 @@ struct AlbumListView: View {
               }
               .padding(.vertical, 2)
             }
+            .toolbarVisibility(.hidden, for: .tabBar)
           }
         }
       }

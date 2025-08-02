@@ -27,47 +27,92 @@ struct AlbumDetailView: View {
   var body: some View {
     let albumArt = album.representativeItem?.albumArt ?? placeholder
     
-    GeometryReader { g in
-      VStack {
-        Image(uiImage: albumArt)
-          .resizable()
-          .clipShape(RoundedRectangle(cornerRadius: 12))
-          .scaledToFit()
-          .padding()
-        Text(album.representativeItem?.albumTitle ?? "Unknown")
-          .font(.headline)
-        if album.representativeItem?.isCompilation == true {
-          Text("Various Artists")
-            .font(.subheadline)
-        } else {
-          Text(album.representativeItem?.albumArtist ?? "Unknown")
-            .font(.subheadline)
+    List {
+      Section {
+        VStack(spacing: 12) {
+          Image(uiImage: albumArt)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(radius: 4)
+            .frame(maxWidth: 300)
+          
+          VStack(spacing: 4) {
+            Text(album.representativeItem?.albumTitle ?? "Unknown")
+              .font(.title2)
+              .fontWeight(.semibold)
+              .multilineTextAlignment(.center)
+            
+            if album.representativeItem?.isCompilation == true {
+              Text("Various Artists")
+                .font(.body)
+                .foregroundColor(.secondary)
+            } else {
+              Text(album.representativeItem?.albumArtist ?? "Unknown")
+                .font(.body)
+                .foregroundColor(.secondary)
+            }
+            
+            HStack {
+              Text(album.representativeItem?.genre ?? "Unknown")
+              Text("•")
+              Text(year)
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+          }
         }
-        HStack {
-          Text(album.representativeItem?.genre ?? "Unknown")
-          Text("•")
-          Text(year)
-        }
-        .font(.footnote)
-        NavigationStack {
-          List(sortedSongs.enumerated(), id: \.element.persistentID) { index, song in
-            NavigationLink(destination: MusicPlayerView(sortedSongs, startingIndex: index)) {
-              HStack {
-                Text(String(song.albumTrackNumber))
-                  .frame(width: g.size.width * 0.07462686567, alignment: .trailing)
-                Divider()
-                Spacer()
-                Text(String(song.title ?? "Unknown"))
-                  .minimumScaleFactor(0.05)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.clear)
+      }
+      
+      Section {
+        ForEach(Array(sortedSongs.enumerated()), id: \.element.persistentID) { index, song in
+          NavigationLink(destination: MusicPlayerView(sortedSongs, startingIndex: index)) {
+            HStack(spacing: 12) {
+              Text("\(song.albumTrackNumber)")
+                .font(.system(size: 15))
+                .foregroundColor(.secondary)
+                .frame(minWidth: 20, alignment: .trailing)
+              
+              VStack(alignment: .leading, spacing: 2) {
+                Text(song.title ?? "Unknown")
+                  .font(.system(size: 16))
                   .lineLimit(1)
-                  .multilineTextAlignment(.trailing)
-                  .frame(maxWidth: .infinity)
+                
+                if album.representativeItem?.isCompilation == true,
+                   let artist = song.artist {
+                  Text(artist)
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                }
+              }
+              
+              Spacer()
+              
+              if let duration = formatDuration(song.playbackDuration) {
+                Text(duration)
+                  .font(.system(size: 14))
+                  .foregroundColor(.secondary)
               }
             }
-            .toolbarVisibility(.hidden, for: .tabBar)
+            .padding(.vertical, 4)
           }
+          .toolbarVisibility(.hidden, for: .tabBar)
         }
       }
     }
+    .listStyle(InsetGroupedListStyle())
+    .navigationBarTitleDisplayMode(.inline)
+  }
+  
+  private func formatDuration(_ duration: TimeInterval) -> String? {
+    guard duration > 0 else { return nil }
+    let minutes = Int(duration) / 60
+    let seconds = Int(duration) % 60
+    return String(format: "%d:%02d", minutes, seconds)
   }
 }

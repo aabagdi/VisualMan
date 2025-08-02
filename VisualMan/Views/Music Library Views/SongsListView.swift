@@ -22,19 +22,27 @@ struct SongsListView: View {
   }
   
   var body: some View {
-    NavigationStack {
-      List(filteredSongs.enumerated(), id: \.element.persistentID) { index, song in
-        NavigationLink(destination: MusicPlayerView(filteredSongs, startingIndex: index)) {
-          VStack(alignment: .leading) {
-            Text(song.title ?? "Unknown")
-              .font(.headline)
-            Text(song.artist ?? "Unknown")
-              .font(.caption2)
+    Section {
+      if !songs.isEmpty {
+        NavigationStack {
+          List(filteredSongs.enumerated(), id: \.element.persistentID) { index, song in
+            NavigationLink(destination: MusicPlayerView(filteredSongs, startingIndex: index)) {
+              VStack(alignment: .leading) {
+                Text(song.title ?? "Unknown")
+                  .font(.headline)
+                Text(song.artist ?? "Unknown")
+                  .font(.caption2)
+              }
+            }
+            .toolbarVisibility(.hidden, for: .tabBar)
           }
+          .searchable(text: $searchText)
         }
-        .toolbarVisibility(.hidden, for: .tabBar)
+      } else {
+        Text("No songs found!")
+          .font(.caption)
       }
-      .searchable(text: $searchText)
     }
+    .navigationTitle("Songs")
   }
 }
