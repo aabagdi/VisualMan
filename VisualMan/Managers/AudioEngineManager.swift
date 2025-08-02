@@ -41,6 +41,8 @@ class AudioEngineManager: ObservableObject {
   private let peakHoldDuration = 10
   private let gainHistorySize = 30
   
+  let playbackCompleted = PassthroughSubject<Void, Never>()
+  
   init() {
     do {
       try setupAudioEngine()
@@ -84,6 +86,20 @@ class AudioEngineManager: ObservableObject {
   
   
   func play(_ source: AudioSource) throws {
+    if player?.isPlaying == true {
+      player?.stop()
+    }
+    
+    engine?.mainMixerNode.removeTap(onBus: 0)
+    
+    audioLevels = Array(repeating: 0.0, count: 512)
+    visualizerBars = Array(repeating: 0.0, count: 32)
+    peakLevels = Array(repeating: 0.0, count: 32)
+    peakHoldTime = Array(repeating: 0, count: 32)
+    gainHistory = []
+    currentGain = 1.0
+    lastSeekFrame = 0
+    
     guard let url = source.getPlaybackURL() else {
       throw Errors.invalidURL
     }
@@ -161,9 +177,15 @@ class AudioEngineManager: ObservableObject {
   }
   
   private func handlePlaybackCompleted() {
-    isPlaying = false
-    currentTime = duration
-    stopDisplayLink()
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      
+      self.isPlaying = false
+      self.currentTime = self.duration
+      self.stopDisplayLink()
+      
+      self.playbackCompleted.send()
+    }
   }
   
   func pause() {

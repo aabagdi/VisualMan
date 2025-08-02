@@ -44,7 +44,7 @@ struct AlbumListView: View {
             }
             .padding(.vertical, 4)
           }
-          
+                    
           NavigationLink(destination: ArtistListView(artists: library.artists, albums: library.albums)) {
             HStack {
               Image(systemName: "music.microphone")
@@ -63,7 +63,24 @@ struct AlbumListView: View {
             .padding(.vertical, 4)
           }
           
-          
+          NavigationLink(destination: GenreListView(genres: library.genres, albums: library.albums)) {
+            HStack {
+              Image(systemName: "guitars.fill")
+                .font(.system(size: 20))
+                .frame(width: 30, height: 30)
+                .padding(.trailing, 8)
+              
+              Text("Genres")
+              
+              Spacer()
+              
+              Text("\(library.genres.count)")
+                .foregroundColor(.secondary)
+                .font(.system(size: 15))
+            }
+            .padding(.vertical, 4)
+          }
+
           NavigationLink(destination: PlaylistListView(playlists: library.playlists)) {
             HStack {
               Image(systemName: "music.note.list")

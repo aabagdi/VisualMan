@@ -19,6 +19,7 @@ struct MusicPlayerView: View {
   @State private var textSize: CGSize = .zero
   @State private var containerSize: CGSize = .zero
   @State private var scrollAnimationKey = UUID()
+  @State private var playbackCompletionCancellable: AnyCancellable?
   
   @ObservedObject private var audioManager = AudioEngineManager.shared
   
@@ -188,19 +189,25 @@ struct MusicPlayerView: View {
           .padding()
         }
         .padding()
-        .onAppear {
-          do {
-            try audioManager.play(audioSources[currentIndex])
-          } catch {
-            failedPlaying.toggle()
-          }
-        }
-        .onDisappear {
-          audioManager.stop()
-        }
       }
       .zIndex(1)
       .opacity(isTapped ? 0 : 1)
+    }
+    .onAppear {
+      playbackCompletionCancellable = audioManager.playbackCompleted
+        .receive(on: DispatchQueue.main)
+        .sink { [weak audioManager] in
+          guard audioManager != nil else { return }
+          onSongCompleted()
+        }
+      do {
+        try audioManager.play(audioSources[currentIndex])
+      } catch {
+        failedPlaying.toggle()
+      }
+    }
+    .onDisappear {
+      audioManager.stop()
     }
     .onTapGesture {
       withAnimation(.easeInOut) {
@@ -221,8 +228,6 @@ struct MusicPlayerView: View {
   private func playCurrentSong() {
     guard let source = currentAudioSource else { return }
     
-    audioManager.stop()
-    
     do {
       try audioManager.play(source)
     } catch {
@@ -236,6 +241,7 @@ struct MusicPlayerView: View {
       audioManager.seek(to: 0)
       return
     } else if currentIndex > 0 {
+      audioManager.stop()
       currentIndex -= 1
       playCurrentSong()
     } else if currentIndex == 0 {
@@ -245,6 +251,7 @@ struct MusicPlayerView: View {
   
   private func skipForwards() {
     guard hasNext else { return }
+    audioManager.stop()
     currentIndex += 1
     playCurrentSong()
   }
@@ -253,7 +260,7 @@ struct MusicPlayerView: View {
   private func currentShader(currentVisualizer: Visualizers, visualizerBars: [Float], audioLevels: [Float], albumArt: UIImage?) -> some View {
     switch currentVisualizer {
     case .bars:
-      BarVisualizerView(visualizerBars: visualizerBars)
+      BarsVisualizerView(visualizerBars: visualizerBars)
     case .threeD:
       ThreeDBarsVisualizerView(visualizerBars: visualizerBars)
     case .album:
@@ -266,6 +273,15 @@ struct MusicPlayerView: View {
       InterferenceVisualizerView(audioLevels: audioLevels)
     case .voronoi:
       VoronoiVisualizerView(audioLevels: audioLevels)
+    }
+  }
+  
+  private func onSongCompleted() {
+    if hasNext {
+      currentIndex += 1
+      playCurrentSong()
+    } else {
+      audioManager.stop()
     }
   }
 }

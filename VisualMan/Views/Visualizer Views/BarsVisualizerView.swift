@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct BarVisualizerView: View {
+struct BarsVisualizerView: View {
   let visualizerBars: [Float]
   
   let barCount = 32
