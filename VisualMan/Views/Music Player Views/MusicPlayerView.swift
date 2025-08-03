@@ -225,13 +225,13 @@ struct MusicPlayerView: View {
         isTapped.toggle()
       }
     }
-    .alert("Failed to play song: \(playingError?.localizedDescription ?? "")", isPresented: $failedPlaying) {
+    .alert("Failed to play song: \(playingError?.localizedDescription ?? "Unknown playing error")", isPresented: $failedPlaying) {
       Button("Okay", role: .cancel) {
         failedPlaying = false
         playingError = nil
       }
     }
-    .alert("Failed to initialize audioEngine: \(audioManager.initializationError?.localizedDescription ?? "")", isPresented: $audioManager.failedToInitialize) {
+    .alert("Failed to initialize audioEngine: \(audioManager.initializationError?.localizedDescription ?? "Unknown initialization error")", isPresented: $audioManager.failedToInitialize) {
       Button("Okay", role: .cancel) {
         audioManager.failedToInitialize = false
         audioManager.initializationError = nil

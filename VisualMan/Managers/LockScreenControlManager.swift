@@ -13,7 +13,7 @@ final class LockScreenControlManager {
   
   private let audioManager = AudioEngineManager.shared
   private let placeholder = UIImage(named: "Art Placeholder")!
-
+  
   var onPlayPause: (() -> Void)?
   var onNext: (() -> Void)?
   var onPrevious: (() -> Void)?
@@ -73,14 +73,18 @@ final class LockScreenControlManager {
   }
   
   func updateNowPlayingInfo(title: String?, artist: String?, albumArt: UIImage?, duration: TimeInterval, currentTime: TimeInterval, isPlaying: Bool) {
+    let artwork: UIImage = albumArt ?? placeholder
+    
     var nowPlayingInfo = [String: Any]()
     nowPlayingInfo[MPMediaItemPropertyTitle] = title ?? "Unknown"
     nowPlayingInfo[MPMediaItemPropertyArtist] = artist ?? "Unknown"
     nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
     nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
     nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-
-    nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(image: albumArt ?? placeholder)
+    
+    nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: artwork.size) { @Sendable _ in
+      artwork
+    }
     
     MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
   }
