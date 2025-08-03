@@ -56,9 +56,6 @@ struct BarView: View {
           .animation(.easeOut(duration: 0.1), value: barHeight)
         Spacer()
       }
-      .onAppear {
-        print(g.size)
-      }
     }
   }
 }

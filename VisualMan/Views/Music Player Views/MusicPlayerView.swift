@@ -169,8 +169,10 @@ struct MusicPlayerView: View {
           Button {
             if audioManager.isPlaying {
               audioManager.pause()
-            } else {
+            } else if audioManager.currentTime > 0 && audioManager.currentTime < audioManager.duration {
               audioManager.resume()
+            } else {
+              playCurrentSong()
             }
           } label: {
             Image(systemName: audioManager.isPlaying ? "pause" : "play")
@@ -271,6 +273,8 @@ struct MusicPlayerView: View {
         currentIndex += 1
         playCurrentSong()
       }
+    } else {
+      currentIndex = 0
     }
   }
   
