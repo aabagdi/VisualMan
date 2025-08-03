@@ -12,7 +12,8 @@ struct CompilationListView: View {
   @State private var searchText: String = ""
   
   let compilations: [MPMediaItemCollection]
-  let placeholder = UIImage(named: "Art Placeholder")!
+  
+  private let placeholder = UIImage(named: "Art Placeholder")!
   
   var searchResults: [MPMediaItemCollection] {
     if searchText.isEmpty {

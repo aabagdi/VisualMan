@@ -10,7 +10,8 @@ import MediaPlayer
 
 struct ArtistDetailView: View {
   let albums: [MPMediaItemCollection]
-  let placeholder = UIImage(named: "Art Placeholder")!
+  
+  private let placeholder = UIImage(named: "Art Placeholder")!
   
   var body: some View {
     List(albums, id: \.representativeItem?.persistentID) { album in

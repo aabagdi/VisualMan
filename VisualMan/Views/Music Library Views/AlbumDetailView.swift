@@ -10,7 +10,8 @@ import MediaPlayer
 
 struct AlbumDetailView: View {
   let album: MPMediaItemCollection
-  let placeholder = UIImage(named: "Art Placeholder")!
+  
+  private let placeholder = UIImage(named: "Art Placeholder")!
   
   private var year: String {
     if let year = album.representativeItem?.value(forProperty: "year") as? Int {

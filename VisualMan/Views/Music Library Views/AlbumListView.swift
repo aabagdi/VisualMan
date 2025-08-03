@@ -13,7 +13,8 @@ struct AlbumListView: View {
   @EnvironmentObject var library: MusicLibraryAccessManager
   
   let albums: [MPMediaItemCollection]
-  let placeholder = UIImage(named: "Art Placeholder")!
+  
+  private let placeholder = UIImage(named: "Art Placeholder")!
   
   private var searchResults: [MPMediaItemCollection] {
     if searchText.isEmpty {
