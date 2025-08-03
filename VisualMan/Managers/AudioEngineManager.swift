@@ -11,7 +11,7 @@ import Accelerate
 import Combine
 import MediaPlayer
 
-class AudioEngineManager: ObservableObject {
+final class AudioEngineManager: ObservableObject {
   static let shared = AudioEngineManager()
   
   @Published var audioLevels: [Float] = Array(repeating: 0.0, count: 512)
@@ -20,6 +20,7 @@ class AudioEngineManager: ObservableObject {
   @Published var currentTime: TimeInterval = 0
   @Published var duration: TimeInterval = 0
   @Published var isInitialized = false
+  @Published var failedToInitialize = false
   @Published var initializationError: Error?
   
   private var engine: AVAudioEngine?
@@ -46,14 +47,14 @@ class AudioEngineManager: ObservableObject {
   
   let playbackCompleted = PassthroughSubject<Void, Never>()
   
-  init() {
+  private init() {
     do {
       try setupAudioEngine()
       isInitialized = true
     } catch {
       initializationError = error
       isInitialized = false
-      print("Failed to setup audio engine: \(error)")
+      failedToInitialize = true
     }
   }
   

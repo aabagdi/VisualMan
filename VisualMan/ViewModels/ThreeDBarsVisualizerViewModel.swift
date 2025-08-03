@@ -8,7 +8,7 @@
 import Foundation
 import Combine
 
-class ThreeDBarsVisualizerViewModel: ObservableObject {
+final class ThreeDBarsVisualizerViewModel: ObservableObject {
   @Published var smoothedValues: [Float] = []
   private var timer: Timer?
   

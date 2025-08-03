@@ -20,6 +20,7 @@ struct MusicPlayerView: View {
   @State private var containerSize: CGSize = .zero
   @State private var scrollAnimationKey = UUID()
   @State private var playbackCompletionCancellable: AnyCancellable?
+  @State private var nowPlayingTimer: Timer?
   
   @ObservedObject private var audioManager = AudioEngineManager.shared
   
@@ -196,6 +197,8 @@ struct MusicPlayerView: View {
       .opacity(isTapped ? 0 : 1)
     }
     .onAppear {
+      setupLockScreenControls()
+      
       playbackCompletionCancellable = audioManager.playbackCompleted
         .receive(on: DispatchQueue.main)
         .sink { _ in
@@ -203,6 +206,8 @@ struct MusicPlayerView: View {
         }
       do {
         try audioManager.play(audioSources[currentIndex])
+        updateNowPlayingInfo()
+        startNowPlayingTimer()
       } catch {
         failedPlaying.toggle()
       }
@@ -210,17 +215,26 @@ struct MusicPlayerView: View {
     .onDisappear {
       playbackCompletionCancellable?.cancel()
       playbackCompletionCancellable = nil
+      stopNowPlayingTimer()
       audioManager.stop()
+      LockScreenControlManager.shared.cleanup()
+      
     }
     .onTapGesture {
       withAnimation(.easeInOut) {
         isTapped.toggle()
       }
     }
-    .alert("Failed to play song: \(playingError?.localizedDescription ?? "")",isPresented: $failedPlaying) {
+    .alert("Failed to play song: \(playingError?.localizedDescription ?? "")", isPresented: $failedPlaying) {
       Button("Okay", role: .cancel) {
         failedPlaying = false
         playingError = nil
+      }
+    }
+    .alert("Failed to initialize audioEngine: \(audioManager.initializationError?.localizedDescription ?? "")", isPresented: $audioManager.failedToInitialize) {
+      Button("Okay", role: .cancel) {
+        audioManager.failedToInitialize = false
+        audioManager.initializationError = nil
       }
     }
     .toolbar {
@@ -276,6 +290,49 @@ struct MusicPlayerView: View {
     } else {
       currentIndex = 0
     }
+  }
+  
+  private func setupLockScreenControls() {
+    let lockScreen = LockScreenControlManager.shared
+    
+    lockScreen.onPlayPause = {
+      if audioManager.isPlaying {
+        audioManager.pause()
+      } else if audioManager.currentTime > 0 && audioManager.currentTime < audioManager.duration {
+        audioManager.resume()
+      } else {
+        playCurrentSong()
+      }
+      self.updateNowPlayingInfo()
+    }
+    
+    lockScreen.onNext = {
+      skipForwards()
+    }
+    
+    lockScreen.onPrevious = {
+      skipBackwards()
+    }
+  }
+  
+  private func updateNowPlayingInfo() {
+    guard let source = currentAudioSource else { return }
+    
+    LockScreenControlManager.shared.updateNowPlayingInfo(title: source.title, artist: source.artist, albumArt: source.albumArt, duration: audioManager.duration, currentTime: audioManager.currentTime, isPlaying: audioManager.isPlaying)
+  }
+  
+  private func startNowPlayingTimer() {
+    stopNowPlayingTimer()
+    nowPlayingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {_ in
+      Task { @MainActor in
+        updateNowPlayingInfo()
+      }
+    }
+  }
+  
+  private func stopNowPlayingTimer() {
+    nowPlayingTimer?.invalidate()
+    nowPlayingTimer = nil
   }
   
   @ViewBuilder

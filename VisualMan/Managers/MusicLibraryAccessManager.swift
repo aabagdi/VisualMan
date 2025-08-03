@@ -10,7 +10,7 @@ import MediaPlayer
 import Combine
 
 @MainActor
-class MusicLibraryAccessManager: ObservableObject {
+final class MusicLibraryAccessManager: ObservableObject {
   @Published var songs: [MPMediaItem] = []
   @Published var playlists: [MPMediaItemCollection] = []
   @Published var albums: [MPMediaItemCollection] = []
