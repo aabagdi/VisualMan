@@ -13,7 +13,7 @@ struct SongsListView: View {
   
   let songs: [MPMediaItem]
   
-  private var filteredSongs: [MPMediaItem] {
+  private var searchResults: [MPMediaItem] {
     if searchText.isEmpty {
       return songs
     } else {
@@ -25,8 +25,8 @@ struct SongsListView: View {
     Section {
       if !songs.isEmpty {
         NavigationStack {
-          List(filteredSongs.enumerated(), id: \.element.persistentID) { index, song in
-            NavigationLink(destination: MusicPlayerView(filteredSongs, startingIndex: index)) {
+          List(searchResults.enumerated(), id: \.element.persistentID) { index, song in
+            NavigationLink(destination: MusicPlayerView(searchResults, startingIndex: index)) {
               VStack(alignment: .leading) {
                 Text(song.title ?? "Unknown")
                   .font(.headline)
@@ -36,7 +36,7 @@ struct SongsListView: View {
             }
             .toolbarVisibility(.hidden, for: .tabBar)
           }
-          .searchable(text: $searchText)
+          .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
         }
       } else {
         Text("No songs found!")

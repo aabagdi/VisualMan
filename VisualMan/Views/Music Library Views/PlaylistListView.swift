@@ -9,7 +9,7 @@ import SwiftUI
 import MediaPlayer
 
 struct PlaylistListView: View {
-  @State var searchText: String = ""
+  @State private var searchText: String = ""
   
   let playlists: [MPMediaItemCollection]
   
@@ -31,7 +31,7 @@ struct PlaylistListView: View {
             Text(playlist.value(forProperty: MPMediaPlaylistPropertyName) as? String ?? "Unknown")
           }
         }
-        .searchable(text: $searchText)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
       } else {
         Text("No playlists found!")
           .font(.caption)

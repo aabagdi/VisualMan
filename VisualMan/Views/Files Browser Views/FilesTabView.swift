@@ -12,6 +12,8 @@ struct FilesTabView: View {
   @State private var showingFilePicker = false
   @State private var showingPlayer = false
   @State private var selectedAudioSource: FileAudioSource?
+  @State private var fileLoadingFailed: Bool = false
+  @State private var fileError: Error?
   
   var body: some View {
     NavigationStack {
@@ -24,6 +26,12 @@ struct FilesTabView: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(Color(UIColor.systemGroupedBackground))
+      .alert("Failed to load file: \(fileError?.localizedDescription ?? "")",isPresented: $fileLoadingFailed) {
+        Button("Okay", role: .cancel) {
+          fileLoadingFailed = false
+          fileError = nil
+        }
+      }
       .fileImporter(
         isPresented: $showingFilePicker,
         allowedContentTypes: [.audio],
@@ -33,7 +41,8 @@ struct FilesTabView: View {
           selectedAudioSource = FileAudioSource(url: url)
           showingPlayer = true
         case .failure(let error):
-          print("Error selecting file: \(error)")
+          fileError = error
+          fileLoadingFailed = true
         }
       }
       .navigationDestination(isPresented: $showingPlayer) {

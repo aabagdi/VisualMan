@@ -98,41 +98,63 @@ struct AlbumListView: View {
             }
             .padding(.vertical, 4)
           }
+          
+          NavigationLink(destination: CompilationListView(compilations: library.compilations)) {
+            HStack {
+              Image(systemName: "person.2.crop.square.stack.fill")
+                .font(.system(size: 20))
+                .frame(width: 30, height: 30)
+                .padding(.trailing, 8)
+              
+              Text("Compilations")
+              
+              Spacer()
+              
+              Text("\(library.compilations.count)")
+                .foregroundColor(.secondary)
+                .font(.system(size: 15))
+            }
+            .padding(.vertical, 4)
+          }
         }
         Section {
-          ForEach(searchResults, id: \.persistentID) { album in
-            NavigationLink(destination: AlbumDetailView(album: album)) {
-              HStack {
-                Image(uiImage: album.representativeItem?.albumArt ?? placeholder)
-                  .resizable()
-                  .clipShape(RoundedRectangle(cornerRadius: 8))
-                  .frame(width: 60, height: 60)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(album.representativeItem?.albumTitle ?? "Unknown")
-                    .font(.system(size: 16))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
+          if !albums.isEmpty {
+            ForEach(searchResults, id: \.persistentID) { album in
+              NavigationLink(destination: AlbumDetailView(album: album)) {
+                HStack {
+                  Image(uiImage: album.representativeItem?.albumArt ?? placeholder)
+                    .resizable()
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .frame(width: 60, height: 60)
                   
-                  if album.representativeItem?.isCompilation == true {
-                    Text("Various Artists")
-                      .font(.system(size: 14))
-                      .foregroundColor(.secondary)
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(album.representativeItem?.albumTitle ?? "Unknown")
+                      .font(.system(size: 16))
+                      .foregroundColor(.primary)
                       .lineLimit(1)
-                  } else {
-                    Text(album.representativeItem?.albumArtist ?? "Unknown")
-                      .font(.system(size: 14))
-                      .foregroundColor(.secondary)
-                      .lineLimit(1)
+                    
+                    if album.representativeItem?.isCompilation == true {
+                      Text("Various Artists")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    } else {
+                      Text(album.representativeItem?.albumArtist ?? "Unknown")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    }
                   }
+                  .padding(.leading, 8)
+                  
+                  Spacer()
                 }
-                .padding(.leading, 8)
-                
-                Spacer()
+                .padding(.vertical, 2)
               }
-              .padding(.vertical, 2)
             }
-            .toolbarVisibility(.hidden, for: .tabBar)
+          } else {
+            Text("No albums found!")
+              .font(.caption)
           }
         }
       }

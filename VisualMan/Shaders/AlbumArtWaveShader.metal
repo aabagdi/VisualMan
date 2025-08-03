@@ -18,6 +18,7 @@ using namespace metal;
   float2 toCenter = position - center;
   float distance = length(toCenter);
   float2 direction = normalize(toCenter);
+  
   float ripple = sin(distance * 0.05 - time * 3.0) * bassLevel * 20.0;
   
   float wobble = sin(position.y * 0.01 + time * 2.0) * midLevel * 15.0;

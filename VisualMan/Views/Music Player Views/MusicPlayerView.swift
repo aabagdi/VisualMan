@@ -206,11 +206,19 @@ struct MusicPlayerView: View {
       }
     }
     .onDisappear {
+      playbackCompletionCancellable?.cancel()
+      playbackCompletionCancellable = nil
       audioManager.stop()
     }
     .onTapGesture {
       withAnimation(.easeInOut) {
         isTapped.toggle()
+      }
+    }
+    .alert("Failed to play song: \(playingError?.localizedDescription ?? "")",isPresented: $failedPlaying) {
+      Button("Okay", role: .cancel) {
+        failedPlaying = false
+        playingError = nil
       }
     }
     .toolbar {
@@ -230,8 +238,8 @@ struct MusicPlayerView: View {
     do {
       try audioManager.play(source)
     } catch {
-      failedPlaying = true
       playingError = error
+      failedPlaying = true
     }
   }
   
@@ -255,6 +263,17 @@ struct MusicPlayerView: View {
     playCurrentSong()
   }
   
+  private func onSongCompleted() {
+    audioManager.stop()
+    
+    if hasNext {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        currentIndex += 1
+        playCurrentSong()
+      }
+    }
+  }
+  
   @ViewBuilder
   private func currentShader(currentVisualizer: Visualizers, visualizerBars: [Float], audioLevels: [Float], albumArt: UIImage?) -> some View {
     switch currentVisualizer {
@@ -272,17 +291,6 @@ struct MusicPlayerView: View {
       InterferenceVisualizerView(audioLevels: audioLevels)
     case .voronoi:
       VoronoiVisualizerView(audioLevels: audioLevels)
-    }
-  }
-  
-  private func onSongCompleted() {
-    audioManager.stop()
-    
-    if hasNext {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-        currentIndex += 1
-        playCurrentSong()
-      }
     }
   }
 }

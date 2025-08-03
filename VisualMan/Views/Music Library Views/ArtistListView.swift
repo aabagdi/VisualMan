@@ -9,7 +9,7 @@ import SwiftUI
 import MediaPlayer
 
 struct ArtistListView: View {
-  @State var searchText: String = ""
+  @State private var searchText: String = ""
   
   let artists: [MPMediaItemCollection]
   let albums: [MPMediaItemCollection]
@@ -39,12 +39,13 @@ struct ArtistListView: View {
               }
             }
           }
-          .searchable(text: $searchText)
+          .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
         } else {
           Text("No artists found!")
             .font(.caption)
         }
       }
+      .toolbarVisibility(.hidden, for: .tabBar)
       .navigationTitle("Artists")
     }
   }

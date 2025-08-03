@@ -9,7 +9,7 @@ import SwiftUI
 import MediaPlayer
 
 struct GenreListView: View {
-  @State var searchText: String = ""
+  @State private var searchText: String = ""
   
   let genres: [MPMediaItemCollection]
   let albums: [MPMediaItemCollection]
@@ -26,14 +26,21 @@ struct GenreListView: View {
   
   var body: some View {
     Section {
-      NavigationStack {
-        List(searchResults, id: \.representativeItem?.persistentID) { genre in
-          NavigationLink(destination: GenreDetailView(genre: genre.representativeItem?.genre ?? "Unknown", albums: albums.filter { $0.representativeItem?.genre == genre.representativeItem?.genre })) {
-            Text(genre.representativeItem?.genre ?? "Unknown")
+      if !genres.isEmpty {
+        NavigationStack {
+          List(searchResults, id: \.representativeItem?.persistentID) { genre in
+            NavigationLink(destination: GenreDetailView(genre: genre.representativeItem?.genre ?? "Unknown", albums: albums.filter { $0.representativeItem?.genre == genre.representativeItem?.genre })) {
+              Text(genre.representativeItem?.genre ?? "Unknown")
+            }
           }
+          .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+          .navigationTitle("Genres")
         }
-        .navigationTitle("Genres")
+      } else {
+        Text("No genres found!")
+          .font(.caption)
       }
     }
+    .toolbarVisibility(.hidden, for: .tabBar)
   }
 }

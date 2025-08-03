@@ -47,13 +47,18 @@ struct BarView: View {
   }
   
   var body: some View {
-    VStack {
-      Spacer(minLength: 0)
-      RoundedRectangle(cornerRadius: 2)
-        .fill(barColor)
-        .frame(height: barHeight)
-        .animation(.easeOut(duration: 0.1), value: barHeight)
-      Spacer()
+    GeometryReader { g in
+      VStack {
+        Spacer(minLength: 0)
+        RoundedRectangle(cornerRadius: g.size.width * 0.2077922078)
+          .fill(barColor)
+          .frame(height: barHeight)
+          .animation(.easeOut(duration: 0.1), value: barHeight)
+        Spacer()
+      }
+      .onAppear {
+        print(g.size)
+      }
     }
   }
 }
