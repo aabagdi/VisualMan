@@ -10,21 +10,19 @@ import MediaPlayer
 import Combine
 
 struct MusicPlayerView: View {
+  @Environment(AudioPlaylistManager.self) private var playlistManager
+  
+  @State private var audioManager = AudioEngineManager.shared
   @State private var currentVisualizer = Visualizers.bars
   @State private var isTapped: Bool = false
   @State private var failedPlaying: Bool = false
   @State private var playingError: Error?
-  @State private var currentIndex: Int
   @State private var scrollToEnd = false
   @State private var textSize: CGSize = .zero
   @State private var containerSize: CGSize = .zero
   @State private var scrollAnimationKey = UUID()
   @State private var playbackCompletionCancellable: AnyCancellable?
   @State private var nowPlayingTimer: Timer?
-  
-  @State private var audioManager = AudioEngineManager.shared
-  
-  let audioSources: [any AudioSource]
   
   private var sliderColor: Color = .white
   
@@ -44,16 +42,15 @@ struct MusicPlayerView: View {
   }
   
   private var currentAudioSource: (any AudioSource)? {
-    guard currentIndex >= 0 && currentIndex < audioSources.count else { return nil }
-    return audioSources[currentIndex]
+    playlistManager.currentAudioSource
   }
   
   private var hasNext: Bool {
-    currentIndex < audioSources.count - 1
+    playlistManager.hasNext
   }
   
   private var hasPrevious: Bool {
-    currentIndex > 0
+    playlistManager.hasPrevious
   }
   
   private enum Visualizers: String, CaseIterable {
@@ -66,22 +63,26 @@ struct MusicPlayerView: View {
     case voronoi = "Voronoi Diagram"
   }
   
-  init(_ audioSources: [AudioSource], startingIndex: Int) {
-    self.audioSources = audioSources
-    self._currentIndex = State(initialValue: startingIndex)
+  init(_ audioSources: [any AudioSource], startingIndex: Int) {
+    _audioSources = audioSources
+    _startingIndex = startingIndex
   }
   
   init(fileURL: URL, title: String? = nil) {
-    self.audioSources = [FileAudioSource(url: fileURL, title: title)]
-    self._currentIndex = State(initialValue: 0)
+    let sources = [FileAudioSource(url: fileURL, title: title)]
+    _audioSources = sources
+    _startingIndex = 0
   }
+  
+  private let _audioSources: [any AudioSource]
+  private let _startingIndex: Int
   
   var body: some View {
     ZStack {
       currentShader(currentVisualizer: currentVisualizer,
                     visualizerBars: audioManager.visualizerBars,
                     audioLevels: audioManager.audioLevels,
-                    albumArt: audioSources[currentIndex].albumArt)
+                    albumArt: currentAudioSource?.albumArt)
       .ignoresSafeArea()
       VStack {
         Spacer()
@@ -110,7 +111,7 @@ struct MusicPlayerView: View {
                       )
                   }
                 }
-                .id("\(currentIndex)-\(scrollAnimationKey)")
+                .id("\(playlistManager.currentIndex)-\(scrollAnimationKey)")
                 .padding(.horizontal)
                 .offset(x: shouldScroll ? (scrollToEnd ? -textSize.width - 100 : 0) : 0)
                 .animation(scrollToEnd ? .linear(duration: scrollDuration).repeatForever(autoreverses: false) : .none, value: scrollToEnd)
@@ -126,7 +127,7 @@ struct MusicPlayerView: View {
                   }
                 }
               }
-              .onChange(of: currentIndex) { _, _ in
+              .onChange(of: playlistManager.currentIndex) { _, _ in
                 scrollToEnd = false
                 textSize = .zero
                 scrollAnimationKey = UUID()
@@ -200,6 +201,8 @@ struct MusicPlayerView: View {
       .opacity(isTapped ? 0 : 1)
     }
     .onAppear {
+      playlistManager.setPlaylist(_audioSources, startingIndex: _startingIndex)
+      
       setupLockScreenControls()
       
       playbackCompletionCancellable = audioManager.playbackCompleted
@@ -209,15 +212,22 @@ struct MusicPlayerView: View {
         }
       
       do {
-        try audioManager.play(audioSources[currentIndex])
+        guard let currentSource = playlistManager.currentAudioSource else {
+          throw NSError(domain: "MusicPlayerView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No audio source available"])
+        }
+        try audioManager.play(currentSource)
         updateNowPlayingInfo()
         
         audioManager.startNowPlayingTimer {
           self.updateNowPlayingInfo()
         }
       } catch {
+        playingError = error
         failedPlaying.toggle()
       }
+    }
+    .onDisappear {
+      cleanup()
     }
     .onTapGesture {
       withAnimation(.easeInOut) {
@@ -252,6 +262,7 @@ struct MusicPlayerView: View {
     
     do {
       try audioManager.play(source)
+      updateNowPlayingInfo()
     } catch {
       playingError = error
       failedPlaying = true
@@ -262,11 +273,11 @@ struct MusicPlayerView: View {
     if audioManager.currentTime >= 3 {
       audioManager.seek(to: 0)
       return
-    } else if currentIndex > 0 {
+    } else if playlistManager.hasPrevious {
       audioManager.stop()
-      currentIndex -= 1
+      playlistManager.moveToPrevious()
       playCurrentSong()
-    } else if currentIndex == 0 {
+    } else if playlistManager.currentIndex == 0 {
       audioManager.seek(to: 0)
     }
   }
@@ -274,7 +285,7 @@ struct MusicPlayerView: View {
   private func skipForwards() {
     guard hasNext else { return }
     audioManager.stop()
-    currentIndex += 1
+    playlistManager.moveToNext()
     playCurrentSong()
   }
   
@@ -283,11 +294,11 @@ struct MusicPlayerView: View {
     
     if hasNext {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-        currentIndex += 1
+        playlistManager.moveToNext()
         playCurrentSong()
       }
     } else {
-      currentIndex = 0
+      playlistManager.moveToIndex(0)
     }
   }
   
@@ -317,12 +328,19 @@ struct MusicPlayerView: View {
   private func updateNowPlayingInfo() {
     guard let source = currentAudioSource else { return }
     
-    LockScreenControlManager.shared.updateNowPlayingInfo(title: source.title, artist: source.artist, albumArt: source.albumArt, duration: audioManager.duration, currentTime: audioManager.currentTime, isPlaying: audioManager.isPlaying)
+    LockScreenControlManager.shared.updateNowPlayingInfo(
+      title: source.title,
+      artist: source.artist,
+      albumArt: source.albumArt,
+      duration: audioManager.duration,
+      currentTime: audioManager.currentTime,
+      isPlaying: audioManager.isPlaying
+    )
   }
   
   private func startNowPlayingTimer() {
     stopNowPlayingTimer()
-    nowPlayingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {_ in
+    nowPlayingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
       Task { @MainActor in
         updateNowPlayingInfo()
       }
@@ -337,6 +355,7 @@ struct MusicPlayerView: View {
   private func cleanup() {
     playbackCompletionCancellable?.cancel()
     playbackCompletionCancellable = nil
+    stopNowPlayingTimer()
   }
   
   @ViewBuilder

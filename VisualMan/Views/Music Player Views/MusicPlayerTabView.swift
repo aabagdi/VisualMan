@@ -11,8 +11,6 @@ import SwiftUI
 struct MusicPlayerTabView: View {
   @Environment(\.tabViewBottomAccessoryPlacement) private var placement
   
-  let sources: [any AudioSource]
-  
   var body: some View {
     switch placement {
     case .inline:
@@ -20,7 +18,7 @@ struct MusicPlayerTabView: View {
     case .expanded:
       MusicTabExpandedView()
     default:
-      Text("Woo")
+      Text("Error!")
     }
   }
 }

@@ -22,7 +22,7 @@ struct HomeScreenView: View {
     }
     .tabBarMinimizeBehavior(.onScrollDown)
     .tabViewBottomAccessory {
-      //MusicPlayerTabView()
+      MusicPlayerTabView()
     }
   }
 }
