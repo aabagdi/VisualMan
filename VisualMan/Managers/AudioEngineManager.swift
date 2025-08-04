@@ -11,17 +11,19 @@ import Accelerate
 import Combine
 import MediaPlayer
 
-final class AudioEngineManager: ObservableObject {
+@Observable
+final class AudioEngineManager {
   static let shared = AudioEngineManager()
   
-  @Published var audioLevels: [Float] = Array(repeating: 0.0, count: 512)
-  @Published var visualizerBars: [Float] = Array(repeating: 0.0, count: 32)
-  @Published var isPlaying = false
-  @Published var currentTime: TimeInterval = 0
-  @Published var duration: TimeInterval = 0
-  @Published var isInitialized = false
-  @Published var failedToInitialize = false
-  @Published var initializationError: Error?
+  var audioLevels: [Float] = Array(repeating: 0.0, count: 512)
+  var visualizerBars: [Float] = Array(repeating: 0.0, count: 32)
+  var isPlaying = false
+  var currentTime: TimeInterval = 0
+  var duration: TimeInterval = 0
+  var isInitialized = false
+  var failedToInitialize = false
+  var initializationError: Error?
+  var currentAudioSourceURL: URL?
   
   private var engine: AVAudioEngine?
   private var player: AVAudioPlayerNode?
@@ -38,6 +40,8 @@ final class AudioEngineManager: ObservableObject {
   private var hasHandledCompletion = false
   private var isHandlingCompletion = false
   private var currentPlaybackID = UUID()
+  private var nowPlayingTimer: Timer?
+  private var lockScreenUpdateHandler: (() -> Void)?
   
   private let smoothingFactor: Float = 0.8
   private let attackTime: Float = 0.1
@@ -90,6 +94,8 @@ final class AudioEngineManager: ObservableObject {
   
   
   func play(_ source: AudioSource) throws {
+    if currentAudioSourceURL == source.getPlaybackURL() && isPlaying { return }
+    
     if player?.isPlaying == true {
       player?.stop()
     }
@@ -109,6 +115,7 @@ final class AudioEngineManager: ObservableObject {
     }
     
     try play(from: url)
+    currentAudioSourceURL = source.getPlaybackURL()
   }
   
   private func play(from url: URL) throws {
@@ -242,6 +249,8 @@ final class AudioEngineManager: ObservableObject {
     }
     hasHandledCompletion = false
     isHandlingCompletion = false
+    stopNowPlayingTimer()
+    currentAudioSourceURL = nil
   }
   
   func seek(to time: TimeInterval) {
@@ -277,6 +286,22 @@ final class AudioEngineManager: ObservableObject {
     currentTime = time
     
     isSeeking = false
+  }
+  
+  func startNowPlayingTimer(updateHandler: @escaping () -> Void) {
+    stopNowPlayingTimer()
+    lockScreenUpdateHandler = updateHandler
+    nowPlayingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        self?.lockScreenUpdateHandler?()
+      }
+    }
+  }
+  
+  func stopNowPlayingTimer() {
+    nowPlayingTimer?.invalidate()
+    nowPlayingTimer = nil
+    lockScreenUpdateHandler = nil
   }
   
   func startDisplayLink() {

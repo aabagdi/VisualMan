@@ -21,12 +21,12 @@ struct FilesTabView: View {
         Button("Select an audio file to play") {
           showingFilePicker.toggle()
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.glassProminent)
         .padding()
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(Color(UIColor.systemGroupedBackground))
-      .alert("Failed to load file: \(fileError?.localizedDescription ?? "")",isPresented: $fileLoadingFailed) {
+      .alert("Failed to load file: \(fileError?.localizedDescription ?? "Unknown file loading error")",isPresented: $fileLoadingFailed) {
         Button("Okay", role: .cancel) {
           fileLoadingFailed = false
           fileError = nil

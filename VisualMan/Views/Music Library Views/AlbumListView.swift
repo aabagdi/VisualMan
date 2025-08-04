@@ -10,8 +10,8 @@ import MediaPlayer
 
 struct AlbumListView: View {
   @State private var searchText: String = ""
-  @EnvironmentObject var library: MusicLibraryAccessManager
-  
+  @Environment(MusicLibraryAccessManager.self) private var library
+
   let albums: [MPMediaItemCollection]
   
   private let placeholder = UIImage(named: "Art Placeholder")!

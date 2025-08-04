@@ -22,7 +22,9 @@ struct MusicPlayerView: View {
   @State private var playbackCompletionCancellable: AnyCancellable?
   @State private var nowPlayingTimer: Timer?
   
-  @ObservedObject private var audioManager = AudioEngineManager.shared
+  @State private var audioManager = AudioEngineManager.shared
+  
+  let audioSources: [any AudioSource]
   
   private var sliderColor: Color = .white
   
@@ -41,7 +43,20 @@ struct MusicPlayerView: View {
     sliderColor.opacity(0.3)
   }
   
-  enum Visualizers: String, CaseIterable {
+  private var currentAudioSource: (any AudioSource)? {
+    guard currentIndex >= 0 && currentIndex < audioSources.count else { return nil }
+    return audioSources[currentIndex]
+  }
+  
+  private var hasNext: Bool {
+    currentIndex < audioSources.count - 1
+  }
+  
+  private var hasPrevious: Bool {
+    currentIndex > 0
+  }
+  
+  private enum Visualizers: String, CaseIterable {
     case bars = "Bars"
     case threeD = "3D Bars"
     case album = "Album Art Waves"
@@ -49,21 +64,6 @@ struct MusicPlayerView: View {
     case fireworks = "Fireworks"
     case interference = "Interference Pattern"
     case voronoi = "Voronoi Diagram"
-  }
-  
-  let audioSources: [any AudioSource]
-  
-  var currentAudioSource: (any AudioSource)? {
-    guard currentIndex >= 0 && currentIndex < audioSources.count else { return nil }
-    return audioSources[currentIndex]
-  }
-  
-  var hasNext: Bool {
-    currentIndex < audioSources.count - 1
-  }
-  
-  var hasPrevious: Bool {
-    currentIndex > 0
   }
   
   init(_ audioSources: [AudioSource], startingIndex: Int) {
@@ -78,8 +78,11 @@ struct MusicPlayerView: View {
   
   var body: some View {
     ZStack {
-      currentShader(currentVisualizer: currentVisualizer, visualizerBars: audioManager.visualizerBars, audioLevels: audioManager.audioLevels, albumArt: audioSources[currentIndex].albumArt)
-        .ignoresSafeArea()
+      currentShader(currentVisualizer: currentVisualizer,
+                    visualizerBars: audioManager.visualizerBars,
+                    audioLevels: audioManager.audioLevels,
+                    albumArt: audioSources[currentIndex].albumArt)
+      .ignoresSafeArea()
       VStack {
         Spacer()
         if let current = currentAudioSource {
@@ -204,21 +207,17 @@ struct MusicPlayerView: View {
         .sink { _ in
           onSongCompleted()
         }
+      
       do {
         try audioManager.play(audioSources[currentIndex])
         updateNowPlayingInfo()
-        startNowPlayingTimer()
+        
+        audioManager.startNowPlayingTimer {
+          self.updateNowPlayingInfo()
+        }
       } catch {
         failedPlaying.toggle()
       }
-    }
-    .onDisappear {
-      playbackCompletionCancellable?.cancel()
-      playbackCompletionCancellable = nil
-      stopNowPlayingTimer()
-      audioManager.stop()
-      LockScreenControlManager.shared.cleanup()
-      
     }
     .onTapGesture {
       withAnimation(.easeInOut) {
@@ -333,6 +332,11 @@ struct MusicPlayerView: View {
   private func stopNowPlayingTimer() {
     nowPlayingTimer?.invalidate()
     nowPlayingTimer = nil
+  }
+  
+  private func cleanup() {
+    playbackCompletionCancellable?.cancel()
+    playbackCompletionCancellable = nil
   }
   
   @ViewBuilder

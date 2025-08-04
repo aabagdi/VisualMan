@@ -8,6 +8,7 @@
 import Foundation
 import MediaPlayer
 
+@MainActor
 final class LockScreenControlManager {
   static let shared = LockScreenControlManager()
   
@@ -32,38 +33,28 @@ final class LockScreenControlManager {
     commandCenter.changePlaybackPositionCommand.isEnabled = true
     
     commandCenter.playCommand.addTarget { [weak self] _ in
-      DispatchQueue.main.async {
-        self?.onPlayPause?()
-      }
+      self?.onPlayPause?()
       return .success
     }
     
     commandCenter.pauseCommand.addTarget { [weak self] _ in
-      DispatchQueue.main.async {
-        self?.onPlayPause?()
-      }
+      self?.onPlayPause?()
       return .success
     }
     
     commandCenter.nextTrackCommand.addTarget { [weak self] _ in
-      DispatchQueue.main.async {
-        self?.onNext?()
-      }
+      self?.onNext?()
       return .success
     }
     
     commandCenter.previousTrackCommand.addTarget { [weak self] _ in
-      DispatchQueue.main.async {
-        self?.onPrevious?()
-      }
+      self?.onPrevious?()
       return .success
     }
     
     commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
       guard let self, let positionEvent = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-      DispatchQueue.main.async {
-        self.seek(to: positionEvent.positionTime)
-      }
+      self.seek(to: positionEvent.positionTime)
       return .success
     }
   }

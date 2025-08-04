@@ -10,15 +10,16 @@ import MediaPlayer
 import Combine
 
 @MainActor
-final class MusicLibraryAccessManager: ObservableObject {
-  @Published var songs: [MPMediaItem] = []
-  @Published var playlists: [MPMediaItemCollection] = []
-  @Published var albums: [MPMediaItemCollection] = []
-  @Published var artists: [MPMediaItemCollection] = []
-  @Published var compilations: [MPMediaItemCollection] = []
-  @Published var genres: [MPMediaItemCollection] = []
-  @Published var authorizationStatus: MPMediaLibraryAuthorizationStatus = .notDetermined
-  @Published var isLoading = false
+@Observable
+final class MusicLibraryAccessManager {
+  var songs: [MPMediaItem] = []
+  var playlists: [MPMediaItemCollection] = []
+  var albums: [MPMediaItemCollection] = []
+  var artists: [MPMediaItemCollection] = []
+  var compilations: [MPMediaItemCollection] = []
+  var genres: [MPMediaItemCollection] = []
+  var authorizationStatus: MPMediaLibraryAuthorizationStatus = .notDetermined
+  var isLoading = false
     
   func requestMusicLibraryAccess() {
     MPMediaLibrary.requestAuthorization() { [weak self] status in

@@ -9,12 +9,14 @@ import SwiftUI
 
 @main
 struct VisualManApp: App {
-  @StateObject var musicLibraryManager = MusicLibraryAccessManager()
+  @State private var musicLibraryManager = MusicLibraryAccessManager()
+  @State private var playlistManager = AudioPlaylistManager()
   
   var body: some Scene {
     WindowGroup {
       HomeScreenView()
-        .environmentObject(musicLibraryManager)
+        .environment(musicLibraryManager)
+        .environment(playlistManager)
         .onAppear {
           musicLibraryManager.requestMusicLibraryAccess()
         }
