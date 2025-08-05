@@ -23,6 +23,7 @@ struct MusicPlayerView: View {
   @State private var scrollAnimationKey = UUID()
   @State private var playbackCompletionCancellable: AnyCancellable?
   @State private var nowPlayingTimer: Timer?
+  @State private var isShowingTabPlayer: Bool = true
   
   private var sliderColor: Color = .white
   
@@ -200,7 +201,10 @@ struct MusicPlayerView: View {
       .zIndex(1)
       .opacity(isTapped ? 0 : 1)
     }
+    .preference(key: BooleanPreferenceKey.self, value: isShowingTabPlayer)
     .onAppear {
+      isShowingTabPlayer = false
+      
       playlistManager.setPlaylist(_audioSources, startingIndex: _startingIndex)
       
       setupLockScreenControls()
@@ -227,6 +231,7 @@ struct MusicPlayerView: View {
       }
     }
     .onDisappear {
+      isShowingTabPlayer = true
       cleanup()
     }
     .onTapGesture {

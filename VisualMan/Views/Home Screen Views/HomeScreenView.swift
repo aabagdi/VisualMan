@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HomeScreenView: View {
   @Environment(MusicLibraryAccessManager.self) private var library
+  @State private var isShowingBar: Bool = true
   
   var body: some View {
     TabView {
@@ -20,9 +21,17 @@ struct HomeScreenView: View {
         FilesTabView()
       }
     }
+    .onPreferenceChange(BooleanPreferenceKey.self) { value in
+      isShowingBar = value
+    }
     .tabBarMinimizeBehavior(.onScrollDown)
     .tabViewBottomAccessory {
-      MusicPlayerTabView()
+      switch isShowingBar {
+      case true:
+        MusicPlayerTabView()
+      case false:
+        EmptyView()
+      }
     }
   }
 }
