@@ -42,6 +42,8 @@ final class MusicLibraryAccessManager {
     artists = MPMediaQuery.artists().collections ?? []
     genres = MPMediaQuery.genres().collections ?? []
     
+    albums = albums.filter { !($0.representativeItem?.isCompilation ?? false) }
+    
     albums.sort {
       $0.representativeItem?.albumArtist ?? "Unknown" < $1.representativeItem?.albumArtist ?? "Unknown"
     }
