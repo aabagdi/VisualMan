@@ -9,7 +9,7 @@ import SwiftUI
 import MediaPlayer
 
 struct SongsListView: View {
-  @State var searchText: String = ""
+  @State private var searchText: String = ""
   
   let songs: [MPMediaItem]
   
