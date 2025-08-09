@@ -30,7 +30,7 @@ struct SongsListView: View {
               VStack(alignment: .leading) {
                 Text(song.title ?? "Unknown")
                   .font(.headline)
-                Text(song.artist ?? "Unknown")
+                Text("\(song.artist ?? "Unknown") • \(song.albumTitle ?? "Unknown")")
                   .font(.caption2)
               }
             }
