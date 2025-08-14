@@ -7,7 +7,6 @@
 
 import SwiftUI
 import RealityKit
-import Combine
 
 struct ThreeDBarsVisualizerView: View {
   let visualizerBars: [Float]
