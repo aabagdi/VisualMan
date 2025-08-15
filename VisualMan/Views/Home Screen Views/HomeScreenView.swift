@@ -9,29 +9,46 @@ import SwiftUI
 
 struct HomeScreenView: View {
   @Environment(MusicLibraryAccessManager.self) private var library
+  
   @State private var isShowingBarPlayer: Bool = true
+  @State private var audioManager = AudioEngineManager.shared
+  @State private var isShowingMusicPlayer = false
+  @State private var playlistManager = AudioPlaylistManager()
   
   var body: some View {
-    TabView {
-      Tab("Music Library", systemImage: "music.note.square.stack.fill") {
-        AlbumListView(albums: library.albums)
+    NavigationStack {
+      TabView {
+        Tab("Music Library", systemImage: "music.note.square.stack.fill") {
+          AlbumListView(albums: library.albums)
+        }
+        
+        Tab("Files", systemImage: "folder.fill") {
+          FilesTabView()
+        }
       }
-      
-      Tab("Files", systemImage: "folder.fill") {
-        FilesTabView()
+      .onPreferenceChange(BooleanPreferenceKey.self) { value in
+        isShowingBarPlayer = value
+      }
+      .tabBarMinimizeBehavior(.onScrollDown)
+      .tabViewBottomAccessory {
+        switch isShowingBarPlayer {
+        case true:
+          MusicPlayerTabView()
+        case false:
+          EmptyView()
+        }
+      }
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          if audioManager.isPlaying || audioManager.currentTime > 0 {
+            NavigationLink("Visualizer") {
+              MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)
+            }
+          }
+        }
       }
     }
-    .onPreferenceChange(BooleanPreferenceKey.self) { value in
-      isShowingBarPlayer = value
-    }
-    .tabBarMinimizeBehavior(.onScrollDown)
-    .tabViewBottomAccessory {
-      switch isShowingBarPlayer {
-      case true:
-        MusicPlayerTabView()
-      case false:
-        EmptyView()
-      }
-    }
+    .navigationTitle("Library")
+    .environment(playlistManager)
   }
 }
