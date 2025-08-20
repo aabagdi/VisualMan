@@ -27,15 +27,13 @@ struct GenreListView: View {
   var body: some View {
     Section {
       if !genres.isEmpty {
-        NavigationStack {
-          List(searchResults, id: \.representativeItem?.persistentID) { genre in
-            NavigationLink(destination: GenreDetailView(genre: genre.representativeItem?.genre ?? "Unknown", albums: albums.filter { $0.representativeItem?.genre == genre.representativeItem?.genre })) {
-              Text(genre.representativeItem?.genre ?? "Unknown")
-            }
+        List(searchResults, id: \.representativeItem?.persistentID) { genre in
+          NavigationLink(destination: GenreDetailView(genre: genre.representativeItem?.genre ?? "Unknown", albums: albums.filter { $0.representativeItem?.genre == genre.representativeItem?.genre })) {
+            Text(genre.representativeItem?.genre ?? "Unknown")
           }
-          .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-          .navigationTitle("Genres")
         }
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+        .navigationTitle("Genres")
       } else {
         Text("No genres found!")
           .font(.caption)

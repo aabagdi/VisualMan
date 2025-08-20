@@ -25,28 +25,26 @@ struct ArtistListView: View {
   }
   
   var body: some View {
-    NavigationStack {
-      Section {
-        if !artists.isEmpty {
-          List {
-            Section {
-              ForEach(searchResults, id: \.representativeItem?.persistentID) { artist in
-                NavigationLink(destination: ArtistDetailView(albums: albums.filter { album in
-                  album.representativeItem?.albumArtist == artist.representativeItem?.albumArtist
-                })) {
-                  Text(artist.representativeItem?.artist ?? "Unknown")
-                }
+    Section {
+      if !artists.isEmpty {
+        List {
+          Section {
+            ForEach(searchResults, id: \.representativeItem?.persistentID) { artist in
+              NavigationLink(destination: ArtistDetailView(albums: albums.filter { album in
+                album.representativeItem?.albumArtist == artist.representativeItem?.albumArtist
+              })) {
+                Text(artist.representativeItem?.artist ?? "Unknown")
               }
             }
           }
-          .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-        } else {
-          Text("No artists found!")
-            .font(.caption)
         }
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+      } else {
+        Text("No artists found!")
+          .font(.caption)
       }
-      .toolbarVisibility(.hidden, for: .tabBar)
-      .navigationTitle("Artists")
     }
+    .toolbarVisibility(.hidden, for: .tabBar)
+    .navigationTitle("Artists")
   }
 }

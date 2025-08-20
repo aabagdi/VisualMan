@@ -24,20 +24,18 @@ struct SongsListView: View {
   var body: some View {
     Section {
       if !songs.isEmpty {
-        NavigationStack {
-          List(Array(searchResults.enumerated()), id: \.element.persistentID) { index, song in
-            NavigationLink(destination: MusicPlayerView(searchResults, startingIndex: index)) {
-              VStack(alignment: .leading) {
-                Text(song.title ?? "Unknown")
-                  .font(.headline)
-                Text("\(song.artist ?? "Unknown") • \(song.albumTitle ?? "Unknown")")
-                  .font(.caption2)
-              }
+        List(Array(searchResults.enumerated()), id: \.element.persistentID) { index, song in
+          NavigationLink(destination: MusicPlayerView(searchResults, startingIndex: index)) {
+            VStack(alignment: .leading) {
+              Text(song.title ?? "Unknown")
+                .font(.headline)
+              Text("\(song.artist ?? "Unknown") • \(song.albumTitle ?? "Unknown")")
+                .font(.caption2)
             }
-            .toolbarVisibility(.hidden, for: .tabBar)
           }
-          .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+          .toolbarVisibility(.hidden, for: .tabBar)
         }
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
       } else {
         Text("No songs found!")
           .font(.caption)
