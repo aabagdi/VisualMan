@@ -20,7 +20,7 @@ struct CompilationListView: View {
       return compilations
     } else {
       return compilations.filter {
-        $0.representativeItem?.title?.localizedCaseInsensitiveContains(searchText) ?? false
+        $0.representativeItem?.albumTitle?.localizedCaseInsensitiveContains(searchText) ?? false
       }
     }
   }
