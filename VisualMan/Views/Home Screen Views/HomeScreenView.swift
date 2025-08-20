@@ -26,18 +26,8 @@ struct HomeScreenView: View {
           FilesTabView()
         }
       }
-      .onPreferenceChange(BooleanPreferenceKey.self) { value in
-        isShowingBarPlayer = value
-      }
-      .tabBarMinimizeBehavior(.onScrollDown)
-      .tabViewBottomAccessory {
-        switch isShowingBarPlayer {
-        case true:
-          MusicPlayerTabView()
-        case false:
-          EmptyView()
-        }
-      }
+      .navigationTitle("Library")  // Applied to TabView content
+      .navigationBarTitleDisplayMode(.large)  // Optional: control display mode
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
           if audioManager.isPlaying || audioManager.currentTime > 0 {
@@ -48,7 +38,6 @@ struct HomeScreenView: View {
         }
       }
     }
-    .navigationTitle("Library")
     .environment(playlistManager)
   }
 }

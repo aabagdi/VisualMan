@@ -201,7 +201,6 @@ struct MusicPlayerView: View {
       .zIndex(1)
       .opacity(isTapped ? 0 : 1)
     }
-    .preference(key: BooleanPreferenceKey.self, value: isShowingTabPlayer)
     .onAppear {
       isShowingTabPlayer = false
       

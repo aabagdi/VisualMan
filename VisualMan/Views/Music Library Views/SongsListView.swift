@@ -25,7 +25,7 @@ struct SongsListView: View {
     Section {
       if !songs.isEmpty {
         NavigationStack {
-          List(searchResults.enumerated(), id: \.element.persistentID) { index, song in
+          List(Array(searchResults.enumerated()), id: \.element.persistentID) { index, song in
             NavigationLink(destination: MusicPlayerView(searchResults, startingIndex: index)) {
               VStack(alignment: .leading) {
                 Text(song.title ?? "Unknown")

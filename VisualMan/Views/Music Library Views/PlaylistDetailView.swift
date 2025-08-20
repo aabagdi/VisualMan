@@ -13,7 +13,7 @@ struct PlaylistDetailView: View {
   
   var body: some View {
     NavigationStack {
-      List(playlist.items.enumerated(), id: \.1.persistentID) { index, song in
+      List(Array(playlist.items.enumerated()), id: \.1.persistentID) { index, song in
         NavigationLink(destination: MusicPlayerView(playlist.items, startingIndex: index)) {
           VStack(alignment: .leading) {
             Text(song.title ?? "Unknown")

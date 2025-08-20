@@ -21,7 +21,7 @@ struct FilesTabView: View {
         Button("Select an audio file to play") {
           showingFilePicker.toggle()
         }
-        .buttonStyle(.glassProminent)
+        .buttonStyle(.borderedProminent)
         .padding()
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
