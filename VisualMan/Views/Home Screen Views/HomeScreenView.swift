@@ -26,8 +26,8 @@ struct HomeScreenView: View {
           FilesTabView()
         }
       }
-      .navigationTitle("Library")  // Applied to TabView content
-      .navigationBarTitleDisplayMode(.large)  // Optional: control display mode
+      .navigationTitle("Library")
+      .navigationBarTitleDisplayMode(.large)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
           if audioManager.isPlaying || audioManager.currentTime > 0 {
