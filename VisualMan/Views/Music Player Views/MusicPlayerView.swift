@@ -69,8 +69,8 @@ struct MusicPlayerView: View {
     _startingIndex = startingIndex
   }
   
-  init(fileURL: URL, title: String? = nil) {
-    let sources = [FileAudioSource(url: fileURL, title: title)]
+  init(fileAudioSource: FileAudioSource) {
+    let sources = [fileAudioSource]
     _audioSources = sources
     _startingIndex = 0
   }

@@ -62,9 +62,11 @@ final class AudioEngineManager {
     }
   }
   
-  isolated deinit {
-    stopDisplayLink()
-    stopSecurityScopedAccess()
+  deinit {
+    Task { @MainActor [weak self] in
+      self?.stopDisplayLink()
+      self?.stopSecurityScopedAccess()
+    }
   }
   
   private func setupAudioEngine() throws {
