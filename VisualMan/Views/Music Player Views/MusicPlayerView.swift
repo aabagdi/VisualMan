@@ -201,6 +201,7 @@ struct MusicPlayerView: View {
       .zIndex(1)
       .opacity(isTapped ? 0 : 1)
     }
+    .toolbar(.hidden, for: .tabBar)
     .onAppear {
       isShowingTabPlayer = false
       

@@ -16,23 +16,25 @@ struct HomeScreenView: View {
   @State private var playlistManager = AudioPlaylistManager()
   
   var body: some View {
-    NavigationStack {
-      TabView {
-        Tab("Music Library", systemImage: "music.note.list") {
+    TabView {
+      Tab("Music Library", systemImage: "music.note.list") {
+        NavigationStack {
           AlbumListView(albums: library.albums)
-        }
-        
-        Tab("Files", systemImage: "folder.fill") {
-          FilesTabView()
+            .toolbar {
+              ToolbarItem(placement: .navigationBarTrailing) {
+                if audioManager.isPlaying || audioManager.currentTime > 0 {
+                  NavigationLink("Visualizer") {
+                    MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)
+                  }
+                }
+              }
+            }
         }
       }
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          if audioManager.isPlaying || audioManager.currentTime > 0 {
-            NavigationLink("Visualizer") {
-              MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)
-            }
-          }
+      
+      Tab("Files", systemImage: "folder.fill") {
+        NavigationStack {
+          FilesTabView()
         }
       }
     }
