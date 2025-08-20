@@ -2,7 +2,7 @@
 //  AudioPlaylistManager.swift
 //  VisualMan
 //
-//  Created by Your Name on Date.
+//  Created by Aadit Bagdi on 8/2/25.
 //
 
 import Foundation
