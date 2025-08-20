@@ -8,8 +8,9 @@
 import Foundation
 import Combine
 
-final class ThreeDBarsVisualizerViewModel: ObservableObject {
-  @Published var smoothedValues: [Float] = []
+@Observable
+final class ThreeDBarsVisualizerViewModel {
+  var smoothedValues: [Float] = []
   private var timer: Timer?
   
   func startSmoothing(targetValues: [Float]) {

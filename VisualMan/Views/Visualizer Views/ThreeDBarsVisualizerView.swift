@@ -10,7 +10,7 @@ import RealityKit
 
 struct ThreeDBarsVisualizerView: View {
   let visualizerBars: [Float]
-  @StateObject private var model = ThreeDBarsVisualizerViewModel()
+  @State private var model = ThreeDBarsVisualizerViewModel()
   @State private var cameraEntity: PerspectiveCamera?
   @State private var rotationAngle: Float = 0
   @State private var verticalAngle: Float = 0
