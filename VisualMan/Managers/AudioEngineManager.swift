@@ -207,14 +207,14 @@ final class AudioEngineManager {
     isHandlingCompletion = true
     
     DispatchQueue.main.async { [weak self] in
-      guard let self = self else { return }
+      guard let self else { return }
       
       self.hasHandledCompletion = true
       
       self.playbackCompleted.send()
       
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-        guard let self = self else { return }
+        guard let self else { return }
         if self.hasHandledCompletion && !(self.player?.isPlaying ?? true) {
           self.isPlaying = false
           self.currentTime = self.duration
