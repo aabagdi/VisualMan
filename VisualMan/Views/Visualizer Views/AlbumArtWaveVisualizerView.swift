@@ -39,11 +39,6 @@ struct AlbumArtWaveVisualizerView: View {
     return highMax * 0.7 + highAvg * 0.3
   }
   
-  private var peakLevel: Float {
-    let overall = (bassLevel + midLevel + highLevel) / 3.0
-    return min(overall * 1.2, 1.0)
-  }
-  
   var body: some View {
     GeometryReader { g in
       TimelineView(.animation) { timeline in
