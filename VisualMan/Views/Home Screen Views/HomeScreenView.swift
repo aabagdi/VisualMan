@@ -18,7 +18,7 @@ struct HomeScreenView: View {
   var body: some View {
     NavigationStack {
       TabView {
-        Tab("Music Library", systemImage: "music.note.square.stack.fill") {
+        Tab("Music Library", systemImage: "music.note.list") {
           AlbumListView(albums: library.albums)
         }
         
