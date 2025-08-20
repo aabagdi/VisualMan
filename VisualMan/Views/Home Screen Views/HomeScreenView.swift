@@ -9,11 +9,11 @@ import SwiftUI
 
 struct HomeScreenView: View {
   @Environment(MusicLibraryAccessManager.self) private var library
+  @Environment(AudioPlaylistManager.self) private var playlistManager
   
   @State private var isShowingBarPlayer: Bool = true
   @State private var audioManager = AudioEngineManager.shared
   @State private var isShowingMusicPlayer = false
-  @State private var playlistManager = AudioPlaylistManager()
   
   var body: some View {
     TabView {
@@ -38,6 +38,5 @@ struct HomeScreenView: View {
         }
       }
     }
-    .environment(playlistManager)
   }
 }
