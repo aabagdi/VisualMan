@@ -9,7 +9,7 @@ import Foundation
 import Combine
 
 @Observable
-class AudioPlaylistManager {
+final class AudioPlaylistManager {
   var audioSources: [any AudioSource] = []
   var currentIndex: Int = 0
   
