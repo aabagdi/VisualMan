@@ -84,7 +84,7 @@ struct AlbumListView: View {
 
           NavigationLink(destination: PlaylistListView(playlists: library.playlists)) {
             HStack {
-              Image(systemName: "music.note.list")
+              Image(systemName: "list.number")
                 .font(.system(size: 20))
                 .frame(width: 30, height: 30)
                 .padding(.trailing, 8)
