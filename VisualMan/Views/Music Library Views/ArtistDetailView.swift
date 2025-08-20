@@ -48,6 +48,6 @@ struct ArtistDetailView: View {
       }
       .toolbarVisibility(.hidden, for: .tabBar)
     }
-    .navigationTitle(albums[0].representativeItem?.albumArtist ?? "Unknown")
+    .navigationTitle(albums[0].representativeItem?.artist ?? "Unknown")
   }
 }
