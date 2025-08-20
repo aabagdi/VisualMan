@@ -87,7 +87,7 @@ struct FilesTabView: View {
     }
   }
   
-  func extractMetadata(from asset: AVAsset) async throws {
+  private func extractMetadata(from asset: AVAsset) async throws {
     let metadata = try await asset.load(.commonMetadata)
     
     title = try? await AVMetadataItem.metadataItems(
