@@ -210,13 +210,23 @@ struct MusicPlayerView: View {
       }
     }
     .toolbar {
-      Picker("Current Visualizer", selection: $currentVisualizer) {
-        ForEach(Visualizers.allCases, id: \.self) { type in
-          Text(type.rawValue)
-            .tag(type)
+      ToolbarItem(placement: .topBarTrailing) {
+        Menu {
+          ForEach(Visualizers.allCases, id: \.self) { type in
+            Button {
+              currentVisualizer = type
+            } label: {
+              if type == currentVisualizer {
+                Label(type.rawValue, systemImage: "checkmark")
+              } else {
+                Text(type.rawValue)
+              }
+            }
+          }
+        } label: {
+          Text(currentVisualizer.rawValue)
         }
       }
-      .fixedSize()
     }
   }
   
