@@ -14,7 +14,7 @@ struct FilesTabView: View {
   @State private var showingPlayer = false
   @State private var selectedAudioSource: FileAudioSource?
   @State private var fileLoadingFailed: Bool = false
-  @State private var fileError: Error?
+  @State private var fileError: VMError?
   @State private var title: String?
   @State private var artist: String?
   @State private var albumArt: UIImage?
@@ -30,7 +30,7 @@ struct FilesTabView: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(Color(UIColor.systemGroupedBackground))
-      .alert("Failed to load file: \(fileError?.localizedDescription ?? "Unknown file loading error")", isPresented: $fileLoadingFailed) {
+      .alert(fileError?.errorDescription ?? "An unknown error occurred while loading the file.", isPresented: $fileLoadingFailed) {
         Button("Okay", role: .cancel) {
           fileLoadingFailed = false
           fileError = nil
@@ -45,7 +45,7 @@ struct FilesTabView: View {
           Task { @MainActor in
             do {
               guard url.startAccessingSecurityScopedResource() else {
-                throw NSError(domain: "FilesTabView", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to access file"])
+                throw VMError.fileAccessDenied
               }
               
               defer {
@@ -66,14 +66,14 @@ struct FilesTabView: View {
               showingPlayer = true
               
             } catch {
-              fileError = error
+              fileError = VMError.failedToCreateFile
               fileLoadingFailed = true
               print("Error loading file: \(error)")
             }
           }
           
         case .failure(let error):
-          fileError = error
+          fileError = VMError.fileSelectionFailed
           fileLoadingFailed = true
           print("File selection failed: \(error)")
         }

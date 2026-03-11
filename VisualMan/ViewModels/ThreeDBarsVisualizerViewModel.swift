@@ -11,12 +11,12 @@ import Combine
 extension ThreeDBarsVisualizerView {
   @Observable
   final class ThreeDBarsVisualizerViewModel {
-    var smoothedValues: [Float] = []
+    var smoothedValues = [32 of Float](repeating: 0.0)
     private var timer: Timer?
     
     func startSmoothing(targetValues: [32 of Float]) {
       if smoothedValues.isEmpty {
-        smoothedValues = Array(repeating: 0.01, count: targetValues.count)
+        smoothedValues = [32 of Float](repeating: 0.01)
       }
       
       timer?.invalidate()

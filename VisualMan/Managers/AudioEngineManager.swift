@@ -22,7 +22,7 @@ final class AudioEngineManager {
   var duration: TimeInterval = 0
   var isInitialized = false
   var failedToInitialize = false
-  var initializationError: Error?
+  var initializationError: VMError?
   var currentAudioSourceURL: URL?
   
   private var engine: AVAudioEngine?
@@ -56,7 +56,7 @@ final class AudioEngineManager {
       try setupAudioEngine()
       isInitialized = true
     } catch {
-      initializationError = error
+      initializationError = VMError.unableToInitialize
       isInitialized = false
       failedToInitialize = true
     }
@@ -74,7 +74,7 @@ final class AudioEngineManager {
       try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
       try AVAudioSession.sharedInstance().setActive(true)
     } catch {
-      throw Errors.invalidSession
+      throw VMError.invalidSession
     }
     
     engine = AVAudioEngine()
@@ -113,7 +113,7 @@ final class AudioEngineManager {
     lastSeekFrame = 0
     
     guard let url = source.getPlaybackURL() else {
-      throw Errors.invalidURL
+      throw VMError.invalidURL
     }
     
     try play(from: url)
@@ -134,7 +134,7 @@ final class AudioEngineManager {
   private func playAudioFromURL(_ url: URL) throws {
     guard let engine,
           let player else {
-      throw Errors.nilEngineOrPlayer
+      throw VMError.nilEngineOrPlayer
     }
     
     hasHandledCompletion = false
@@ -147,7 +147,7 @@ final class AudioEngineManager {
       audioFile = try AVAudioFile(forReading: url)
       
       guard let audioFile else {
-        throw Errors.failedToCreateFile
+        throw VMError.failedToCreateFile
       }
       
       duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
@@ -175,7 +175,7 @@ final class AudioEngineManager {
         self?.isPlaying = false
         self?.stopDisplayLink()
       }
-      throw Errors.failedToPlay
+      throw VMError.failedToPlay
     }
     
     let format = engine.mainMixerNode.outputFormat(forBus: 0)

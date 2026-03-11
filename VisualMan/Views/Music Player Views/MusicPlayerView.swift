@@ -16,7 +16,7 @@ struct MusicPlayerView: View {
   @State private var currentVisualizer = Visualizers.bars
   @State private var isTapped: Bool = false
   @State private var failedPlaying: Bool = false
-  @State private var playingError: Error?
+  @State private var playingError: VMError?
   @State private var scrollToEnd = false
   @State private var textSize: CGSize = .zero
   @State private var containerSize: CGSize = .zero
@@ -217,7 +217,7 @@ struct MusicPlayerView: View {
       
       do {
         guard let currentSource = playlistManager.currentAudioSource else {
-          throw NSError(domain: "MusicPlayerView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No audio source available"])
+          throw VMError.noAudioSource
         }
         try audioManager.play(currentSource)
         updateNowPlayingInfo()
@@ -225,8 +225,11 @@ struct MusicPlayerView: View {
         audioManager.startNowPlayingTimer {
           self.updateNowPlayingInfo()
         }
-      } catch {
+      } catch let error as VMError {
         playingError = error
+        failedPlaying.toggle()
+      } catch {
+        playingError = VMError.failedToPlay
         failedPlaying.toggle()
       }
     }
@@ -239,13 +242,13 @@ struct MusicPlayerView: View {
         isTapped.toggle()
       }
     }
-    .alert("Failed to play song: \(playingError?.localizedDescription ?? "Unknown playing error")", isPresented: $failedPlaying) {
+    .alert(playingError?.errorDescription ?? "An unknown error occurred during playback.", isPresented: $failedPlaying) {
       Button("Okay", role: .cancel) {
         failedPlaying = false
         playingError = nil
       }
     }
-    .alert("Failed to initialize audioEngine: \(audioManager.initializationError?.localizedDescription ?? "Unknown initialization error")", isPresented: $audioManager.failedToInitialize) {
+    .alert(audioManager.initializationError?.errorDescription ?? "An unknown error occurred during initialization.", isPresented: $audioManager.failedToInitialize) {
       Button("Okay", role: .cancel) {
         audioManager.failedToInitialize = false
         audioManager.initializationError = nil
@@ -268,8 +271,11 @@ struct MusicPlayerView: View {
     do {
       try audioManager.play(source)
       updateNowPlayingInfo()
-    } catch {
+    } catch let error as VMError {
       playingError = error
+      failedPlaying = true
+    } catch {
+      playingError = VMError.failedToPlay
       failedPlaying = true
     }
   }
