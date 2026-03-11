@@ -10,6 +10,7 @@ import Combine
 
 extension ThreeDBarsVisualizerView {
   @Observable
+  @MainActor
   final class ThreeDBarsVisualizerViewModel {
     var smoothedValues = [32 of Float](repeating: 0.0)
     private var timer: Timer?
@@ -21,8 +22,8 @@ extension ThreeDBarsVisualizerView {
       
       timer?.invalidate()
       timer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
-        Task { @MainActor in
-          self?.updateSmoothedValues(targetValues: targetValues)
+        Task {
+          await self?.updateSmoothedValues(targetValues: targetValues)
         }
       }
     }

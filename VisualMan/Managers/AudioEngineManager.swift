@@ -25,23 +25,24 @@ final class AudioEngineManager {
   var initializationError: VMError?
   var currentAudioSourceURL: URL?
   
-  private var engine: AVAudioEngine?
-  private var player: AVAudioPlayerNode?
-  private var audioFile: AVAudioFile?
-  private var displayLink: CADisplayLink?
-  private var securityScopedURL: URL?
-  private var lastSeekFrame: AVAudioFramePosition = 0
-  private var isSeeking: Bool = false
-  private var numberOfBars = 32
-  private var peakLevels = [32 of Float](repeating: 0.0)
-  private var peakHoldTime = [32 of Float](repeating: 0.0)
-  private var gainHistory: [Float] = []
-  private var currentGain: Float = 1.0
-  private var hasHandledCompletion = false
-  private var isHandlingCompletion = false
-  private var currentPlaybackID = UUID()
-  private var nowPlayingTimer: Timer?
-  private var lockScreenUpdateHandler: (() -> Void)?
+  @ObservationIgnored private var engine: AVAudioEngine?
+  @ObservationIgnored private var player: AVAudioPlayerNode?
+  @ObservationIgnored private var audioFile: AVAudioFile?
+  @ObservationIgnored private var displayLink: CADisplayLink?
+  @ObservationIgnored private var securityScopedURL: URL?
+  @ObservationIgnored private var lastSeekFrame: AVAudioFramePosition = 0
+  @ObservationIgnored private var isSeeking: Bool = false
+  @ObservationIgnored private var numberOfBars = 32
+  @ObservationIgnored private var peakLevels = [32 of Float](repeating: 0.0)
+  @ObservationIgnored private var peakHoldTime = [32 of Float](repeating: 0.0)
+  @ObservationIgnored private var gainHistory: [Float] = []
+  @ObservationIgnored private var currentGain: Float = 1.0
+  @ObservationIgnored private var hasHandledCompletion = false
+  @ObservationIgnored private var isHandlingCompletion = false
+  @ObservationIgnored private var currentPlaybackID = UUID()
+  @ObservationIgnored private var nowPlayingTimer: Timer?
+  @ObservationIgnored private var lockScreenUpdateHandler: (() -> Void)?
+  @ObservationIgnored private nonisolated(unsafe) var dftSetup: OpaquePointer?
   
   private let smoothingFactor: Float = 0.8
   private let attackTime: Float = 0.1
@@ -63,6 +64,9 @@ final class AudioEngineManager {
   }
   
   deinit {
+    if let dftSetup {
+      vDSP_DFT_DestroySetup(dftSetup)
+    }
     Task { @MainActor [weak self] in
       self?.stopDisplayLink()
       self?.stopSecurityScopedAccess()
@@ -92,6 +96,8 @@ final class AudioEngineManager {
     
     engine.attach(player)
     engine.connect(player, to: engine.mainMixerNode, format: format)
+    
+    dftSetup = vDSP_DFT_zop_CreateSetup(nil, 1024, vDSP_DFT_Direction.FORWARD)
   }
   
   
@@ -354,7 +360,7 @@ final class AudioEngineManager {
       realIn[i] = samples[i] * window
     }
     
-    guard let dftSetup = vDSP_DFT_zop_CreateSetup(nil, 1024, vDSP_DFT_Direction.FORWARD) else { return }
+    guard let dftSetup else { return }
     
     withUnsafeMutablePointer(to: &realIn) { riPtr in
       withUnsafeMutablePointer(to: &imagIn) { iiPtr in
@@ -465,7 +471,6 @@ final class AudioEngineManager {
       }
     }
     
-    vDSP_DFT_DestroySetup(dftSetup)
   }
   
   private func updateAutomaticGainControl(bars: [Float]) {
