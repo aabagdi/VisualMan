@@ -7,22 +7,18 @@
 
 import SwiftUI
 import MediaPlayer
-import Combine
 
 struct MusicPlayerView: View {
   @Environment(AudioPlaylistManager.self) private var playlistManager
   
   @State private var audioManager = AudioEngineManager.shared
+  @State private var viewModel = MusicPlayerViewModel()
   @State private var currentVisualizer = Visualizers.bars
   @State private var isTapped: Bool = false
-  @State private var failedPlaying: Bool = false
-  @State private var playingError: VMError?
   @State private var scrollToEnd = false
   @State private var textSize: CGSize = .zero
   @State private var containerSize: CGSize = .zero
   @State private var scrollAnimationKey = UUID()
-  @State private var playbackCompletionCancellable: AnyCancellable?
-  @State private var nowPlayingTimer: Timer?
   @State private var isShowingTabPlayer: Bool = true
   
   private var sliderColor: Color = .white
@@ -44,14 +40,6 @@ struct MusicPlayerView: View {
   
   private var currentAudioSource: (any AudioSource)? {
     playlistManager.currentAudioSource
-  }
-  
-  private var hasNext: Bool {
-    playlistManager.hasNext
-  }
-  
-  private var hasPrevious: Bool {
-    playlistManager.hasPrevious
   }
   
   private enum Visualizers: String, CaseIterable {
@@ -163,7 +151,7 @@ struct MusicPlayerView: View {
         .padding()
         HStack {
           Button {
-            skipBackwards()
+            viewModel.skipBackwards(playlistManager: playlistManager)
           } label: {
             Image(systemName: "backward")
               .foregroundStyle(normalFillColor)
@@ -173,13 +161,7 @@ struct MusicPlayerView: View {
           Spacer()
           
           Button {
-            if audioManager.isPlaying {
-              audioManager.pause()
-            } else if audioManager.currentTime > 0 && audioManager.currentTime < audioManager.duration {
-              audioManager.resume()
-            } else {
-              playCurrentSong()
-            }
+            viewModel.togglePlayback(playlistManager: playlistManager)
           } label: {
             Image(systemName: audioManager.isPlaying ? "pause" : "play")
               .foregroundStyle(normalFillColor)
@@ -189,7 +171,7 @@ struct MusicPlayerView: View {
           Spacer()
           
           Button {
-            skipForwards()
+            viewModel.skipForwards(playlistManager: playlistManager)
           } label: {
             Image(systemName: "forward")
               .foregroundStyle(normalFillColor)
@@ -204,48 +186,21 @@ struct MusicPlayerView: View {
     .toolbar(.hidden, for: .tabBar)
     .onAppear {
       isShowingTabPlayer = false
-      
-      playlistManager.setPlaylist(_audioSources, startingIndex: _startingIndex)
-      
-      setupLockScreenControls()
-      
-      playbackCompletionCancellable = audioManager.playbackCompleted
-        .receive(on: DispatchQueue.main)
-        .sink { _ in
-          onSongCompleted()
-        }
-      
-      do {
-        guard let currentSource = playlistManager.currentAudioSource else {
-          throw VMError.noAudioSource
-        }
-        try audioManager.play(currentSource)
-        updateNowPlayingInfo()
-        
-        audioManager.startNowPlayingTimer {
-          self.updateNowPlayingInfo()
-        }
-      } catch let error as VMError {
-        playingError = error
-        failedPlaying.toggle()
-      } catch {
-        playingError = VMError.failedToPlay
-        failedPlaying.toggle()
-      }
+      viewModel.start(playlistManager: playlistManager, audioSources: _audioSources, startingIndex: _startingIndex)
     }
     .onDisappear {
       isShowingTabPlayer = true
-      cleanup()
+      viewModel.cleanup()
     }
     .onTapGesture {
       withAnimation(.easeInOut) {
         isTapped.toggle()
       }
     }
-    .alert(playingError?.errorDescription ?? "An unknown error occurred during playback.", isPresented: $failedPlaying) {
+    .alert(viewModel.playingError?.errorDescription ?? "An unknown error occurred during playback.", isPresented: $viewModel.failedPlaying) {
       Button("Okay", role: .cancel) {
-        failedPlaying = false
-        playingError = nil
+        viewModel.failedPlaying = false
+        viewModel.playingError = nil
       }
     }
     .alert(audioManager.initializationError?.errorDescription ?? "An unknown error occurred during initialization.", isPresented: $audioManager.failedToInitialize) {
@@ -263,110 +218,6 @@ struct MusicPlayerView: View {
       }
       .fixedSize()
     }
-  }
-  
-  private func playCurrentSong() {
-    guard let source = currentAudioSource else { return }
-    
-    do {
-      try audioManager.play(source)
-      updateNowPlayingInfo()
-    } catch let error as VMError {
-      playingError = error
-      failedPlaying = true
-    } catch {
-      playingError = VMError.failedToPlay
-      failedPlaying = true
-    }
-  }
-  
-  private func skipBackwards() {
-    if audioManager.currentTime >= 3 {
-      audioManager.seek(to: 0)
-      return
-    } else if playlistManager.hasPrevious {
-      audioManager.stop()
-      playlistManager.moveToPrevious()
-      playCurrentSong()
-    } else if playlistManager.currentIndex == 0 {
-      audioManager.seek(to: 0)
-    }
-  }
-  
-  private func skipForwards() {
-    guard hasNext else { return }
-    audioManager.stop()
-    playlistManager.moveToNext()
-    playCurrentSong()
-  }
-  
-  private func onSongCompleted() {
-    audioManager.stop()
-    
-    if hasNext {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-        playlistManager.moveToNext()
-        playCurrentSong()
-      }
-    } else {
-      playlistManager.moveToIndex(0)
-    }
-  }
-  
-  private func setupLockScreenControls() {
-    let lockScreen = LockScreenControlManager.shared
-    
-    lockScreen.onPlayPause = {
-      if audioManager.isPlaying {
-        audioManager.pause()
-      } else if audioManager.currentTime > 0 && audioManager.currentTime < audioManager.duration {
-        audioManager.resume()
-      } else {
-        playCurrentSong()
-      }
-      self.updateNowPlayingInfo()
-    }
-    
-    lockScreen.onNext = {
-      skipForwards()
-    }
-    
-    lockScreen.onPrevious = {
-      skipBackwards()
-    }
-  }
-  
-  private func updateNowPlayingInfo() {
-    guard let source = currentAudioSource else { return }
-    
-    LockScreenControlManager.shared.updateNowPlayingInfo(
-      title: source.title,
-      artist: source.artist,
-      albumArt: source.albumArt,
-      duration: audioManager.duration,
-      currentTime: audioManager.currentTime,
-      isPlaying: audioManager.isPlaying
-    )
-  }
-  
-  private func startNowPlayingTimer() {
-    stopNowPlayingTimer()
-    nowPlayingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-      Task { @MainActor in
-        updateNowPlayingInfo()
-      }
-    }
-  }
-  
-  private func stopNowPlayingTimer() {
-    nowPlayingTimer?.invalidate()
-    nowPlayingTimer = nil
-  }
-  
-  private func cleanup() {
-    playbackCompletionCancellable?.cancel()
-    playbackCompletionCancellable = nil
-    stopNowPlayingTimer()
   }
   
   @ViewBuilder
