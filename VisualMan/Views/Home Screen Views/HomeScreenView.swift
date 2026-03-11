@@ -38,5 +38,6 @@ struct HomeScreenView: View {
         }
       }
     }
+    .tabBarMinimizeBehavior(.onScrollDown)
   }
 }
