@@ -15,8 +15,8 @@ import MediaPlayer
 final class AudioEngineManager {
   static let shared = AudioEngineManager()
   
-  var audioLevels: [Float] = Array(repeating: 0.0, count: 512)
-  var visualizerBars: [Float] = Array(repeating: 0.0, count: 32)
+  var audioLevels = [512 of Float](repeating: 0.0)
+  var visualizerBars = [32 of Float](repeating: 0.0)
   var isPlaying = false
   var currentTime: TimeInterval = 0
   var duration: TimeInterval = 0
@@ -33,8 +33,8 @@ final class AudioEngineManager {
   private var lastSeekFrame: AVAudioFramePosition = 0
   private var isSeeking: Bool = false
   private var numberOfBars = 32
-  private var peakLevels: [Float] = Array(repeating: 0.0, count: 32)
-  private var peakHoldTime: [Int] = Array(repeating: 0, count: 32)
+  private var peakLevels = [32 of Float](repeating: 0.0)
+  private var peakHoldTime = [32 of Float](repeating: 0.0)
   private var gainHistory: [Float] = []
   private var currentGain: Float = 1.0
   private var hasHandledCompletion = false
@@ -46,7 +46,7 @@ final class AudioEngineManager {
   private let smoothingFactor: Float = 0.8
   private let attackTime: Float = 0.1
   private let releaseTime: Float = 0.6
-  private let peakHoldDuration = 10
+  private let peakHoldDuration: Float = 10.0
   private let gainHistorySize = 30
   
   let playbackCompleted = PassthroughSubject<Void, Never>()
@@ -104,10 +104,10 @@ final class AudioEngineManager {
     
     engine?.mainMixerNode.removeTap(onBus: 0)
     
-    audioLevels = Array(repeating: 0.0, count: 512)
-    visualizerBars = Array(repeating: 0.0, count: 32)
-    peakLevels = Array(repeating: 0.0, count: 32)
-    peakHoldTime = Array(repeating: 0, count: 32)
+    audioLevels = [512 of Float](repeating: 0.0)
+    visualizerBars = [32 of Float](repeating: 0.0)
+    peakLevels = [32 of Float](repeating: 0.0)
+    peakHoldTime = [32 of Float](repeating: 0.0)
     gainHistory = []
     currentGain = 1.0
     lastSeekFrame = 0
@@ -344,10 +344,10 @@ final class AudioEngineManager {
   }
   
   private func processAudioBuffer(_ samples: [Float]) {
-    var realIn = [Float](repeating: 0, count: 1024)
-    var imagIn = [Float](repeating: 0, count: 1024)
-    var realOut = [Float](repeating: 0, count: 1024)
-    var imagOut = [Float](repeating: 0, count: 1024)
+    var realIn = [1024 of Float](repeating: 0.0)
+    var imagIn = [1024 of Float](repeating: 0.0)
+    var realOut = [1024 of Float](repeating: 0.0)
+    var imagOut = [1024 of Float](repeating: 0.0)
     
     for i in 0..<min(samples.count, 1024) {
       let window = 0.5 - 0.5 * cos(2.0 * .pi * Float(i) / Float(1023))
@@ -356,25 +356,41 @@ final class AudioEngineManager {
     
     guard let dftSetup = vDSP_DFT_zop_CreateSetup(nil, 1024, vDSP_DFT_Direction.FORWARD) else { return }
     
-    vDSP_DFT_Execute(dftSetup, &realIn, &imagIn, &realOut, &imagOut)
+    withUnsafeMutablePointer(to: &realIn) { riPtr in
+      withUnsafeMutablePointer(to: &imagIn) { iiPtr in
+        withUnsafeMutablePointer(to: &realOut) { roPtr in
+          withUnsafeMutablePointer(to: &imagOut) { ioPtr in
+            let ri = UnsafeMutableRawPointer(riPtr).assumingMemoryBound(to: Float.self)
+            let ii = UnsafeMutableRawPointer(iiPtr).assumingMemoryBound(to: Float.self)
+            let ro = UnsafeMutableRawPointer(roPtr).assumingMemoryBound(to: Float.self)
+            let io = UnsafeMutableRawPointer(ioPtr).assumingMemoryBound(to: Float.self)
+            vDSP_DFT_Execute(dftSetup, ri, ii, ro, io)
+          }
+        }
+      }
+    }
     
-    var magnitudes = [Float](repeating: 0.0, count: 512)
+    var magnitudes = [512 of Float](repeating: 0.0)
     
-    realOut.withUnsafeBufferPointer { realPtr in
-      imagOut.withUnsafeBufferPointer { imagPtr in
-        guard let realBase = realPtr.baseAddress,
-              let imagBase = imagPtr.baseAddress else { return }
-        
-        var complex = DSPSplitComplex(realp: UnsafeMutablePointer(mutating: realBase),
-                                      imagp: UnsafeMutablePointer(mutating: imagBase))
-        vDSP_zvabs(&complex, 1, &magnitudes, 1, 512)
+    withUnsafeMutablePointer(to: &realOut) { roPtr in
+      withUnsafeMutablePointer(to: &imagOut) { ioPtr in
+        withUnsafeMutablePointer(to: &magnitudes) { magPtr in
+          let ro = UnsafeMutableRawPointer(roPtr).assumingMemoryBound(to: Float.self)
+          let io = UnsafeMutableRawPointer(ioPtr).assumingMemoryBound(to: Float.self)
+          let mag = UnsafeMutableRawPointer(magPtr).assumingMemoryBound(to: Float.self)
+          var complex = DSPSplitComplex(realp: ro, imagp: io)
+          vDSP_zvabs(&complex, 1, mag, 1, 512)
+        }
       }
     }
     
     var scaleFactor: Float = 2.0 / Float(1024)
-    vDSP_vsmul(magnitudes, 1, &scaleFactor, &magnitudes, 1, 512)
+    withUnsafeMutablePointer(to: &magnitudes) { magPtr in
+      let mag = UnsafeMutableRawPointer(magPtr).assumingMemoryBound(to: Float.self)
+      vDSP_vsmul(mag, 1, &scaleFactor, mag, 1, 512)
+    }
     
-    var logMagnitudes = [Float](repeating: 0.0, count: 512)
+    var logMagnitudes = [512 of Float](repeating: 0.0)
     
     let sampleRate: Float = 44100.0
     let binFrequencyWidth = sampleRate / Float(1024)
@@ -474,8 +490,8 @@ final class AudioEngineManager {
     currentGain = currentGain * 0.95 + desiredGain * 0.05
   }
   
-  private func createVisualizerBars(from fftData: [Float]) -> [Float] {
-    var bars = [Float](repeating: 0, count: numberOfBars)
+  private func createVisualizerBars(from fftData: [512 of Float]) -> [Float] {
+    var bars = [Float](repeating: 0.0, count: numberOfBars)
     
     let minFreq: Float = 60.0
     let maxFreq: Float = 16000.0

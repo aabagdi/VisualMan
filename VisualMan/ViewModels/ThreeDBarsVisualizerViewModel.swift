@@ -14,7 +14,7 @@ extension ThreeDBarsVisualizerView {
     var smoothedValues: [Float] = []
     private var timer: Timer?
     
-    func startSmoothing(targetValues: [Float]) {
+    func startSmoothing(targetValues: [32 of Float]) {
       if smoothedValues.isEmpty {
         smoothedValues = Array(repeating: 0.01, count: targetValues.count)
       }
@@ -32,7 +32,7 @@ extension ThreeDBarsVisualizerView {
       timer = nil
     }
     
-    private func updateSmoothedValues(targetValues: [Float]) {
+    private func updateSmoothedValues(targetValues: [32 of Float]) {
       for index in 0..<min(targetValues.count, smoothedValues.count) {
         let targetHeight = max(0.01, targetValues[index] * 10)
         

@@ -9,7 +9,7 @@ import SwiftUI
 import RealityKit
 
 struct ThreeDBarsVisualizerView: View {
-  let visualizerBars: [Float]
+  let visualizerBars: [32 of Float]
   @State private var model = ThreeDBarsVisualizerViewModel()
   @State private var cameraEntity: PerspectiveCamera?
   @State private var rotationAngle: Float = 0
@@ -28,7 +28,7 @@ struct ThreeDBarsVisualizerView: View {
       let root = Entity()
       root.position = [0.0, 0.0, 0.0]
       
-      for (index, _) in visualizerBars.enumerated() {
+      for index in visualizerBars.indices {
         let barContainer = Entity()
         barContainer.name = "bar_\(index)"
         

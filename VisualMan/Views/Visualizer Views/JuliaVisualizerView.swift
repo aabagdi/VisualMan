@@ -13,27 +13,41 @@ struct JuliaVisualizerView: View {
   @State private var smoothedMid: Float = 0
   @State private var smoothedHigh: Float = 0
   
-  let audioLevels: [Float]
+  let audioLevels: [512 of Float]
   
   private var bassLevel: Float {
     guard audioLevels.count >= 512 else { return 0 }
-    let bassRange = audioLevels[1..<10]
-    return bassRange.reduce(0, +) / Float(bassRange.count)
+    let bassRange = 1..<10
+    var bassResult: Float = 0.0
+    for i in bassRange { bassResult += audioLevels[i] }
+    return bassResult / Float(bassRange.count)
   }
   
   private var midLevel: Float {
     guard audioLevels.count >= 512 else { return 0 }
-    let midRange = audioLevels[10..<50]
-    let midAvg = midRange.reduce(0, +) / Float(midRange.count)
-    let midMax = midRange.max() ?? 0
+    let midRange = 10..<50
+    var midResult: Float = 0.0
+    var midMax: Float = 0.0
+    for i in midRange {
+      let currentLevel = audioLevels[i]
+      midMax = max(midMax, currentLevel)
+      midResult += currentLevel
+    }
+    let midAvg = midResult / Float(midRange.count)
     return midAvg * 0.5 + midMax * 0.5
   }
   
   private var highLevel: Float {
     guard audioLevels.count >= 512 else { return 0 }
-    let highRange = audioLevels[50..<150]
-    let highMax = highRange.max() ?? 0
-    let highAvg = highRange.reduce(0, +) / Float(highRange.count)
+    let highRange = 50..<150
+    var highResult: Float = 0.0
+    var highMax: Float = 0.0
+    for i in highRange {
+      let currentLevel = audioLevels[i]
+      highMax = max(highMax, currentLevel)
+      highResult += currentLevel
+    }
+    let highAvg = highResult / Float(highRange.count)
     return highMax * 0.7 + highAvg * 0.3
   }
   
