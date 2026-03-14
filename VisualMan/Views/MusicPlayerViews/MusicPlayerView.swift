@@ -202,6 +202,7 @@ struct MusicPlayerView: View {
       }
       return
     }
+    
     let luminance = art.calculateAverageLuminance() ?? 0.0
     withAnimation(.easeInOut) {
       sliderColor = luminance > 0.5 ? .black : .white
