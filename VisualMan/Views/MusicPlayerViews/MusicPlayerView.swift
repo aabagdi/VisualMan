@@ -137,6 +137,12 @@ struct MusicPlayerView: View {
           endPoint: .bottom
         )
       )
+      .contentShape(Rectangle())
+      .onTapGesture {
+        withAnimation(.easeInOut) {
+          isTapped.toggle()
+        }
+      }
       .zIndex(1)
       .opacity(isTapped ? 0 : 1)
       .allowsHitTesting(!isTapped)
