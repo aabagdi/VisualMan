@@ -104,9 +104,7 @@ final class AudioEngineManager {
   func play(_ source: AudioSource) throws {
     if currentAudioSourceURL == source.getPlaybackURL() && isPlaying { return }
     
-    if player?.isPlaying == true {
-      player?.stop()
-    }
+    player?.stop()
     
     engine?.mainMixerNode.removeTap(onBus: 0)
     

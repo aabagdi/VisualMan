@@ -30,7 +30,11 @@ extension MusicPlayerView {
           self?.onSongCompleted(playlistManager: playlistManager)
         }
       
-      playCurrentSong(playlistManager: playlistManager)
+      let currentSourceURL = playlistManager.currentAudioSource?.getPlaybackURL()
+      let alreadyLoaded = currentSourceURL != nil && audioManager.currentAudioSourceURL == currentSourceURL
+      if !alreadyLoaded {
+        playCurrentSong(playlistManager: playlistManager)
+      }
       
       audioManager.startNowPlayingTimer {
         self.updateNowPlayingInfo(playlistManager: playlistManager)

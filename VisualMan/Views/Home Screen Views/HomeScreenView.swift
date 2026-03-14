@@ -35,6 +35,8 @@ struct HomeScreenView: View {
       Tab("Files", systemImage: "folder.fill") {
         NavigationStack {
           FilesTabView()
+            .toolbar(.hidden, for: .navigationBar)
+            .ignoresSafeArea()
         }
       }
     }

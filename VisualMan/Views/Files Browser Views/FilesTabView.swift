@@ -17,9 +17,14 @@ struct FilesTabView: View {
   @State private var title: String?
   @State private var artist: String?
   @State private var albumArt: UIImage?
+  @State private var isShowingVisualizer = false
+  
+  @State private var audioManager = AudioEngineManager.shared
+  @Environment(AudioPlaylistManager.self) private var playlistManager
   
   var body: some View {
-    UIDocumentBrowserViewControllerRepresentable { url in
+    UIDocumentBrowserViewControllerRepresentable(
+      onDocumentPicked: { url in
       Task { @MainActor in
         do {
           guard url.startAccessingSecurityScopedResource() else {
@@ -49,7 +54,10 @@ struct FilesTabView: View {
           print("Error loading file: \(error)")
         }
       }
-    }
+    },
+      showVisualizerButton: audioManager.isPlaying || audioManager.currentTime > 0,
+      onVisualizerTapped: { isShowingVisualizer = true }
+    )
     .alert(fileError?.errorDescription ?? "An unknown error occurred while loading the file.", isPresented: $fileLoadingFailed) {
       Button("Okay", role: .cancel) {
         fileLoadingFailed = false
@@ -61,6 +69,9 @@ struct FilesTabView: View {
         MusicPlayerView(fileAudioSource: audioSource)
           .toolbarVisibility(.hidden, for: .tabBar)
       }
+    }
+    .navigationDestination(isPresented: $isShowingVisualizer) {
+      MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)
     }
   }
   
