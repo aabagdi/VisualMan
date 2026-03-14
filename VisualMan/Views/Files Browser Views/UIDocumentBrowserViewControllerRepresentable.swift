@@ -41,7 +41,9 @@ struct UIDocumentBrowserViewControllerRepresentable: UIViewControllerRepresentab
       let action = UIAction { _ in
         context.coordinator.onVisualizerTapped?()
       }
-      let button = UIBarButtonItem(title: "Visualizer", primaryAction: action)
+      let button = UIBarButtonItem(primaryAction: action)
+      let barsFill = UIImage(systemName: "play.fill")
+      button.image = barsFill
       controller.additionalTrailingNavigationBarButtonItems = [button]
     } else {
       controller.additionalTrailingNavigationBarButtonItems = []

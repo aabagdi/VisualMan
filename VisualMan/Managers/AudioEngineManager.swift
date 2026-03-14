@@ -8,7 +8,6 @@
 import Foundation
 import AVFoundation
 import Accelerate
-import Combine
 import MediaPlayer
 
 @Observable
@@ -50,9 +49,13 @@ final class AudioEngineManager {
   private let peakHoldDuration: Float = 10.0
   private let gainHistorySize = 30
   
-  let playbackCompleted = PassthroughSubject<Void, Never>()
+  @ObservationIgnored private var playbackContinuation: AsyncStream<Void>.Continuation?
+  @ObservationIgnored let playbackCompleted: AsyncStream<Void>
   
   private init() {
+    var continuation: AsyncStream<Void>.Continuation?
+    playbackCompleted = AsyncStream<Void> { continuation = $0 }
+    playbackContinuation = continuation
     do {
       try setupAudioEngine()
       isInitialized = true
@@ -210,22 +213,21 @@ final class AudioEngineManager {
     
     isHandlingCompletion = true
     
-    DispatchQueue.main.async { [weak self] in
+    Task { @MainActor [weak self] in
       guard let self else { return }
       
       self.hasHandledCompletion = true
       
-      self.playbackCompleted.send()
+      self.playbackContinuation?.yield()
       
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-        guard let self else { return }
-        if self.hasHandledCompletion && !(self.player?.isPlaying ?? true) {
-          self.isPlaying = false
-          self.currentTime = self.duration
-          self.stopDisplayLink()
-        }
-        self.isHandlingCompletion = false
+      try? await Task.sleep(for: .milliseconds(100))
+      
+      if self.hasHandledCompletion && !(self.player?.isPlaying ?? true) {
+        self.isPlaying = false
+        self.currentTime = self.duration
+        self.stopDisplayLink()
       }
+      self.isHandlingCompletion = false
     }
   }
   

@@ -15,20 +15,8 @@ struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
   @State private var currentVisualizer = Visualizers.bars
   @State private var isTapped: Bool = false
-  @State private var scrollToEnd = false
-  @State private var textSize: CGSize = .zero
-  @State private var containerSize: CGSize = .zero
-  @State private var scrollAnimationKey = UUID()
   
   private var sliderColor: Color = .white
-  
-  private var shouldScroll: Bool {
-    textSize.width > containerSize.width
-  }
-  
-  private var scrollDuration: Double {
-    Double(textSize.width) / 20.0
-  }
   
   private var normalFillColor: Color {
     sliderColor.opacity(0.5)
@@ -75,64 +63,13 @@ struct MusicPlayerView: View {
       VStack {
         Spacer()
         if let current = currentAudioSource {
-          GeometryReader { g in
-            ScrollViewReader { _ in
-              ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: shouldScroll ? 100 : 0) {
-                  ForEach(0..<(shouldScroll ? 3 : 1), id: \.self) { _ in
-                    Text("\(current.title ?? "Unknown") • \(current.artist ?? "Unknown")")
-                      .font(.title2)
-                      .fontWeight(.semibold)
-                      .foregroundColor(.white)
-                      .lineLimit(1)
-                      .fixedSize()
-                      .background(
-                        GeometryReader { textGeometry in
-                          Color.clear
-                            .onAppear {
-                              let newSize = textGeometry.size
-                              if newSize != textSize {
-                                textSize = newSize
-                              }
-                            }
-                        }
-                      )
-                  }
-                }
-                .id("\(playlistManager.currentIndex)-\(scrollAnimationKey)")
-                .padding(.horizontal)
-                .offset(x: shouldScroll ? (scrollToEnd ? -textSize.width - 100 : 0) : 0)
-                .animation(scrollToEnd ? .linear(duration: scrollDuration).repeatForever(autoreverses: false) : .none, value: scrollToEnd)
-              }
-              .disabled(true)
-              .onAppear {
-                containerSize = g.size
-              }
-              .onChange(of: textSize) { oldSize, newSize in
-                if oldSize == .zero && newSize.width > containerSize.width && !scrollToEnd {
-                  DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    scrollToEnd = true
-                  }
-                }
-              }
-              .onChange(of: playlistManager.currentIndex) { _, _ in
-                scrollToEnd = false
-                textSize = .zero
-                scrollAnimationKey = UUID()
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                  scrollAnimationKey = UUID()
-                }
-              }
-              .onChange(of: scrollAnimationKey) { _, _ in
-                if textSize.width > containerSize.width {
-                  DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    scrollToEnd = true
-                  }
-                }
-              }
-            }
-          }
+          MarqueeTextView(
+            "\(current.title ?? "Unknown") • \(current.artist ?? "Unknown")",
+            resetID: playlistManager.currentIndex
+          )
+          .font(.title2)
+          .fontWeight(.semibold)
+          .foregroundColor(.white)
           .frame(height: 40)
         }
         ProgressSliderView(value: $audioManager.currentTime,

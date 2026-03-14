@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 extension MusicPlayerView {
   @Observable
@@ -15,7 +14,7 @@ extension MusicPlayerView {
     private let audioManager = AudioEngineManager.shared
     private let lockScreen = LockScreenControlManager.shared
     
-    @ObservationIgnored private var playbackCompletionCancellable: AnyCancellable?
+    @ObservationIgnored private var playbackListeningTask: Task<Void, Never>?
     
     var failedPlaying: Bool = false
     var playingError: VMError?
@@ -24,11 +23,14 @@ extension MusicPlayerView {
       playlistManager.setPlaylist(audioSources, startingIndex: startingIndex)
       setupLockScreenControls(playlistManager: playlistManager)
       
-      playbackCompletionCancellable = audioManager.playbackCompleted
-        .receive(on: DispatchQueue.main)
-        .sink { [weak self] _ in
+      playbackListeningTask?.cancel()
+      playbackListeningTask = Task { [weak self] in
+        guard let stream = self?.audioManager.playbackCompleted else { return }
+        for await _ in stream {
+          guard !Task.isCancelled else { break }
           self?.onSongCompleted(playlistManager: playlistManager)
         }
+      }
       
       let currentSourceURL = playlistManager.currentAudioSource?.getPlaybackURL()
       let alreadyLoaded = currentSourceURL != nil && audioManager.currentAudioSourceURL == currentSourceURL
@@ -42,8 +44,8 @@ extension MusicPlayerView {
     }
     
     func cleanup() {
-      playbackCompletionCancellable?.cancel()
-      playbackCompletionCancellable = nil
+      playbackListeningTask?.cancel()
+      playbackListeningTask = nil
     }
     
     func togglePlayback(playlistManager: AudioPlaylistManager) {
@@ -95,7 +97,8 @@ extension MusicPlayerView {
       audioManager.stop()
       
       if playlistManager.hasNext {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        Task {
+          try? await Task.sleep(for: .milliseconds(100))
           playlistManager.moveToNext()
           self.playCurrentSong(playlistManager: playlistManager)
         }
