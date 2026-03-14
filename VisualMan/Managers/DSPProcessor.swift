@@ -28,9 +28,16 @@ actor DSPProcessor {
   private let releaseTime: Float = 0.6
   private let peakHoldDuration: Float = 10.0
   private let gainHistorySize = 30
+  private var hannWindow = [1024 of Float](repeating: 0.0)
+  private var aWeightTable = [512 of Float](repeating: 0.0)
+  private var cachedSampleRate: Float = 0.0
   
   init() {
     dftSetup = vDSP_DFT_zop_CreateSetup(nil, 1024, vDSP_DFT_Direction.FORWARD)
+    withUnsafeMutablePointer(to: &hannWindow) { hannPtr in
+      let hann = UnsafeMutableRawPointer(hannPtr).assumingMemoryBound(to: Float.self)
+      vDSP_hann_window(hann, 1024, Int32(vDSP_HANN_NORM))
+    }
   }
   
   deinit {
@@ -54,9 +61,16 @@ actor DSPProcessor {
     var realOut = [1024 of Float](repeating: 0.0)
     var imagOut = [1024 of Float](repeating: 0.0)
     
-    for i in 0..<min(samples.count, 1024) {
-      let window = 0.5 - 0.5 * cos(2.0 * .pi * Float(i) / Float(1023))
-      realIn[i] = samples[i] * window
+    let sampleCount = min(samples.count, 1024)
+    withUnsafeMutablePointer(to: &realIn) { riPtr in
+      withUnsafeMutablePointer(to: &hannWindow) { hannPtr in
+        let ri = UnsafeMutableRawPointer(riPtr).assumingMemoryBound(to: Float.self)
+        let hann = UnsafeMutableRawPointer(hannPtr).assumingMemoryBound(to: Float.self)
+        samples.withUnsafeBufferPointer { srcBuf in
+          ri.update(from: srcBuf.baseAddress!, count: sampleCount)
+        }
+        vDSP_vmul(ri, 1, hann, 1, ri, 1, vDSP_Length(sampleCount))
+      }
     }
     
     guard let dftSetup else { return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars) }
@@ -95,52 +109,56 @@ actor DSPProcessor {
       vDSP_vsmul(mag, 1, &scaleFactor, mag, 1, 512)
     }
     
-    var logMagnitudes = [512 of Float](repeating: 0.0)
-    
-    let binFrequencyWidth = sampleRate / Float(1024)
-    
-    for i in 0..<512 {
-      let frequency = Float(i) * binFrequencyWidth
-      
-      let f2 = frequency * frequency
-      let f4 = f2 * f2
-      
-      let c1: Float = 12194.217 * 12194.217
-      let c2: Float = 20.598997 * 20.598997
-      let c3: Float = 107.65265 * 107.65265
-      let c4: Float = 737.86223 * 737.86223
-      
-      let num = c1 * f4
-      
-      let term1 = f2 + c2
-      let term2 = f2 + c3
-      let term3 = f2 + c4
-      let term4 = f2 + c1
-      let sqrtTerm = sqrt(term2 * term3)
-      let den = term1 * sqrtTerm * term4
-      
-      var aWeight: Float = 0.0
-      if den > 0 && frequency > 10 {
-        aWeight = 2.0 + 20.0 * log10(num / den)
-      } else if frequency <= 10 {
-        aWeight = -50.0
-      }
-      
-      let aWeightLinear = pow(10.0, aWeight / 20.0)
-      
-      let magnitude = magnitudes[i] + 1e-10
-      
-      let weightedMagnitude = magnitude * aWeightLinear
-      
-      let db = 20.0 * log10(weightedMagnitude)
-      
-      let normalized = (db + 60.0) / 80.0
-      
-      logMagnitudes[i] = max(0.0, min(1.0, normalized))
+    if sampleRate != cachedSampleRate {
+      rebuildAWeightTable(sampleRate: sampleRate)
+      cachedSampleRate = sampleRate
     }
     
-    for i in 0..<512 {
-      audioLevels[i] = audioLevels[i] * 0.8 + logMagnitudes[i] * 0.2
+    var weightedMagnitudes = [512 of Float](repeating: 0.0)
+    
+    withUnsafeMutablePointer(to: &magnitudes) { magPtr in
+      withUnsafeMutablePointer(to: &aWeightTable) { awPtr in
+        withUnsafeMutablePointer(to: &weightedMagnitudes) { wmPtr in
+          let mag = UnsafeMutableRawPointer(magPtr).assumingMemoryBound(to: Float.self)
+          let aw = UnsafeMutableRawPointer(awPtr).assumingMemoryBound(to: Float.self)
+          let wm = UnsafeMutableRawPointer(wmPtr).assumingMemoryBound(to: Float.self)
+          
+          var floor: Float = 1e-10
+          vDSP_vsadd(mag, 1, &floor, wm, 1, 512)
+          
+          vDSP_vmul(wm, 1, aw, 1, wm, 1, 512)
+        }
+      }
+    }
+    
+    var logMagnitudes = [512 of Float](repeating: 0.0)
+    
+    withUnsafeMutablePointer(to: &weightedMagnitudes) { wmPtr in
+      withUnsafeMutablePointer(to: &logMagnitudes) { lmPtr in
+        let wm = UnsafeMutableRawPointer(wmPtr).assumingMemoryBound(to: Float.self)
+        let lm = UnsafeMutableRawPointer(lmPtr).assumingMemoryBound(to: Float.self)
+        
+        var ref: Float = 1.0
+        vDSP_vdbcon(wm, 1, &ref, lm, 1, 512, 1)
+        
+        var offset: Float = 60.0
+        vDSP_vsadd(lm, 1, &offset, lm, 1, 512)
+        var range: Float = 80.0
+        vDSP_vsdiv(lm, 1, &range, lm, 1, 512)
+        
+        var low: Float = 0.0
+        var high: Float = 1.0
+        vDSP_vclip(lm, 1, &low, &high, lm, 1, 512)
+      }
+    }
+    
+    withUnsafeMutablePointer(to: &audioLevels) { alPtr in
+      withUnsafeMutablePointer(to: &logMagnitudes) { lmPtr in
+        let al = UnsafeMutableRawPointer(alPtr).assumingMemoryBound(to: Float.self)
+        let lm = UnsafeMutableRawPointer(lmPtr).assumingMemoryBound(to: Float.self)
+        var interpolation: Float = 0.2
+        vDSP_vintb(al, 1, lm, 1, &interpolation, al, 1, 512)
+      }
     }
     
     let newBars = createVisualizerBars(from: audioLevels, sampleRate: sampleRate)
@@ -174,8 +192,10 @@ actor DSPProcessor {
   
   private func updateAutomaticGainControl(bars: [32 of Float]) {
     var maxBar: Float = 0.0
-    for i in bars.indices {
-      maxBar = max(maxBar, bars[i])
+    var bars = bars
+    withUnsafeMutablePointer(to: &bars) { barsPtr in
+      let b = UnsafeMutableRawPointer(barsPtr).assumingMemoryBound(to: Float.self)
+      vDSP_maxv(b, 1, &maxBar, 32)
     }
     
     gainHistory.append(maxBar)
@@ -195,6 +215,40 @@ actor DSPProcessor {
     desiredGain = max(0.3, min(2.0, desiredGain))
     
     currentGain = currentGain * 0.95 + desiredGain * 0.05
+  }
+  
+  private func rebuildAWeightTable(sampleRate: Float) {
+    let binFrequencyWidth = sampleRate / Float(1024)
+    
+    let c1: Float = 12194.217 * 12194.217
+    let c2: Float = 20.598997 * 20.598997
+    let c3: Float = 107.65265 * 107.65265
+    let c4: Float = 737.86223 * 737.86223
+    
+    for i in 0..<512 {
+      let frequency = Float(i) * binFrequencyWidth
+      
+      let f2 = frequency * frequency
+      let f4 = f2 * f2
+      
+      let num = c1 * f4
+      
+      let term1 = f2 + c2
+      let term2 = f2 + c3
+      let term3 = f2 + c4
+      let term4 = f2 + c1
+      let sqrtTerm = sqrt(term2 * term3)
+      let den = term1 * sqrtTerm * term4
+      
+      var aWeight: Float = 0.0
+      if den > 0 && frequency > 10 {
+        aWeight = 2.0 + 20.0 * log10(num / den)
+      } else if frequency <= 10 {
+        aWeight = -50.0
+      }
+      
+      aWeightTable[i] = pow(10.0, aWeight / 20.0)
+    }
   }
   
   private func createVisualizerBars(from fftData: [512 of Float], sampleRate: Float) -> [32 of Float] {
