@@ -7,7 +7,6 @@
 
 import Foundation
 import MediaPlayer
-import Combine
 
 @MainActor
 @Observable

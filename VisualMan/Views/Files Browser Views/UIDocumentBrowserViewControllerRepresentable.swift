@@ -18,7 +18,7 @@ struct UIDocumentBrowserViewControllerRepresentable: UIViewControllerRepresentab
   }
   
   func makeUIViewController(context: Context) -> DocumentBrowserContainerViewController {
-    let browser = UIDocumentBrowserViewController(forOpening: [.aiff, .mp3, .wav, .mpeg4Audio])
+    let browser = UIDocumentBrowserViewController(forOpening: [.aiff, .mp3, .wav, .mpeg4Audio, .audio])
     browser.allowsDocumentCreation = false
     browser.allowsPickingMultipleItems = false
     browser.delegate = context.coordinator

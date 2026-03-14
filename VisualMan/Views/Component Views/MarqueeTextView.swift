@@ -42,52 +42,49 @@ struct MarqueeTextView<ResetID: Equatable>: View {
   }
   
   var body: some View {
-    GeometryReader { geometry in
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: shouldScroll ? spacing : 0) {
-          ForEach(0..<(shouldScroll ? 3 : 1), id: \.self) { _ in
-            Text(text)
-              .lineLimit(1)
-              .fixedSize()
-              .background(
-                GeometryReader { textGeometry in
-                  Color.clear
-                    .onAppear {
-                      let newSize = textGeometry.size
-                      if newSize != textSize {
-                        textSize = newSize
-                      }
-                    }
-                }
-              )
-          }
-        }
-        .id("\(String(describing: resetID))-\(scrollAnimationKey)")
-        .padding(.horizontal)
-        .offset(x: shouldScroll ? (scrollToEnd ? -textSize.width - spacing : 0) : 0)
-        .animation(
-          scrollToEnd
-            ? .linear(duration: scrollDuration).repeatForever(autoreverses: false)
-            : .none,
-          value: scrollToEnd
-        )
-      }
-      .disabled(true)
-      .onAppear {
-        containerSize = geometry.size
-      }
-      .onChange(of: textSize) { oldSize, newSize in
-        if oldSize == .zero && newSize.width > containerSize.width && !scrollToEnd {
-          startScrollAfterDelay()
+    ScrollView(.horizontal) {
+      HStack(spacing: shouldScroll ? spacing : 0) {
+        ForEach(0..<(shouldScroll ? 3 : 1), id: \.self) { _ in
+          Text(text)
+            .lineLimit(1)
+            .fixedSize()
+            .onGeometryChange(for: CGSize.self) { proxy in
+              proxy.size
+            } action: { newSize in
+              if newSize != textSize {
+                textSize = newSize
+              }
+            }
         }
       }
-      .onChange(of: resetID) { _, _ in
-        resetMarquee()
+      .id("\(String(describing: resetID))-\(scrollAnimationKey)")
+      .padding(.horizontal)
+      .offset(x: shouldScroll ? (scrollToEnd ? -textSize.width - spacing : 0) : 0)
+      .animation(
+        scrollToEnd
+          ? .linear(duration: scrollDuration).repeatForever(autoreverses: false)
+          : .none,
+        value: scrollToEnd
+      )
+    }
+    .scrollIndicators(.hidden)
+    .disabled(true)
+    .onGeometryChange(for: CGSize.self) { proxy in
+      proxy.size
+    } action: { newSize in
+      containerSize = newSize
+    }
+    .onChange(of: textSize) { oldSize, newSize in
+      if oldSize == .zero && newSize.width > containerSize.width && !scrollToEnd {
+        startScrollAfterDelay()
       }
-      .onChange(of: scrollAnimationKey) { _, _ in
-        if textSize.width > containerSize.width {
-          startScrollAfterDelay()
-        }
+    }
+    .onChange(of: resetID) { _, _ in
+      resetMarquee()
+    }
+    .onChange(of: scrollAnimationKey) { _, _ in
+      if textSize.width > containerSize.width {
+        startScrollAfterDelay()
       }
     }
   }

@@ -19,7 +19,7 @@ struct ArtistListView: View {
       return artists
     } else {
       return artists.filter {
-        $0.representativeItem?.albumArtist?.localizedCaseInsensitiveContains(searchText) ?? false
+        $0.representativeItem?.albumArtist?.localizedStandardContains(searchText) ?? false
       }
     }
   }

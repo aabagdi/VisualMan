@@ -19,7 +19,7 @@ struct GenreListView: View {
       return genres
     } else {
       return genres.filter {
-        $0.representativeItem?.genre?.localizedCaseInsensitiveContains(searchText) ?? false
+        $0.representativeItem?.genre?.localizedStandardContains(searchText) ?? false
       }
     }
   }

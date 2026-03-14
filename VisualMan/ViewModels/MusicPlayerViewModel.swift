@@ -15,75 +15,84 @@ extension MusicPlayerView {
     private let lockScreen = LockScreenControlManager.shared
     
     @ObservationIgnored private var playbackListeningTask: Task<Void, Never>?
+    @ObservationIgnored private var songTransitionTask: Task<Void, Never>?
+    @ObservationIgnored private weak var playlistManager: AudioPlaylistManager?
     
     var failedPlaying: Bool = false
     var playingError: VMError?
     
     func start(playlistManager: AudioPlaylistManager, audioSources: [any AudioSource], startingIndex: Int) {
+      self.playlistManager = playlistManager
       playlistManager.setPlaylist(audioSources, startingIndex: startingIndex)
-      setupLockScreenControls(playlistManager: playlistManager)
+      setupLockScreenControls()
       
       playbackListeningTask?.cancel()
       playbackListeningTask = Task { [weak self] in
         guard let stream = self?.audioManager.playbackCompleted else { return }
         for await _ in stream {
           guard !Task.isCancelled else { break }
-          self?.onSongCompleted(playlistManager: playlistManager)
+          self?.onSongCompleted()
         }
       }
       
       let currentSourceURL = playlistManager.currentAudioSource?.getPlaybackURL()
       let alreadyLoaded = currentSourceURL != nil && audioManager.currentAudioSourceURL == currentSourceURL
       if !alreadyLoaded {
-        playCurrentSong(playlistManager: playlistManager)
+        playCurrentSong()
       }
       
-      audioManager.startNowPlayingTimer {
-        self.updateNowPlayingInfo(playlistManager: playlistManager)
+      audioManager.startNowPlayingTimer { [weak self] in
+        self?.updateNowPlayingInfo()
       }
     }
     
     func cleanup() {
       playbackListeningTask?.cancel()
       playbackListeningTask = nil
+      songTransitionTask?.cancel()
+      songTransitionTask = nil
+      lockScreen.onPlayPause = nil
+      lockScreen.onNext = nil
+      lockScreen.onPrevious = nil
     }
     
-    func togglePlayback(playlistManager: AudioPlaylistManager) {
+    func togglePlayback() {
       if audioManager.isPlaying {
         audioManager.pause()
       } else if audioManager.currentTime > 0 && audioManager.currentTime < audioManager.duration {
         audioManager.resume()
       } else {
-        playCurrentSong(playlistManager: playlistManager)
+        playCurrentSong()
       }
-      updateNowPlayingInfo(playlistManager: playlistManager)
+      updateNowPlayingInfo()
     }
     
-    func skipBackwards(playlistManager: AudioPlaylistManager) {
+    func skipBackwards() {
+      guard let playlistManager else { return }
       if audioManager.currentTime >= 3 {
         audioManager.seek(to: 0)
       } else if playlistManager.hasPrevious {
         audioManager.stop()
         playlistManager.moveToPrevious()
-        playCurrentSong(playlistManager: playlistManager)
+        playCurrentSong()
       } else if playlistManager.currentIndex == 0 {
         audioManager.seek(to: 0)
       }
     }
     
-    func skipForwards(playlistManager: AudioPlaylistManager) {
-      guard playlistManager.hasNext else { return }
+    func skipForwards() {
+      guard let playlistManager, playlistManager.hasNext else { return }
       audioManager.stop()
       playlistManager.moveToNext()
-      playCurrentSong(playlistManager: playlistManager)
+      playCurrentSong()
     }
     
-    private func playCurrentSong(playlistManager: AudioPlaylistManager) {
-      guard let source = playlistManager.currentAudioSource else { return }
+    private func playCurrentSong() {
+      guard let source = playlistManager?.currentAudioSource else { return }
       
       do {
         try audioManager.play(source)
-        updateNowPlayingInfo(playlistManager: playlistManager)
+        updateNowPlayingInfo()
       } catch let error as VMError {
         playingError = error
         failedPlaying = true
@@ -93,36 +102,39 @@ extension MusicPlayerView {
       }
     }
     
-    private func onSongCompleted(playlistManager: AudioPlaylistManager) {
+    private func onSongCompleted() {
+      guard let playlistManager else { return }
       audioManager.stop()
       
       if playlistManager.hasNext {
-        Task {
+        songTransitionTask?.cancel()
+        songTransitionTask = Task {
           try? await Task.sleep(for: .milliseconds(100))
+          guard !Task.isCancelled else { return }
           playlistManager.moveToNext()
-          self.playCurrentSong(playlistManager: playlistManager)
+          playCurrentSong()
         }
       } else {
         playlistManager.moveToIndex(0)
       }
     }
     
-    private func setupLockScreenControls(playlistManager: AudioPlaylistManager) {
+    private func setupLockScreenControls() {
       lockScreen.onPlayPause = { [weak self] in
-        self?.togglePlayback(playlistManager: playlistManager)
+        self?.togglePlayback()
       }
       
       lockScreen.onNext = { [weak self] in
-        self?.skipForwards(playlistManager: playlistManager)
+        self?.skipForwards()
       }
       
       lockScreen.onPrevious = { [weak self] in
-        self?.skipBackwards(playlistManager: playlistManager)
+        self?.skipBackwards()
       }
     }
     
-    private func updateNowPlayingInfo(playlistManager: AudioPlaylistManager) {
-      guard let source = playlistManager.currentAudioSource else { return }
+    private func updateNowPlayingInfo() {
+      guard let source = playlistManager?.currentAudioSource else { return }
       
       lockScreen.updateNowPlayingInfo(
         title: source.title,

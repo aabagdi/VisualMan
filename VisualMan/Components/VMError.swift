@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum VMError: LocalizedError {
+enum VMError: LocalizedError, Sendable {
   case invalidSession
   case invalidURL
   case nilEngineOrPlayer

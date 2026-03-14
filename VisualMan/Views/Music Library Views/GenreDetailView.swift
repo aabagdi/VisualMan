@@ -26,18 +26,18 @@ struct GenreDetailView: View {
           VStack(alignment: .leading, spacing: 2) {
             Text(album.representativeItem?.albumTitle ?? "Unknown")
               .font(.system(size: 16))
-              .foregroundColor(.primary)
+              .foregroundStyle(.primary)
               .lineLimit(1)
             
             if album.representativeItem?.isCompilation == true {
               Text("Various Artists")
                 .font(.system(size: 14))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
             } else {
               Text(album.representativeItem?.albumArtist ?? "Unknown")
                 .font(.system(size: 14))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
             }
           }

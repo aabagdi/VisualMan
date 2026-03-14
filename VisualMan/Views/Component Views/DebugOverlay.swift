@@ -20,7 +20,7 @@ struct DebugOverlay: View {
     }
     .padding()
     .background(.black.opacity(0.5))
-    .foregroundColor(.white)
+    .foregroundStyle(.white)
     .font(.caption)
   }
 }

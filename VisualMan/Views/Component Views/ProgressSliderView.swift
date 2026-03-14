@@ -72,14 +72,14 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
             Text(displayTime.asTimeString(style: .positional))
               .font(.caption)
               .monospacedDigit()
-              .foregroundColor(isDragging ? fillColor : emptyColor)
+              .foregroundStyle(isDragging ? fillColor : emptyColor)
             
             Spacer(minLength: 0)
             
             Text("-" + remainingTime.asTimeString(style: .positional))
               .font(.caption)
               .monospacedDigit()
-              .foregroundColor(isDragging ? fillColor : emptyColor)
+              .foregroundStyle(isDragging ? fillColor : emptyColor)
           }
         }
         .frame(width: isDragging ? bounds.size.width * 1.04 : bounds.size.width)

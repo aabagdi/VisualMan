@@ -18,7 +18,7 @@ struct PlaylistListView: View {
       return playlists
     } else {
       return playlists.filter {
-        (($0.value(forProperty: MPMediaPlaylistPropertyName) as? String) ?? "").localizedCaseInsensitiveContains(searchText)
+        (($0.value(forProperty: MPMediaPlaylistPropertyName) as? String) ?? "").localizedStandardContains(searchText)
       }
     }
   }

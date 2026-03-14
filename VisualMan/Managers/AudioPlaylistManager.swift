@@ -8,6 +8,7 @@
 import Foundation
 
 @Observable
+@MainActor
 final class AudioPlaylistManager {
   var audioSources: [any AudioSource] = []
   var currentIndex: Int = 0

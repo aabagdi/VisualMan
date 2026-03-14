@@ -69,7 +69,7 @@ struct MusicPlayerView: View {
           )
           .font(.title2)
           .fontWeight(.semibold)
-          .foregroundColor(.white)
+          .foregroundStyle(.white)
           .frame(height: 40)
         }
         ProgressSliderView(value: $audioManager.currentTime,
@@ -87,31 +87,34 @@ struct MusicPlayerView: View {
         .padding()
         HStack {
           Button {
-            viewModel.skipBackwards(playlistManager: playlistManager)
+            viewModel.skipBackwards()
           } label: {
             Image(systemName: "backward")
               .foregroundStyle(normalFillColor)
           }
+          .accessibilityLabel("Previous")
           .padding()
           
           Spacer()
           
           Button {
-            viewModel.togglePlayback(playlistManager: playlistManager)
+            viewModel.togglePlayback()
           } label: {
             Image(systemName: audioManager.isPlaying ? "pause" : "play")
               .foregroundStyle(normalFillColor)
           }
+          .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
           .padding()
           
           Spacer()
           
           Button {
-            viewModel.skipForwards(playlistManager: playlistManager)
+            viewModel.skipForwards()
           } label: {
             Image(systemName: "forward")
               .foregroundStyle(normalFillColor)
           }
+          .accessibilityLabel("Next")
           .padding()
         }
         .padding()

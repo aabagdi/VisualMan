@@ -20,7 +20,7 @@ struct CompilationListView: View {
       return compilations
     } else {
       return compilations.filter {
-        $0.representativeItem?.albumTitle?.localizedCaseInsensitiveContains(searchText) ?? false
+        $0.representativeItem?.albumTitle?.localizedStandardContains(searchText) ?? false
       }
     }
   }
@@ -39,12 +39,12 @@ struct CompilationListView: View {
               VStack(alignment: .leading, spacing: 2) {
                 Text(compilation.representativeItem?.albumTitle ?? "Unknown")
                   .font(.system(size: 16))
-                  .foregroundColor(.primary)
+                  .foregroundStyle(.primary)
                   .lineLimit(1)
                 
                 Text("Various Artists")
                   .font(.system(size: 14))
-                  .foregroundColor(.secondary)
+                  .foregroundStyle(.secondary)
                   .lineLimit(1)
               }
               .padding(.leading, 8)

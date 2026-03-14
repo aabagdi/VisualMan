@@ -20,7 +20,7 @@ struct AlbumListView: View {
     if searchText.isEmpty {
       return albums
     } else {
-      return albums.filter { $0.representativeItem?.albumTitle?.localizedCaseInsensitiveContains(searchText) ?? false || $0.representativeItem?.artist?.localizedCaseInsensitiveContains(searchText) ?? false }
+      return albums.filter { $0.representativeItem?.albumTitle?.localizedStandardContains(searchText) ?? false || $0.representativeItem?.artist?.localizedStandardContains(searchText) ?? false }
     }
   }
   
@@ -40,7 +40,7 @@ struct AlbumListView: View {
               Spacer()
               
               Text("\(library.songs.count)")
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .font(.system(size: 15))
             }
             .padding(.vertical, 4)
@@ -58,7 +58,7 @@ struct AlbumListView: View {
               Spacer()
               
               Text("\(library.artists.count)")
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .font(.system(size: 15))
             }
             .padding(.vertical, 4)
@@ -76,7 +76,7 @@ struct AlbumListView: View {
               Spacer()
               
               Text("\(library.genres.count)")
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .font(.system(size: 15))
             }
             .padding(.vertical, 4)
@@ -94,7 +94,7 @@ struct AlbumListView: View {
               Spacer()
               
               Text("\(library.playlists.count)")
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .font(.system(size: 15))
             }
             .padding(.vertical, 4)
@@ -112,7 +112,7 @@ struct AlbumListView: View {
               Spacer()
               
               Text("\(library.compilations.count)")
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .font(.system(size: 15))
             }
             .padding(.vertical, 4)
@@ -133,18 +133,18 @@ struct AlbumListView: View {
                 VStack(alignment: .leading, spacing: 2) {
                   Text(album.representativeItem?.albumTitle ?? "Unknown")
                     .font(.system(size: 16))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                   
                   if album.representativeItem?.isCompilation == true {
                     Text("Various Artists")
                       .font(.system(size: 14))
-                      .foregroundColor(.secondary)
+                      .foregroundStyle(.secondary)
                       .lineLimit(1)
                   } else {
                     Text(album.representativeItem?.albumArtist ?? "Unknown")
                       .font(.system(size: 14))
-                      .foregroundColor(.secondary)
+                      .foregroundStyle(.secondary)
                       .lineLimit(1)
                   }
                 }
@@ -161,7 +161,7 @@ struct AlbumListView: View {
         }
       }
     }
-    .listStyle(InsetGroupedListStyle())
+    .listStyle(.insetGrouped)
     .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
     .navigationTitle("Library")
   }

@@ -22,8 +22,8 @@ extension ThreeDBarsVisualizerView {
       
       timer?.invalidate()
       timer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
-        Task {
-          await self?.updateSmoothedValues(targetValues: targetValues)
+        Task { @MainActor in
+          self?.updateSmoothedValues(targetValues: targetValues)
         }
       }
     }

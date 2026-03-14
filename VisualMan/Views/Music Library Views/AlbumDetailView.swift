@@ -47,11 +47,11 @@ struct AlbumDetailView: View {
             if album.representativeItem?.isCompilation == true {
               Text("Various Artists")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
             } else {
               Text(album.representativeItem?.albumArtist ?? "Unknown")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
             }
             
             HStack {
@@ -60,7 +60,7 @@ struct AlbumDetailView: View {
               Text(year)
             }
             .font(.caption)
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
           }
         }
         .frame(maxWidth: .infinity)
@@ -75,7 +75,7 @@ struct AlbumDetailView: View {
             HStack(spacing: 12) {
               Text("\(song.albumTrackNumber)")
                 .font(.system(size: 15))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .frame(minWidth: 20, alignment: .trailing)
               
               VStack(alignment: .leading, spacing: 2) {
@@ -87,7 +87,7 @@ struct AlbumDetailView: View {
                    let artist = song.artist {
                   Text(artist)
                     .font(.system(size: 14))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                 }
               }
@@ -97,7 +97,7 @@ struct AlbumDetailView: View {
               if let duration = formatDuration(song.playbackDuration) {
                 Text(duration)
                   .font(.system(size: 14))
-                  .foregroundColor(.secondary)
+                  .foregroundStyle(.secondary)
               }
             }
             .padding(.vertical, 4)
@@ -106,7 +106,7 @@ struct AlbumDetailView: View {
         }
       }
     }
-    .listStyle(InsetGroupedListStyle())
+    .listStyle(.insetGrouped)
     .navigationBarTitleDisplayMode(.inline)
   }
   
