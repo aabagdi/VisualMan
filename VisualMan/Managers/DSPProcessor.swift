@@ -297,7 +297,6 @@ actor DSPProcessor {
         
         bars[i] = avgMag * 0.7 + maxMag * 0.3
         
-        // Smooth bass compensation: linear ramp in log-frequency from 1.5x at 60 Hz to 1.0x at 500 Hz
         let logCenter = (logFreqLow + logFreqHigh) / 2.0
         if logCenter < logBoostCeiling {
           let boost = 1.0 + 0.5 * (logBoostCeiling - logCenter) / (logBoostCeiling - logMinFreq)
