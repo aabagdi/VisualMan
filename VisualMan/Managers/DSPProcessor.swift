@@ -21,6 +21,9 @@ actor DSPProcessor {
   private var peakHoldTime = [32 of Float](repeating: 0.0)
   private var gainHistory: [Float] = []
   private var currentGain: Float = 1.0
+  private var hannWindow = [1024 of Float](repeating: 0.0)
+  private var aWeightTable = [512 of Float](repeating: 0.0)
+  private var cachedSampleRate: Float = 0.0
   
   private let numberOfBars = 32
   private let smoothingFactor: Float = 0.8
@@ -28,9 +31,6 @@ actor DSPProcessor {
   private let releaseTime: Float = 0.6
   private let peakHoldDuration: Float = 10.0
   private let gainHistorySize = 30
-  private var hannWindow = [1024 of Float](repeating: 0.0)
-  private var aWeightTable = [512 of Float](repeating: 0.0)
-  private var cachedSampleRate: Float = 0.0
   
   init() {
     dftSetup = vDSP_DFT_zop_CreateSetup(nil, 1024, vDSP_DFT_Direction.FORWARD)
