@@ -168,7 +168,7 @@ struct MusicPlayerView: View {
   }
   
   @ViewBuilder
-  private func currentShader(currentVisualizer: Visualizers, visualizerBars: [32 of Float], audioLevels: [512 of Float], albumArt: UIImage?) -> some View {
+  private func currentShader(currentVisualizer: Visualizers, visualizerBars: [32 of Float], audioLevels: [1024 of Float], albumArt: UIImage?) -> some View {
     switch currentVisualizer {
     case .bars:
       BarsVisualizerView(visualizerBars: visualizerBars)

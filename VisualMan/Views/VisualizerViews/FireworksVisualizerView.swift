@@ -13,7 +13,7 @@ struct FireworksVisualizerView: View {
   @State private var smoothedMid: Float = 0
   @State private var smoothedHigh: Float = 0
   
-  let audioLevels: [512 of Float]
+  let audioLevels: [1024 of Float]
   
   private var bassLevel: Float {
     guard audioLevels.count >= 512 else { return 0 }

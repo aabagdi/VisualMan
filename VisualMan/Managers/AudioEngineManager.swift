@@ -15,7 +15,7 @@ import Synchronization
 final class AudioEngineManager {
   static let shared = AudioEngineManager()
   
-  var audioLevels = [512 of Float](repeating: 0.0)
+  var audioLevels = [1024 of Float](repeating: 0.0)
   var visualizerBars = [32 of Float](repeating: 0.0)
   var isPlaying = false
   var currentTime: TimeInterval = 0
@@ -90,7 +90,7 @@ final class AudioEngineManager {
     
     engine?.mainMixerNode.removeTap(onBus: 0)
     
-    audioLevels = [512 of Float](repeating: 0.0)
+    audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
     await dspProcessor.reset()
     lastSeekFrame = 0
@@ -158,7 +158,7 @@ final class AudioEngineManager {
     
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
     
-    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable [weak self] buffer, _ in
+    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable [weak self] buffer, _ in
       guard let self else { return }
       guard self.isProcessingBuffer.compareExchange(expected: false, desired: true, ordering: .acquiringAndReleasing).exchanged else { return }
       guard let channelData = buffer.floatChannelData?[0] else {

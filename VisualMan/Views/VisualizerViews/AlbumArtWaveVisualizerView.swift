@@ -13,7 +13,7 @@ struct AlbumArtWaveVisualizerView: View {
   @State private var smoothedMid: Float = 0
   @State private var smoothedHigh: Float = 0
   
-  let audioLevels: [512 of Float]
+  let audioLevels: [1024 of Float]
   let albumArt: UIImage?
   let placeholder = UIImage(named: "Art Placeholder")!
   
