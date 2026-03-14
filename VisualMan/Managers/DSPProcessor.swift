@@ -253,40 +253,47 @@ actor DSPProcessor {
   
   private func createVisualizerBars(from fftData: [512 of Float], sampleRate: Float) -> [32 of Float] {
     var bars = [32 of Float](repeating: 0.0)
+    var fftData = fftData
     
     let minFreq: Float = 60.0
     let maxFreq: Float = 16000.0
     
     let logMinFreq = log10(minFreq)
     let logMaxFreq = log10(maxFreq)
+    let binWidth = sampleRate / Float(512 * 2)
     
-    for i in 0..<numberOfBars {
-      let logFreqLow = logMinFreq + (logMaxFreq - logMinFreq) * Float(i) / Float(numberOfBars)
-      let logFreqHigh = logMinFreq + (logMaxFreq - logMinFreq) * Float(i + 1) / Float(numberOfBars)
+    withUnsafeMutablePointer(to: &fftData) { fftPtr in
+      let fft = UnsafeMutableRawPointer(fftPtr).assumingMemoryBound(to: Float.self)
       
-      let freqLow = pow(10, logFreqLow)
-      let freqHigh = pow(10, logFreqHigh)
-      
-      let binWidth = sampleRate / Float(fftData.count * 2)
-      let binLow = Int(freqLow / binWidth)
-      let binHigh = Int(freqHigh / binWidth)
-      
-      let startBin = max(0, min(binLow, fftData.count - 1))
-      let endBin = max(startBin + 1, min(binHigh, fftData.count))
-      
-      var maxMag: Float = 0
-      var avgMag: Float = 0
-      var count = 0
-      
-      for j in startBin..<endBin {
-        let mag = fftData[j]
-        avgMag += mag
-        maxMag = max(maxMag, mag)
-        count += 1
-      }
-      
-      if count > 0 {
-        avgMag /= Float(count)
+      for i in 0..<numberOfBars {
+        let logFreqLow = logMinFreq + (logMaxFreq - logMinFreq) * Float(i) / Float(numberOfBars)
+        let logFreqHigh = logMinFreq + (logMaxFreq - logMinFreq) * Float(i + 1) / Float(numberOfBars)
+        
+        let freqLow = pow(10, logFreqLow)
+        let freqHigh = pow(10, logFreqHigh)
+        
+        let fracBinLow = freqLow / binWidth
+        let fracBinHigh = freqHigh / binWidth
+        let startBin = max(0, min(Int(fracBinLow), 511))
+        let endBin = max(startBin + 1, min(Int(fracBinHigh), 512))
+        let count = vDSP_Length(endBin - startBin)
+        
+        var maxMag: Float = 0
+        var avgMag: Float = 0
+        
+        if count <= 2 {
+          let centerBin = (fracBinLow + fracBinHigh) / 2.0
+          let binIndex = max(0, min(Int(centerBin), 510))
+          let frac = centerBin - Float(binIndex)
+          let v0 = (fft + binIndex).pointee
+          let v1 = (fft + binIndex + 1).pointee
+          avgMag = v0 + (v1 - v0) * frac
+          maxMag = max(v0, v1)
+        } else {
+          vDSP_maxv(fft + startBin, 1, &maxMag, count)
+          vDSP_meanv(fft + startBin, 1, &avgMag, count)
+        }
+        
         bars[i] = avgMag * 0.7 + maxMag * 0.3
         
         let freqCenter = (freqLow + freqHigh) / 2.0

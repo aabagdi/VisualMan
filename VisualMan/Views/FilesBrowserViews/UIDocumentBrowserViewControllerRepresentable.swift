@@ -85,12 +85,14 @@ class DocumentBrowserContainerViewController: UIViewController {
     addChild(browserController)
     view.addSubview(browserController.view)
     browserController.view.translatesAutoresizingMaskIntoConstraints = false
+    
     NSLayoutConstraint.activate([
       browserController.view.topAnchor.constraint(equalTo: view.topAnchor),
       browserController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
       browserController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       browserController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
     ])
+    
     browserController.didMove(toParent: self)
   }
   
