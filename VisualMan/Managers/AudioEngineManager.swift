@@ -35,7 +35,6 @@ final class AudioEngineManager {
   @ObservationIgnored private var isSeeking: Bool = false
   @ObservationIgnored private let dspProcessor = DSPProcessor()
   @ObservationIgnored private var hasHandledCompletion = false
-  @ObservationIgnored private var isHandlingCompletion = false
   @ObservationIgnored private var currentPlaybackID = UUID()
   @ObservationIgnored private var nowPlayingTimer: Timer?
   @ObservationIgnored private var lockScreenUpdateHandler: (() -> Void)?
@@ -84,7 +83,7 @@ final class AudioEngineManager {
   }
   
   
-  func play(_ source: AudioSource) throws {
+  func play(_ source: AudioSource) async throws {
     if currentAudioSourceURL == source.getPlaybackURL() && isPlaying { return }
     
     player?.stop()
@@ -93,7 +92,7 @@ final class AudioEngineManager {
     
     audioLevels = [512 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
-    Task { await dspProcessor.reset() }
+    await dspProcessor.reset()
     lastSeekFrame = 0
     
     guard let url = source.getPlaybackURL() else {
@@ -122,7 +121,6 @@ final class AudioEngineManager {
     }
     
     hasHandledCompletion = false
-    isHandlingCompletion = false
     
     let playbackID = UUID()
     currentPlaybackID = playbackID
@@ -193,23 +191,13 @@ final class AudioEngineManager {
   }
   
   private func handlePlaybackCompleted() {
-    guard !hasHandledCompletion && !isHandlingCompletion else { return }
-    
-    isHandlingCompletion = true
+    guard !hasHandledCompletion else { return }
     hasHandledCompletion = true
     
+    isPlaying = false
+    currentTime = duration
+    stopDisplayLink()
     playbackContinuation?.yield()
-    
-    Task {
-      try? await Task.sleep(for: .milliseconds(100))
-      
-      if hasHandledCompletion && !(player?.isPlaying ?? true) {
-        isPlaying = false
-        currentTime = duration
-        stopDisplayLink()
-      }
-      isHandlingCompletion = false
-    }
   }
   
   func pause() {
@@ -237,7 +225,6 @@ final class AudioEngineManager {
       lastSeekFrame = 0
     }
     hasHandledCompletion = false
-    isHandlingCompletion = false
     stopNowPlayingTimer()
     currentAudioSourceURL = nil
   }
@@ -250,7 +237,6 @@ final class AudioEngineManager {
     
     currentPlaybackID = UUID()
     hasHandledCompletion = false
-    isHandlingCompletion = false
     
     let sampleRate = audioFile.fileFormat.sampleRate
     let newFrame = AVAudioFramePosition(time * sampleRate)
@@ -378,4 +364,3 @@ private final class DisplayLinkStream: NSObject {
     continuation?.yield()
   }
 }
-

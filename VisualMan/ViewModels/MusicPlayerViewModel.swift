@@ -90,15 +90,17 @@ extension MusicPlayerView {
     private func playCurrentSong() {
       guard let source = playlistManager?.currentAudioSource else { return }
       
-      do {
-        try audioManager.play(source)
-        updateNowPlayingInfo()
-      } catch let error as VMError {
-        playingError = error
-        failedPlaying = true
-      } catch {
-        playingError = VMError.failedToPlay
-        failedPlaying = true
+      Task {
+        do {
+          try await audioManager.play(source)
+          updateNowPlayingInfo()
+        } catch let error as VMError {
+          playingError = error
+          failedPlaying = true
+        } catch {
+          playingError = VMError.failedToPlay
+          failedPlaying = true
+        }
       }
     }
     
