@@ -15,8 +15,7 @@ struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
   @State private var currentVisualizer = Visualizers.bars
   @State private var isTapped: Bool = false
-  
-  private var sliderColor: Color = .white
+  @State private var sliderColor: Color = .white
   
   private var normalFillColor: Color {
     sliderColor.opacity(0.5)
@@ -60,6 +59,11 @@ struct MusicPlayerView: View {
                     audioLevels: audioManager.audioLevels,
                     albumArt: currentAudioSource?.albumArt)
       .ignoresSafeArea()
+      .onTapGesture {
+        withAnimation(.easeInOut) {
+          isTapped.toggle()
+        }
+      }
       VStack {
         Spacer()
         if let current = currentAudioSource {
@@ -69,7 +73,7 @@ struct MusicPlayerView: View {
           )
           .font(.title2)
           .fontWeight(.semibold)
-          .foregroundStyle(.white)
+          .foregroundStyle(sliderColor)
           .frame(height: 40)
         }
         ProgressSliderView(value: $audioManager.currentTime,
@@ -117,22 +121,26 @@ struct MusicPlayerView: View {
           .accessibilityLabel("Next")
           .padding()
         }
+        .contentShape(Rectangle())
         .padding()
       }
       .zIndex(1)
       .opacity(isTapped ? 0 : 1)
+      .allowsHitTesting(!isTapped)
     }
     .toolbar(.hidden, for: .tabBar)
     .onAppear {
       viewModel.start(playlistManager: playlistManager, audioSources: _audioSources, startingIndex: _startingIndex)
+      updateControlColor()
     }
     .onDisappear {
       viewModel.cleanup()
     }
-    .onTapGesture {
-      withAnimation(.easeInOut) {
-        isTapped.toggle()
-      }
+    .onChange(of: currentVisualizer) {
+      updateControlColor()
+    }
+    .onChange(of: playlistManager.currentIndex) {
+      updateControlColor()
     }
     .alert(viewModel.playingError?.errorDescription ?? "An unknown error occurred during playback.", isPresented: $viewModel.failedPlaying) {
       Button("Okay", role: .cancel) {
@@ -184,6 +192,19 @@ struct MusicPlayerView: View {
       InterferenceVisualizerView(audioLevels: audioLevels)
     case .voronoi:
       VoronoiVisualizerView(audioLevels: audioLevels)
+    }
+  }
+  
+  private func updateControlColor() {
+    guard currentVisualizer == .album, let art = currentAudioSource?.albumArt else {
+      withAnimation(.easeInOut) {
+        sliderColor = .white
+      }
+      return
+    }
+    let luminance = art.calculateAverageLuminance() ?? 0.0
+    withAnimation(.easeInOut) {
+      sliderColor = luminance > 0.5 ? .black : .white
     }
   }
 }
