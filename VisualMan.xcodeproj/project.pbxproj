@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3959D7932F66203700B91CE8 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 3959D7922F66203700B91CE8 /* Dependencies */; };
+		3959D7952F66203700B91CE8 /* DependenciesMacros in Frameworks */ = {isa = PBXBuildFile; productRef = 3959D7942F66203700B91CE8 /* DependenciesMacros */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		39CA34472E1C75EA00F3017E /* VisualMan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VisualMan.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -36,6 +41,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3959D7952F66203700B91CE8 /* DependenciesMacros in Frameworks */,
+				3959D7932F66203700B91CE8 /* Dependencies in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +85,8 @@
 			);
 			name = VisualMan;
 			packageProductDependencies = (
+				3959D7922F66203700B91CE8 /* Dependencies */,
+				3959D7942F66203700B91CE8 /* DependenciesMacros */,
 			);
 			productName = VisualMan;
 			productReference = 39CA34472E1C75EA00F3017E /* VisualMan.app */;
@@ -108,6 +117,7 @@
 			mainGroup = 39CA343E2E1C75EA00F3017E;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				3959D7912F66203700B91CE8 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 39CA34482E1C75EA00F3017E /* Products */;
@@ -369,6 +379,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		3959D7912F66203700B91CE8 /* XCRemoteSwiftPackageReference "swift-dependencies" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-dependencies";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.11.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		3959D7922F66203700B91CE8 /* Dependencies */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3959D7912F66203700B91CE8 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
+			productName = Dependencies;
+		};
+		3959D7942F66203700B91CE8 /* DependenciesMacros */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3959D7912F66203700B91CE8 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
+			productName = DependenciesMacros;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 39CA343F2E1C75EA00F3017E /* Project object */;
 }

@@ -15,6 +15,7 @@ struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
   @State private var currentVisualizer = Visualizers.bars
   @State private var isTapped: Bool = false
+  
   private let sliderColor: Color = .white
   
   private var normalFillColor: Color {
@@ -134,12 +135,6 @@ struct MusicPlayerView: View {
           endPoint: .bottom
         )
       )
-      .contentShape(Rectangle())
-      .onTapGesture {
-        withAnimation(.easeInOut) {
-          isTapped.toggle()
-        }
-      }
       .zIndex(1)
       .opacity(isTapped ? 0 : 1)
       .allowsHitTesting(!isTapped)
