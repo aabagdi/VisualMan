@@ -6,13 +6,14 @@
 //
 
 import Foundation
+import Dependencies
 
 extension MusicPlayerView {
   @Observable
   @MainActor
   final class MusicPlayerViewModel {
-    private let audioManager = AudioEngineManager.shared
-    private let lockScreen = LockScreenControlManager.shared
+    @ObservationIgnored @Dependency(AudioEngineManager.self) private var audioManager
+    @ObservationIgnored @Dependency(LockScreenControlManager.self) private var lockScreen
     
     @ObservationIgnored private var playbackListeningTask: Task<Void, Never>?
     @ObservationIgnored private var songTransitionTask: Task<Void, Never>?

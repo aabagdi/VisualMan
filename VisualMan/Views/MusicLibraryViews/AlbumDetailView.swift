@@ -11,7 +11,7 @@ import MediaPlayer
 struct AlbumDetailView: View {
   let album: MPMediaItemCollection
   
-  private var audioManager: AudioEngineManager { AudioEngineManager.shared }
+  @Environment(AudioEngineManager.self) private var audioManager
   private let placeholder = UIImage(named: "Art Placeholder")!
   
   private var year: String {

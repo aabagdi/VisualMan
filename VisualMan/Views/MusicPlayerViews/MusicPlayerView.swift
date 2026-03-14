@@ -9,12 +9,12 @@ import SwiftUI
 import MediaPlayer
 
 struct MusicPlayerView: View {
-  @Environment(AudioPlaylistManager.self) private var playlistManager
-  
-  @State private var audioManager = AudioEngineManager.shared
   @State private var viewModel = MusicPlayerViewModel()
   @State private var currentVisualizer = Visualizers.bars
   @State private var isTapped: Bool = false
+  
+  @Environment(AudioEngineManager.self) private var audioManager
+  @Environment(AudioPlaylistManager.self) private var playlistManager
   
   private let sliderColor: Color = .white
   
@@ -54,6 +54,8 @@ struct MusicPlayerView: View {
   private let _startingIndex: Int
   
   var body: some View {
+    @Bindable var audioManager = audioManager
+    
     ZStack {
       currentShader(currentVisualizer: currentVisualizer,
                     visualizerBars: audioManager.visualizerBars,

@@ -12,9 +12,7 @@ import Synchronization
 
 @Observable
 @MainActor
-final class AudioEngineManager {
-  static let shared = AudioEngineManager()
-  
+final class AudioEngineManager: @unchecked Sendable {
   var audioLevels = [1024 of Float](repeating: 0.0)
   var visualizerBars = [32 of Float](repeating: 0.0)
   var isPlaying = false
@@ -33,17 +31,18 @@ final class AudioEngineManager {
   @ObservationIgnored private var securityScopedURL: URL?
   @ObservationIgnored private var lastSeekFrame: AVAudioFramePosition = 0
   @ObservationIgnored private var isSeeking: Bool = false
-  @ObservationIgnored private let dspProcessor = DSPProcessor()
   @ObservationIgnored private var hasHandledCompletion = false
   @ObservationIgnored private var currentPlaybackID = UUID()
   @ObservationIgnored private var nowPlayingTimer: Timer?
   @ObservationIgnored private var lockScreenUpdateHandler: (() -> Void)?
+  @ObservationIgnored private var playbackContinuation: AsyncStream<Void>.Continuation?
+  
+  private let dspProcessor = DSPProcessor()
   private let isProcessingBuffer = Atomic<Bool>(false)
   
-  @ObservationIgnored private var playbackContinuation: AsyncStream<Void>.Continuation?
-  @ObservationIgnored let playbackCompleted: AsyncStream<Void>
+  let playbackCompleted: AsyncStream<Void>
   
-  private init() {
+  init() {
     var continuation: AsyncStream<Void>.Continuation?
     playbackCompleted = AsyncStream<Void> { continuation = $0 }
     playbackContinuation = continuation

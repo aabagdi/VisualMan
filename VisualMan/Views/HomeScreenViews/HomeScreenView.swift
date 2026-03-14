@@ -8,12 +8,12 @@
 import SwiftUI
 
 struct HomeScreenView: View {
+  @State private var isShowingBarPlayer: Bool = true
+  @State private var isShowingMusicPlayer = false
+  
+  @Environment(AudioEngineManager.self) private var audioManager
   @Environment(MusicLibraryAccessManager.self) private var library
   @Environment(AudioPlaylistManager.self) private var playlistManager
-  
-  @State private var isShowingBarPlayer: Bool = true
-  @State private var audioManager = AudioEngineManager.shared
-  @State private var isShowingMusicPlayer = false
   
   var body: some View {
     TabView {

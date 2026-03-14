@@ -7,19 +7,19 @@
 
 import Foundation
 import MediaPlayer
+import Dependencies
 
 @MainActor
-final class LockScreenControlManager {
-  static let shared = LockScreenControlManager()
+final class LockScreenControlManager: @unchecked Sendable {
   
-  private let audioManager = AudioEngineManager.shared
+  @Dependency(AudioEngineManager.self) private var audioManager
   private let placeholder = UIImage(named: "Art Placeholder")!
   
   var onPlayPause: (() -> Void)?
   var onNext: (() -> Void)?
   var onPrevious: (() -> Void)?
   
-  private init() {
+  init() {
     setupRemoteTransportControls()
   }
   

@@ -6,9 +6,11 @@
 //
 
 import SwiftUI
+import Dependencies
 
 @main
 struct VisualManApp: App {
+  @Dependency(AudioEngineManager.self) private var audioEngineManager
   @State private var musicLibraryManager = MusicLibraryAccessManager()
   @State private var playlistManager = AudioPlaylistManager()
   
@@ -17,6 +19,7 @@ struct VisualManApp: App {
       HomeScreenView()
         .environment(musicLibraryManager)
         .environment(playlistManager)
+        .environment(audioEngineManager)
         .onAppear {
           musicLibraryManager.requestMusicLibraryAccess()
         }

@@ -19,7 +19,7 @@ struct FilesTabView: View {
   @State private var albumArt: UIImage?
   @State private var isShowingVisualizer = false
   
-  @State private var audioManager = AudioEngineManager.shared
+  @Environment(AudioEngineManager.self) private var audioManager
   @Environment(AudioPlaylistManager.self) private var playlistManager
   
   var body: some View {

@@ -11,9 +11,9 @@ import MediaPlayer
 struct SongsListView: View {
   @State private var searchText: String = ""
   
-  let songs: [MPMediaItem]
+  @Environment(AudioEngineManager.self) private var audioManager
   
-  private var audioManager: AudioEngineManager { AudioEngineManager.shared }
+  let songs: [MPMediaItem]
   
   private var searchResults: [MPMediaItem] {
     if searchText.isEmpty {
