@@ -34,8 +34,7 @@ actor DSPProcessor {
   
   init() {
     dftSetup = vDSP_DFT_zop_CreateSetup(nil, 2048, vDSP_DFT_Direction.FORWARD)
-    withUnsafeMutablePointer(to: &hannWindow) { hannPtr in
-      let hann = UnsafeMutableRawPointer(hannPtr).assumingMemoryBound(to: Float.self)
+    hannWindow.withUnsafeElementPointer { hann in
       vDSP_hann_window(hann, 2048, Int32(vDSP_HANN_NORM))
     }
   }
@@ -62,10 +61,8 @@ actor DSPProcessor {
     var imagOut = [2048 of Float](repeating: 0.0)
     
     let sampleCount = min(samples.count, 2048)
-    withUnsafeMutablePointer(to: &realIn) { riPtr in
-      withUnsafeMutablePointer(to: &hannWindow) { hannPtr in
-        let ri = UnsafeMutableRawPointer(riPtr).assumingMemoryBound(to: Float.self)
-        let hann = UnsafeMutableRawPointer(hannPtr).assumingMemoryBound(to: Float.self)
+    realIn.withUnsafeElementPointer { ri in
+      hannWindow.withUnsafeElementPointer { hann in
         samples.withUnsafeBufferPointer { srcBuf in
           ri.update(from: srcBuf.baseAddress!, count: sampleCount)
         }
@@ -75,14 +72,10 @@ actor DSPProcessor {
     
     guard let dftSetup else { return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars) }
     
-    withUnsafeMutablePointer(to: &realIn) { riPtr in
-      withUnsafeMutablePointer(to: &imagIn) { iiPtr in
-        withUnsafeMutablePointer(to: &realOut) { roPtr in
-          withUnsafeMutablePointer(to: &imagOut) { ioPtr in
-            let ri = UnsafeMutableRawPointer(riPtr).assumingMemoryBound(to: Float.self)
-            let ii = UnsafeMutableRawPointer(iiPtr).assumingMemoryBound(to: Float.self)
-            let ro = UnsafeMutableRawPointer(roPtr).assumingMemoryBound(to: Float.self)
-            let io = UnsafeMutableRawPointer(ioPtr).assumingMemoryBound(to: Float.self)
+    realIn.withUnsafeElementPointer { ri in
+      imagIn.withUnsafeElementPointer { ii in
+        realOut.withUnsafeElementPointer { ro in
+          imagOut.withUnsafeElementPointer { io in
             vDSP_DFT_Execute(dftSetup, ri, ii, ro, io)
           }
         }
@@ -91,12 +84,9 @@ actor DSPProcessor {
     
     var magnitudes = [1024 of Float](repeating: 0.0)
     
-    withUnsafeMutablePointer(to: &realOut) { roPtr in
-      withUnsafeMutablePointer(to: &imagOut) { ioPtr in
-        withUnsafeMutablePointer(to: &magnitudes) { magPtr in
-          let ro = UnsafeMutableRawPointer(roPtr).assumingMemoryBound(to: Float.self)
-          let io = UnsafeMutableRawPointer(ioPtr).assumingMemoryBound(to: Float.self)
-          let mag = UnsafeMutableRawPointer(magPtr).assumingMemoryBound(to: Float.self)
+    realOut.withUnsafeElementPointer { ro in
+      imagOut.withUnsafeElementPointer { io in
+        magnitudes.withUnsafeElementPointer { mag in
           var complex = DSPSplitComplex(realp: ro, imagp: io)
           vDSP_zvabs(&complex, 1, mag, 1, 1024)
         }
@@ -104,8 +94,7 @@ actor DSPProcessor {
     }
     
     var scaleFactor: Float = 2.0 / Float(2048)
-    withUnsafeMutablePointer(to: &magnitudes) { magPtr in
-      let mag = UnsafeMutableRawPointer(magPtr).assumingMemoryBound(to: Float.self)
+    magnitudes.withUnsafeElementPointer { mag in
       vDSP_vsmul(mag, 1, &scaleFactor, mag, 1, 1024)
     }
     
@@ -116,13 +105,9 @@ actor DSPProcessor {
     
     var weightedMagnitudes = [1024 of Float](repeating: 0.0)
     
-    withUnsafeMutablePointer(to: &magnitudes) { magPtr in
-      withUnsafeMutablePointer(to: &aWeightTable) { awPtr in
-        withUnsafeMutablePointer(to: &weightedMagnitudes) { wmPtr in
-          let mag = UnsafeMutableRawPointer(magPtr).assumingMemoryBound(to: Float.self)
-          let aw = UnsafeMutableRawPointer(awPtr).assumingMemoryBound(to: Float.self)
-          let wm = UnsafeMutableRawPointer(wmPtr).assumingMemoryBound(to: Float.self)
-          
+    magnitudes.withUnsafeElementPointer { mag in
+      aWeightTable.withUnsafeElementPointer { aw in
+        weightedMagnitudes.withUnsafeElementPointer { wm in
           var floor: Float = 1e-10
           vDSP_vsadd(mag, 1, &floor, wm, 1, 1024)
           
@@ -133,11 +118,8 @@ actor DSPProcessor {
     
     var logMagnitudes = [1024 of Float](repeating: 0.0)
     
-    withUnsafeMutablePointer(to: &weightedMagnitudes) { wmPtr in
-      withUnsafeMutablePointer(to: &logMagnitudes) { lmPtr in
-        let wm = UnsafeMutableRawPointer(wmPtr).assumingMemoryBound(to: Float.self)
-        let lm = UnsafeMutableRawPointer(lmPtr).assumingMemoryBound(to: Float.self)
-        
+    weightedMagnitudes.withUnsafeElementPointer { wm in
+      logMagnitudes.withUnsafeElementPointer { lm in
         var ref: Float = 1.0
         vDSP_vdbcon(wm, 1, &ref, lm, 1, 1024, 1)
         
@@ -152,10 +134,8 @@ actor DSPProcessor {
       }
     }
     
-    withUnsafeMutablePointer(to: &audioLevels) { alPtr in
-      withUnsafeMutablePointer(to: &logMagnitudes) { lmPtr in
-        let al = UnsafeMutableRawPointer(alPtr).assumingMemoryBound(to: Float.self)
-        let lm = UnsafeMutableRawPointer(lmPtr).assumingMemoryBound(to: Float.self)
+    audioLevels.withUnsafeElementPointer { al in
+      logMagnitudes.withUnsafeElementPointer { lm in
         var interpolation: Float = 0.2
         vDSP_vintb(al, 1, lm, 1, &interpolation, al, 1, 1024)
       }
@@ -193,8 +173,7 @@ actor DSPProcessor {
   private func updateAutomaticGainControl(bars: [32 of Float]) {
     var maxBar: Float = 0.0
     var bars = bars
-    withUnsafeMutablePointer(to: &bars) { barsPtr in
-      let b = UnsafeMutableRawPointer(barsPtr).assumingMemoryBound(to: Float.self)
+    bars.withUnsafeElementPointer { b in
       vDSP_maxv(b, 1, &maxBar, 32)
     }
     
@@ -263,9 +242,7 @@ actor DSPProcessor {
     let binWidth = sampleRate / Float(2048)
     let logBoostCeiling = log10(500.0 as Float)
     
-    withUnsafeMutablePointer(to: &fftData) { fftPtr in
-      let fft = UnsafeMutableRawPointer(fftPtr).assumingMemoryBound(to: Float.self)
-      
+    fftData.withUnsafeElementPointer { fft in
       for i in 0..<numberOfBars {
         let logFreqLow = logMinFreq + (logMaxFreq - logMinFreq) * Float(i) / Float(numberOfBars)
         let logFreqHigh = logMinFreq + (logMaxFreq - logMinFreq) * Float(i + 1) / Float(numberOfBars)
