@@ -13,6 +13,8 @@ struct SongsListView: View {
   
   let songs: [MPMediaItem]
   
+  private var audioManager: AudioEngineManager { AudioEngineManager.shared }
+  
   private var searchResults: [MPMediaItem] {
     if searchText.isEmpty {
       return songs
@@ -25,12 +27,20 @@ struct SongsListView: View {
     Section {
       if !songs.isEmpty {
         List(Array(searchResults.enumerated()), id: \.element.persistentID) { index, song in
+          let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
           NavigationLink(destination: MusicPlayerView(searchResults, startingIndex: index)) {
-            VStack(alignment: .leading) {
-              Text(song.title ?? "Unknown")
-                .font(.headline)
-              Text("\(song.artist ?? "Unknown") • \(song.albumTitle ?? "Unknown")")
-                .font(.caption2)
+            HStack(spacing: 10) {
+              if isCurrentSong {
+                NowPlayingIndicatorView(isAnimating: audioManager.isPlaying)
+                  .foregroundStyle(.tint)
+              }
+              VStack(alignment: .leading) {
+                Text(song.title ?? "Unknown")
+                  .font(.headline)
+                  .foregroundStyle(isCurrentSong ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                Text("\(song.artist ?? "Unknown") • \(song.albumTitle ?? "Unknown")")
+                  .font(.caption2)
+              }
             }
           }
           .toolbarVisibility(.hidden, for: .tabBar)

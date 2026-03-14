@@ -249,6 +249,8 @@ final class AudioEngineManager {
     isSeeking = true
     
     currentPlaybackID = UUID()
+    hasHandledCompletion = false
+    isHandlingCompletion = false
     
     let sampleRate = audioFile.fileFormat.sampleRate
     let newFrame = AVAudioFramePosition(time * sampleRate)
@@ -260,19 +262,31 @@ final class AudioEngineManager {
     player.stop()
     
     if clampedFrame < audioFile.length {
+      let playbackID = currentPlaybackID
       player.scheduleSegment(
         audioFile,
         startingFrame: clampedFrame,
         frameCount: AVAudioFrameCount(audioFile.length - clampedFrame),
         at: nil
-      )
+      ) { [weak self] in
+        Task { @MainActor in
+          guard let self,
+                self.currentPlaybackID == playbackID else { return }
+          self.handlePlaybackCompleted()
+        }
+      }
       
       if isPlaying {
         player.play()
       }
+      
+      currentTime = time
+    } else {
+      currentTime = duration
+      isSeeking = false
+      handlePlaybackCompleted()
+      return
     }
-    
-    currentTime = time
     
     isSeeking = false
   }
@@ -338,6 +352,7 @@ final class AudioEngineManager {
     }
   }
 }
+
 @MainActor
 private final class DisplayLinkStream: NSObject {
   private var displayLink: CADisplayLink?

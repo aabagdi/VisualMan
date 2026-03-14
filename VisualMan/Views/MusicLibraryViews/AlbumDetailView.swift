@@ -11,6 +11,7 @@ import MediaPlayer
 struct AlbumDetailView: View {
   let album: MPMediaItemCollection
   
+  private var audioManager: AudioEngineManager { AudioEngineManager.shared }
   private let placeholder = UIImage(named: "Art Placeholder")!
   
   private var year: String {
@@ -71,17 +72,25 @@ struct AlbumDetailView: View {
       
       Section {
         ForEach(Array(sortedSongs.enumerated()), id: \.element.persistentID) { index, song in
+          let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
           NavigationLink(destination: MusicPlayerView(sortedSongs, startingIndex: index)) {
             HStack(spacing: 12) {
-              Text("\(song.albumTrackNumber)")
-                .font(.system(size: 15))
-                .foregroundStyle(.secondary)
-                .frame(minWidth: 20, alignment: .trailing)
+              if isCurrentSong {
+                NowPlayingIndicatorView(isAnimating: audioManager.isPlaying)
+                  .foregroundStyle(.tint)
+                  .frame(minWidth: 20, alignment: .trailing)
+              } else {
+                Text("\(song.albumTrackNumber)")
+                  .font(.system(size: 15))
+                  .foregroundStyle(.secondary)
+                  .frame(minWidth: 20, alignment: .trailing)
+              }
               
               VStack(alignment: .leading, spacing: 2) {
                 Text(song.title ?? "Unknown")
                   .font(.system(size: 16))
                   .lineLimit(1)
+                  .foregroundStyle(isCurrentSong ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                 
                 if album.representativeItem?.isCompilation == true,
                    let artist = song.artist {

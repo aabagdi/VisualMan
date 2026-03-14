@@ -11,14 +11,24 @@ import MediaPlayer
 struct PlaylistDetailView: View {
   let playlist: MPMediaItemCollection
   
+  private var audioManager: AudioEngineManager { AudioEngineManager.shared }
+  
   var body: some View {
     List(Array(playlist.items.enumerated()), id: \.1.persistentID) { index, song in
+      let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
       NavigationLink(destination: MusicPlayerView(playlist.items, startingIndex: index)) {
-        VStack(alignment: .leading) {
-          Text(song.title ?? "Unknown")
-            .font(.headline)
-          Text(song.artist ?? "Unknown")
-            .font(.caption2)
+        HStack(spacing: 10) {
+          if isCurrentSong {
+            NowPlayingIndicatorView(isAnimating: audioManager.isPlaying)
+              .foregroundStyle(.tint)
+          }
+          VStack(alignment: .leading) {
+            Text(song.title ?? "Unknown")
+              .font(.headline)
+              .foregroundStyle(isCurrentSong ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+            Text(song.artist ?? "Unknown")
+              .font(.caption2)
+          }
         }
       }
       .toolbarVisibility(.hidden, for: .tabBar)
