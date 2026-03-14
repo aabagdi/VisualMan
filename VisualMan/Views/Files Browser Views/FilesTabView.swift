@@ -10,7 +10,6 @@ import AVKit
 internal import UniformTypeIdentifiers
 
 struct FilesTabView: View {
-  @State private var showingFilePicker = false
   @State private var showingPlayer = false
   @State private var selectedAudioSource: FileAudioSource?
   @State private var fileLoadingFailed: Bool = false
@@ -20,69 +19,47 @@ struct FilesTabView: View {
   @State private var albumArt: UIImage?
   
   var body: some View {
-    NavigationStack {
-      VStack {
-        Button("Select an audio file to play") {
-          showingFilePicker.toggle()
-        }
-        .buttonStyle(.borderedProminent)
-        .padding()
-      }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(Color(UIColor.systemGroupedBackground))
-      .alert(fileError?.errorDescription ?? "An unknown error occurred while loading the file.", isPresented: $fileLoadingFailed) {
-        Button("Okay", role: .cancel) {
-          fileLoadingFailed = false
-          fileError = nil
-        }
-      }
-      .fileImporter(
-        isPresented: $showingFilePicker,
-        allowedContentTypes: [.audio]
-      ) { result in
-        switch result {
-        case .success(let url):
-          Task { @MainActor in
-            do {
-              guard url.startAccessingSecurityScopedResource() else {
-                throw VMError.fileAccessDenied
-              }
-              
-              defer {
-                url.stopAccessingSecurityScopedResource()
-              }
-              
-              let asset = AVURLAsset(url: url)
-              
-              try await extractMetadata(from: asset)
-              
-              selectedAudioSource = FileAudioSource(
-                url: url,
-                title: title,
-                artist: artist,
-                albumArt: albumArt
-              )
-              
-              showingPlayer = true
-              
-            } catch {
-              fileError = VMError.failedToCreateFile
-              fileLoadingFailed = true
-              print("Error loading file: \(error)")
-            }
+    UIDocumentBrowserViewControllerRepresentable { url in
+      Task { @MainActor in
+        do {
+          guard url.startAccessingSecurityScopedResource() else {
+            throw VMError.fileAccessDenied
           }
           
-        case .failure(let error):
-          fileError = VMError.fileSelectionFailed
+          defer {
+            url.stopAccessingSecurityScopedResource()
+          }
+          
+          let asset = AVURLAsset(url: url)
+          
+          try await extractMetadata(from: asset)
+          
+          selectedAudioSource = FileAudioSource(
+            url: url,
+            title: title,
+            artist: artist,
+            albumArt: albumArt
+          )
+          
+          showingPlayer = true
+          
+        } catch {
+          fileError = VMError.failedToCreateFile
           fileLoadingFailed = true
-          print("File selection failed: \(error)")
+          print("Error loading file: \(error)")
         }
       }
-      .navigationDestination(isPresented: $showingPlayer) {
-        if let audioSource = selectedAudioSource {
-          MusicPlayerView(fileAudioSource: audioSource)
-            .toolbarVisibility(.hidden, for: .tabBar)
-        }
+    }
+    .alert(fileError?.errorDescription ?? "An unknown error occurred while loading the file.", isPresented: $fileLoadingFailed) {
+      Button("Okay", role: .cancel) {
+        fileLoadingFailed = false
+        fileError = nil
+      }
+    }
+    .navigationDestination(isPresented: $showingPlayer) {
+      if let audioSource = selectedAudioSource {
+        MusicPlayerView(fileAudioSource: audioSource)
+          .toolbarVisibility(.hidden, for: .tabBar)
       }
     }
   }

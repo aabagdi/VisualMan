@@ -19,7 +19,6 @@ struct MusicPlayerView: View {
   @State private var textSize: CGSize = .zero
   @State private var containerSize: CGSize = .zero
   @State private var scrollAnimationKey = UUID()
-  @State private var isShowingTabPlayer: Bool = true
   
   private var sliderColor: Color = .white
   
@@ -185,11 +184,9 @@ struct MusicPlayerView: View {
     }
     .toolbar(.hidden, for: .tabBar)
     .onAppear {
-      isShowingTabPlayer = false
       viewModel.start(playlistManager: playlistManager, audioSources: _audioSources, startingIndex: _startingIndex)
     }
     .onDisappear {
-      isShowingTabPlayer = true
       viewModel.cleanup()
     }
     .onTapGesture {
