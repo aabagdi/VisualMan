@@ -26,7 +26,6 @@ struct NavierStokesMetalView: UIViewRepresentable {
     mtkView.enableSetNeedsDisplay = false
     mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0.02, alpha: 1)
     
-    // Add the layer's residency set so the GPU can access drawable textures
     if let metalLayer = mtkView.layer as? CAMetalLayer {
       renderer.commandQueue.addResidencySet(metalLayer.residencySet)
     }
