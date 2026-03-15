@@ -24,32 +24,31 @@ struct HomeScreenView: View {
   var body: some View {
     TabView(selection: $selectedTab) {
       Tab("Music Library", systemImage: "music.note.list", value: .musicLibrary) {
-        AlbumListView(albums: library.albums)
+        NavigationStack {
+          AlbumListView(albums: library.albums)
+            .toolbar {
+              ToolbarItem(placement: .topBarLeading) {
+                NavigationLink("Credits", destination: CreditsView())
+              }
+              ToolbarItem(placement: .topBarTrailing) {
+                if audioManager.isPlaying || audioManager.currentTime > 0 {
+                  NavigationLink(destination: MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)) {
+                    Image(systemName: "play.fill")
+                  }
+                }
+              }
+            }
+        }
       }
       
       Tab("Files", systemImage: "folder.fill", value: .files) {
-        FilesTabView()
-          .ignoresSafeArea()
+        NavigationStack {
+          FilesTabView()
+            .ignoresSafeArea()
+            .toolbar(.hidden, for: .navigationBar)
+        }
       }
     }
     .tabBarMinimizeBehavior(.onScrollDown)
-    .navigationTitle(selectedTab == .musicLibrary ? "Library" : "")
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbar(selectedTab == .musicLibrary ? .visible : .hidden, for: .navigationBar)
-    .toolbar {
-      if selectedTab == .musicLibrary {
-        ToolbarItem(placement: .topBarLeading) {
-          NavigationLink("Credits", destination: CreditsView())
-        }
-        
-        ToolbarItem(placement: .topBarTrailing) {
-          if audioManager.isPlaying || audioManager.currentTime > 0 {
-            NavigationLink(destination: MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)) {
-              Image(systemName: "play.fill")
-            }
-          }
-        }
-      }
-    }
   }
 }

@@ -16,12 +16,10 @@ struct VisualManApp: App {
   
   var body: some Scene {
     WindowGroup {
-      NavigationStack {
-        HomeScreenView()
-          .onAppear {
-            musicLibraryManager.requestMusicLibraryAccess()
-          }
-      }
+      HomeScreenView()
+        .onAppear {
+          musicLibraryManager.requestMusicLibraryAccess()
+        }
       .environment(musicLibraryManager)
       .environment(playlistManager)
       .environment(audioEngineManager)

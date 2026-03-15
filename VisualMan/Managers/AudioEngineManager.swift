@@ -9,6 +9,7 @@ import Foundation
 import AVFoundation
 import MediaPlayer
 import Synchronization
+import Dependencies
 
 @Observable
 @MainActor
@@ -23,6 +24,8 @@ final class AudioEngineManager: @unchecked Sendable {
   var initializationError: VMError?
   var currentAudioSourceURL: URL?
   
+  @ObservationIgnored @Dependency(\.uuid) var uuid
+  
   @ObservationIgnored private var engine: AVAudioEngine?
   @ObservationIgnored private var player: AVAudioPlayerNode?
   @ObservationIgnored private var audioFile: AVAudioFile?
@@ -32,7 +35,7 @@ final class AudioEngineManager: @unchecked Sendable {
   @ObservationIgnored private var lastSeekFrame: AVAudioFramePosition = 0
   @ObservationIgnored private var isSeeking: Bool = false
   @ObservationIgnored private var hasHandledCompletion = false
-  @ObservationIgnored private var currentPlaybackID = UUID()
+  @ObservationIgnored private var currentPlaybackID: UUID
   @ObservationIgnored private var nowPlayingTimer: Timer?
   @ObservationIgnored private var lockScreenUpdateHandler: (() -> Void)?
   @ObservationIgnored private var playbackContinuation: AsyncStream<Void>.Continuation?
@@ -43,6 +46,10 @@ final class AudioEngineManager: @unchecked Sendable {
   let playbackCompleted: AsyncStream<Void>
   
   init() {
+    @Dependency(\.uuid) var uuid
+    let initialID = uuid()
+    currentPlaybackID = initialID
+    
     var continuation: AsyncStream<Void>.Continuation?
     playbackCompleted = AsyncStream<Void> { continuation = $0 }
     playbackContinuation = continuation
@@ -121,7 +128,7 @@ final class AudioEngineManager: @unchecked Sendable {
     
     hasHandledCompletion = false
     
-    let playbackID = UUID()
+    let playbackID = uuid()
     currentPlaybackID = playbackID
     
     do {
@@ -212,7 +219,7 @@ final class AudioEngineManager: @unchecked Sendable {
   }
   
   func stop() {
-    currentPlaybackID = UUID()
+    currentPlaybackID = uuid()
     player?.stop()
     engine?.mainMixerNode.removeTap(onBus: 0)
     engine?.stop()
@@ -234,7 +241,7 @@ final class AudioEngineManager: @unchecked Sendable {
     
     isSeeking = true
     
-    currentPlaybackID = UUID()
+    currentPlaybackID = uuid()
     hasHandledCompletion = false
     
     let sampleRate = audioFile.fileFormat.sampleRate
@@ -322,17 +329,16 @@ final class AudioEngineManager: @unchecked Sendable {
       
       guard sampleTime >= 0 else { return }
       
-      let currentFrame = lastSeekFrame + sampleTime
-      let newTime = Double(currentFrame) / audioFile.fileFormat.sampleRate
+      let playerSeconds = Double(sampleTime) / playerTime.sampleRate
+      let seekSeconds = Double(lastSeekFrame) / audioFile.fileFormat.sampleRate
+      let newTime = seekSeconds + playerSeconds
       
       if newTime >= 0 && newTime <= duration {
         currentTime = newTime
       }
       
       if currentTime >= duration - 0.05 && !isSeeking && !hasHandledCompletion {
-        if currentFrame >= audioFile.length - Int64(audioFile.fileFormat.sampleRate * 0.05) {
-          handlePlaybackCompleted()
-        }
+        handlePlaybackCompleted()
       }
     }
   }

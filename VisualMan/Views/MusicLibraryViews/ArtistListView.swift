@@ -19,7 +19,7 @@ struct ArtistListView: View {
       return artists
     } else {
       return artists.filter {
-        $0.representativeItem?.albumArtist?.localizedStandardContains(searchText) ?? false
+        $0.representativeItem?.artist?.localizedStandardContains(searchText) ?? false
       }
     }
   }
@@ -31,7 +31,7 @@ struct ArtistListView: View {
           Section {
             ForEach(searchResults, id: \.representativeItem?.persistentID) { artist in
               NavigationLink(destination: ArtistDetailView(albums: albums.filter { album in
-                album.representativeItem?.albumArtist == artist.representativeItem?.albumArtist
+                album.representativeItem?.artist == artist.representativeItem?.artist
               })) {
                 Text(artist.representativeItem?.artist ?? "Unknown")
               }

@@ -163,5 +163,7 @@ struct AlbumListView: View {
     }
     .listStyle(.insetGrouped)
     .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+    .navigationTitle("Library")
+    .navigationBarTitleDisplayMode(.inline)
   }
 }

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Dependencies
 
 struct MarqueeTextView<ResetID: Equatable>: View {
   let text: String
@@ -17,7 +18,10 @@ struct MarqueeTextView<ResetID: Equatable>: View {
   @State private var scrollToEnd = false
   @State private var textSize: CGSize = .zero
   @State private var containerSize: CGSize = .zero
-  @State private var scrollAnimationKey = UUID()
+  @State private var scrollAnimationKey: UUID
+  
+  @Dependency(\.uuid) var uuid
+  @Dependency(\.continuousClock) var clock
   
   init(
     _ text: String,
@@ -26,11 +30,14 @@ struct MarqueeTextView<ResetID: Equatable>: View {
     initialDelay: Duration = .seconds(2),
     speed: Double = 20.0
   ) {
+    @Dependency(\.uuid) var uuid
+    
     self.text = text
     self.resetID = resetID
     self.spacing = spacing
     self.initialDelay = initialDelay
     self.speed = speed
+    self.scrollAnimationKey = uuid()
   }
   
   private var shouldScroll: Bool {
@@ -92,17 +99,17 @@ struct MarqueeTextView<ResetID: Equatable>: View {
   private func resetMarquee() {
     scrollToEnd = false
     textSize = .zero
-    scrollAnimationKey = UUID()
+    scrollAnimationKey = uuid()
     
     Task {
-      try? await Task.sleep(for: .milliseconds(100))
-      scrollAnimationKey = UUID()
+      try? await clock.sleep(for: .milliseconds(100))
+      scrollAnimationKey = uuid()
     }
   }
   
   private func startScrollAfterDelay() {
     Task {
-      try? await Task.sleep(for: initialDelay)
+      try? await clock.sleep(for: initialDelay)
       scrollToEnd = true
     }
   }

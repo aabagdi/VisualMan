@@ -14,11 +14,12 @@ extension MusicPlayerView {
   final class MusicPlayerViewModel {
     @ObservationIgnored @Dependency(AudioEngineManager.self) private var audioManager
     @ObservationIgnored @Dependency(LockScreenControlManager.self) private var lockScreen
+    @ObservationIgnored @Dependency(\.continuousClock) var clock
     
     @ObservationIgnored private var playbackListeningTask: Task<Void, Never>?
     @ObservationIgnored private var songTransitionTask: Task<Void, Never>?
     @ObservationIgnored private weak var playlistManager: AudioPlaylistManager?
-    
+        
     var failedPlaying: Bool = false
     var playingError: VMError?
     
@@ -112,7 +113,7 @@ extension MusicPlayerView {
       if playlistManager.hasNext {
         songTransitionTask?.cancel()
         songTransitionTask = Task {
-          try? await Task.sleep(for: .milliseconds(100))
+          try? await clock.sleep(for: .milliseconds(100))
           guard !Task.isCancelled else { return }
           playlistManager.moveToNext()
           playCurrentSong()
