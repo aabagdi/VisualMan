@@ -20,7 +20,7 @@ final class AudioTapProcessor: Sendable {
                                               ordering: .acquiringAndReleasing).exchanged else { return }
     let dsp = dspProcessor
     
-    Task { [self] in
+    Task {
       let result = await dsp.processSamples(samples, sampleRate: sampleRate)
       resultContinuation.withLock { _ = $0?.yield(result) }
       isProcessingBuffer.store(false, ordering: .releasing)

@@ -21,11 +21,11 @@ final class MusicLibraryAccessManager {
   var isLoading = false
     
   func requestMusicLibraryAccess() {
-    MPMediaLibrary.requestAuthorization { [weak self] status in
+    MPMediaLibrary.requestAuthorization { status in
       Task { @MainActor in
-        self?.authorizationStatus = status
+        self.authorizationStatus = status
         if status == .authorized {
-          self?.loadLibrary()
+          self.loadLibrary()
         }
       }
     }
