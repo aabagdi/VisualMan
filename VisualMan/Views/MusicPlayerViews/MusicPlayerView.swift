@@ -37,6 +37,12 @@ struct MusicPlayerView: View {
     case fireworks = "Fireworks"
     case interference = "Interference Pattern"
     case voronoi = "Voronoi Diagram"
+    case aurora = "Aurora Borealis"
+    case oscilloscope = "Oscilloscope"
+    case sphereMesh = "Sphere"
+    case terrain = "Terrain Flyover"
+    case fluidSim = "Fluid"
+    case navierStokes = "Navier-Stokes"
   }
   
   init(_ audioSources: [any AudioSource], startingIndex: Int) {
@@ -209,6 +215,18 @@ struct MusicPlayerView: View {
       InterferenceVisualizerView(audioLevels: audioLevels)
     case .voronoi:
       VoronoiVisualizerView(audioLevels: audioLevels)
+    case .aurora:
+      AuroraBorealisVisualizerView(audioLevels: audioLevels)
+    case .oscilloscope:
+      OscilloscopeVisualizerView(audioLevels: audioLevels)
+    case .sphereMesh:
+      SphereMeshVisualizerView(audioLevels: audioLevels)
+    case .terrain:
+      TerrainFlyoverVisualizerView(audioLevels: audioLevels)
+    case .fluidSim:
+      FluidSimVisualizerView(audioLevels: audioLevels)
+    case .navierStokes:
+      NavierStokesVisualizerView(audioLevels: audioLevels)
     }
   }
 }

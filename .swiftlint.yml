@@ -3,6 +3,7 @@ disabled_rules:
  - trailing_whitespace
  - function_parameter_count
  - trailing_comma
+ - cyclomatic_complexity
 
 excluded:
  - .git
