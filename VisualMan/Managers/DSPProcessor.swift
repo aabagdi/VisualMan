@@ -252,7 +252,7 @@ actor DSPProcessor {
     var fftData = fftData
     
     let minFreq: Float = 60.0
-    let maxFreq: Float = 16000.0
+    let maxFreq: Float = 13000.0
     
     let logMinFreq = log10(minFreq)
     let logMaxFreq = log10(maxFreq)
@@ -289,13 +289,12 @@ actor DSPProcessor {
           vDSP_meanv(fft + startBin, 1, &avgMag, count)
         }
         
-        bars[i] = avgMag * 0.7 + maxMag * 0.3
-        
+        let rawMag = avgMag * 0.7 + maxMag * 0.3
         let logCenter = (logFreqLow + logFreqHigh) / 2.0
-        if logCenter < logBoostCeiling {
-          let boost = 1.0 + 0.5 * (logBoostCeiling - logCenter) / (logBoostCeiling - logMinFreq)
-          bars[i] *= boost
-        }
+        bars[i] = applyFrequencyBoosts(rawMag,
+                                       logCenter: logCenter,
+                                       logMinFreq: logMinFreq,
+                                       logBoostCeiling: logBoostCeiling)
         
         bars[i] = tanh(bars[i] * 1.5)
         
@@ -304,5 +303,32 @@ actor DSPProcessor {
     }
     
     return bars
+  }
+  
+}
+
+extension DSPProcessor {
+  private func applyFrequencyBoosts(_ magnitude: Float,
+                                    logCenter: Float,
+                                    logMinFreq: Float,
+                                    logBoostCeiling: Float) -> Float {
+    var result = magnitude
+    
+    if logCenter < logBoostCeiling {
+      let boost = 1.0 + 0.5 * (logBoostCeiling - logCenter) / (logBoostCeiling - logMinFreq)
+      result *= boost
+    }
+    
+    let logPresenceLow = log10(2000.0 as Float)
+    let logPresenceHigh = log10(8000.0 as Float)
+    if logCenter >= logPresenceLow && logCenter <= logPresenceHigh {
+      let mid = (logPresenceLow + logPresenceHigh) / 2.0
+      let halfWidth = (logPresenceHigh - logPresenceLow) / 2.0
+      let distance = abs(logCenter - mid) / halfWidth
+      let boost = 1.0 + 0.4 * (1.0 - distance * distance)
+      result *= boost
+    }
+    
+    return result
   }
 }
