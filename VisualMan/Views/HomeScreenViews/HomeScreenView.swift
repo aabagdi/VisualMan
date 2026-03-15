@@ -10,36 +10,41 @@ import SwiftUI
 struct HomeScreenView: View {
   @State private var isShowingBarPlayer: Bool = true
   @State private var isShowingMusicPlayer = false
+  @State private var selectedTab: VMTab = .musicLibrary
+  
+  enum VMTab {
+    case musicLibrary
+    case files
+  }
   
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(MusicLibraryAccessManager.self) private var library
   @Environment(AudioPlaylistManager.self) private var playlistManager
   
   var body: some View {
-    TabView {
-      Tab("Music Library", systemImage: "music.note.list") {
-        NavigationStack {
-          AlbumListView(albums: library.albums)
-            .toolbar {
-              ToolbarItem(placement: .navigationBarTrailing) {
-                if audioManager.isPlaying || audioManager.currentTime > 0 {
-                  NavigationLink(destination: MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)) {
-                    Image(systemName: "play.fill")
-                  }
-                }
-              }
-            }
-        }
+    TabView(selection: $selectedTab) {
+      Tab("Music Library", systemImage: "music.note.list", value: .musicLibrary) {
+        AlbumListView(albums: library.albums)
       }
       
-      Tab("Files", systemImage: "folder.fill") {
-        NavigationStack {
-          FilesTabView()
-            .toolbar(.hidden, for: .navigationBar)
-            .ignoresSafeArea()
-        }
+      Tab("Files", systemImage: "folder.fill", value: .files) {
+        FilesTabView()
+          .ignoresSafeArea()
       }
     }
     .tabBarMinimizeBehavior(.onScrollDown)
+    .toolbar {
+      ToolbarItem(placement: .topBarLeading) {
+        NavigationLink("Credits", destination: CreditsView())
+      }
+      
+      ToolbarItem(placement: .topBarTrailing) {
+        if selectedTab == .musicLibrary, audioManager.isPlaying || audioManager.currentTime > 0 {
+          NavigationLink(destination: MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)) {
+            Image(systemName: "play.fill")
+          }
+        }
+      }
+    }
   }
 }
