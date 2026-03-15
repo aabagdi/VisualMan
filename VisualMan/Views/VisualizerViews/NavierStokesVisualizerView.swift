@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct NavierStokesVisualizerView: View {
-  @State private var renderer: FluidSimulationRenderer?
+  @State private var renderer: NavierStokesRenderer?
   @State private var smoothedBass: Float = 0
   @State private var smoothedMid: Float = 0
   @State private var smoothedHigh: Float = 0
@@ -55,7 +55,7 @@ struct NavierStokesVisualizerView: View {
     TimelineView(.animation) { timeline in
       Group {
         if let renderer {
-          FluidMetalView(renderer: renderer,
+          NavierStokesMetalView(renderer: renderer,
                          bass: smoothedBass,
                          mid: smoothedMid,
                          high: smoothedHigh)
@@ -71,7 +71,7 @@ struct NavierStokesVisualizerView: View {
       .ignoresSafeArea()
     }
     .onAppear {
-      renderer = FluidSimulationRenderer()
+      renderer = NavierStokesRenderer()
     }
   }
 }

@@ -1,5 +1,5 @@
 //
-//  FluidSimulationRenderer.swift
+//  NavierStokesRenderer.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 3/15/26.
@@ -10,7 +10,7 @@ import MetalKit
 import simd
 
 @MainActor
-final class FluidSimulationRenderer {
+final class NavierStokesRenderer {
   let device: MTLDevice
   let commandQueue: MTLCommandQueue
   
@@ -211,7 +211,7 @@ final class FluidSimulationRenderer {
   
 }
 
-extension FluidSimulationRenderer {
+extension NavierStokesRenderer {
   private func splatForce(commandBuffer: MTLCommandBuffer, pos: SIMD2<Float>,
                           force: SIMD3<Float>, radius: Float) {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }

@@ -1,5 +1,5 @@
 //
-//  FluidMetalView.swift
+//  NavierStokesMetalView.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 3/15/26.
@@ -8,8 +8,8 @@
 import SwiftUI
 import MetalKit
 
-struct FluidMetalView: UIViewRepresentable {
-  let renderer: FluidSimulationRenderer
+struct NavierStokesMetalView: UIViewRepresentable {
+  let renderer: NavierStokesRenderer
   let bass: Float
   let mid: Float
   let high: Float
@@ -39,12 +39,12 @@ struct FluidMetalView: UIViewRepresentable {
   
   @MainActor
   class Coordinator: NSObject, MTKViewDelegate {
-    let renderer: FluidSimulationRenderer
+    let renderer: NavierStokesRenderer
     var bass: Float = 0
     var mid: Float = 0
     var high: Float = 0
     
-    init(renderer: FluidSimulationRenderer) {
+    init(renderer: NavierStokesRenderer) {
       self.renderer = renderer
     }
     

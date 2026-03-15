@@ -1,5 +1,5 @@
 //
-//  FluidCompute.metal
+//  NavierStokesCompute.metal
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 3/15/26.
