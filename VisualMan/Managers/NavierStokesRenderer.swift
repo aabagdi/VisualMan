@@ -12,7 +12,7 @@ import simd
 @MainActor
 final class NavierStokesRenderer {
   let device: MTLDevice
-  let commandQueue: MTLCommandQueue
+  let commandQueue: any MTL4CommandQueue
   
   private let gridSize: Int = 1536
   
@@ -41,16 +41,72 @@ final class NavierStokesRenderer {
   private let dyeDissipation: Float = 0.99
   private let jacobiIterations: Int = 20
   
+  // Metal 4 infrastructure — triple-buffered
+  private static let maxFramesInFlight: UInt64 = 3
+  private var commandAllocators: [any MTL4CommandAllocator] = []
+  private var commandBuffer: any MTL4CommandBuffer
+  private var argumentTable: any MTL4ArgumentTable
+  private var uniformBuffers: [MTLBuffer] = []
+  private var uniformOffset: Int = 0
+  private var sharedEvent: MTLSharedEvent!
+  private var frameNumber: UInt64 = 0
+  private var residencySet: MTLResidencySet!
+  
+  private var currentUniformBuffer: MTLBuffer!
+  
   init?() {
     guard let device = MTLCreateSystemDefaultDevice(),
-          let commandQueue = device.makeCommandQueue() else {
+          let commandQueue = device.makeMTL4CommandQueue(),
+          let commandBuffer = device.makeCommandBuffer(),
+          let sharedEvent = device.makeSharedEvent() else {
       return nil
     }
     self.device = device
     self.commandQueue = commandQueue
+    self.commandBuffer = commandBuffer
+    self.sharedEvent = sharedEvent
+    sharedEvent.signaledValue = 0
+    
+    for _ in 0..<Self.maxFramesInFlight {
+      guard let allocator = device.makeCommandAllocator(),
+            let uniformBuf = device.makeBuffer(length: 4096, options: .storageModeShared) else {
+        return nil
+      }
+      commandAllocators.append(allocator)
+      uniformBuffers.append(uniformBuf)
+    }
+    
+    let tableDesc = MTL4ArgumentTableDescriptor()
+    tableDesc.maxTextureBindCount = 3
+    tableDesc.maxBufferBindCount = 3
+    guard let argumentTable = try? device.makeArgumentTable(descriptor: tableDesc) else {
+      return nil
+    }
+    self.argumentTable = argumentTable
     
     setupPipelines()
     setupTextures()
+    
+    let setDesc = MTLResidencySetDescriptor()
+    setDesc.initialCapacity = 16
+    guard let residencySet = try? device.makeResidencySet(descriptor: setDesc) else {
+      return nil
+    }
+    self.residencySet = residencySet
+    
+    residencySet.addAllocation(velocityA!)
+    residencySet.addAllocation(velocityB!)
+    residencySet.addAllocation(pressure!)
+    residencySet.addAllocation(pressureTemp!)
+    residencySet.addAllocation(divergenceTexture!)
+    residencySet.addAllocation(dyeA!)
+    residencySet.addAllocation(dyeB!)
+    for buf in uniformBuffers {
+      residencySet.addAllocation(buf)
+    }
+    residencySet.commit()
+    
+    commandQueue.addResidencySet(residencySet)
   }
   
   private func setupPipelines() {
@@ -107,47 +163,120 @@ final class NavierStokesRenderer {
     desc.usage = [.shaderRead, .shaderWrite, .renderTarget]
     desc.storageMode = .private
     outputTexture = device.makeTexture(descriptor: desc)
+    
+    if let outputTexture {
+      residencySet.addAllocation(outputTexture)
+      residencySet.commit()
+    }
   }
   
-  func update(bass: Float, mid: Float, high: Float) {
-    guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
+  private func writeUniform<T>(_ value: T) -> MTLGPUAddress {
+    let aligned = (uniformOffset + 15) & ~15
+    (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
+    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
+    uniformOffset = aligned + MemoryLayout<T>.size
+    return addr
+  }
+  
+  func update(bass: Float, mid: Float, high: Float, drawable: CAMetalDrawable) {
+    frameNumber += 1
+    let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
+    
+    // Wait only for the frame that previously used this allocator/buffer slot.
+    // For the first maxFramesInFlight frames, the wait value is <= 0 (already signaled).
+    let waitValue = frameNumber > Self.maxFramesInFlight
+      ? frameNumber - Self.maxFramesInFlight
+      : 0
+    sharedEvent.wait(untilSignaledValue: waitValue, timeoutMS: 1000)
+    
+    let allocator = commandAllocators[frameIndex]
+    currentUniformBuffer = uniformBuffers[frameIndex]
+    allocator.reset()
+    uniformOffset = 0
     
     time += dt * (1.0 + bass * 0.5)
     
-    injectAudioSplats(commandBuffer: commandBuffer, bass: bass, mid: mid, high: high)
+    commandBuffer.beginCommandBuffer(allocator: allocator)
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+    encoder.setArgumentTable(argumentTable)
     
-    advect(commandBuffer: commandBuffer,
+    injectAudioSplats(encoder: encoder, bass: bass, mid: mid, high: high)
+    
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
+    advect(encoder: encoder,
            velocityIn: velocityA, fieldIn: velocityA, fieldOut: velocityB,
            dissipation: velocityDissipation)
     swap(&velocityA, &velocityB)
     
-    computeDivergence(commandBuffer: commandBuffer)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
+    computeDivergence(encoder: encoder)
+    
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     for _ in 0..<jacobiIterations {
-      jacobiIteration(commandBuffer: commandBuffer)
+      jacobiIteration(encoder: encoder)
       swap(&pressure, &pressureTemp)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
     
-    gradientSubtract(commandBuffer: commandBuffer)
+    gradientSubtract(encoder: encoder)
     
-    advect(commandBuffer: commandBuffer,
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
+    advect(encoder: encoder,
            velocityIn: velocityA, fieldIn: dyeA, fieldOut: dyeB,
            dissipation: dyeDissipation)
     swap(&dyeA, &dyeB)
     
-    blurDyeH(commandBuffer: commandBuffer)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
+    blurDyeH(encoder: encoder)
     swap(&dyeA, &dyeB)
-    blurDyeV(commandBuffer: commandBuffer)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    blurDyeV(encoder: encoder)
     swap(&dyeA, &dyeB)
+    
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     if let output = outputTexture {
-      render(commandBuffer: commandBuffer, output: output)
+      render(encoder: encoder, output: output)
     }
     
-    commandBuffer.commit()
+    if let output = outputTexture {
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit)
+      
+      let srcSize = MTLSize(
+        width: min(output.width, drawable.texture.width),
+        height: min(output.height, drawable.texture.height),
+        depth: 1
+      )
+      encoder.copy(
+        sourceTexture: output,
+        sourceSlice: 0,
+        sourceLevel: 0,
+        sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+        sourceSize: srcSize,
+        destinationTexture: drawable.texture,
+        destinationSlice: 0,
+        destinationLevel: 0,
+        destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0)
+      )
+    }
+    
+    encoder.endEncoding()
+    commandBuffer.endCommandBuffer()
+    
+    commandQueue.waitForDrawable(drawable)
+    commandQueue.commit([commandBuffer])
+    commandQueue.signalEvent(sharedEvent, value: frameNumber)
+    commandQueue.signalDrawable(drawable)
+    drawable.present()
   }
   
-  private func injectAudioSplats(commandBuffer: MTLCommandBuffer, bass: Float, mid: Float, high: Float) {
+  private func injectAudioSplats(encoder: any MTL4ComputeCommandEncoder,
+                                 bass: Float, mid: Float, high: Float) {
     let center = Float(gridSize) / 2.0
     let audioEnergy = (bass + mid + high) / 3.0
     
@@ -158,12 +287,14 @@ final class NavierStokesRenderer {
       let offset = bass * 120.0
       let splatPos = SIMD2<Float>(center + cos(angle) * offset, center + sin(angle) * offset)
       
-      splatForce(commandBuffer: commandBuffer, pos: splatPos,
+      splatForce(encoder: encoder, pos: splatPos,
                  force: SIMD3<Float>(forceX, forceY, 0), radius: 150.0 + bass * 90.0)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
       
       let dyeColor = SIMD3<Float>(bass * 1.5, bass * 0.3, bass * 0.1)
-      splatDye(commandBuffer: commandBuffer, pos: splatPos,
+      splatDye(encoder: encoder, pos: splatPos,
                color: dyeColor, radius: 120.0 + bass * 60.0)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
     
     if mid > 0.01 {
@@ -175,15 +306,17 @@ final class NavierStokesRenderer {
         let tangentX = -sin(angle) * mid * 270.0
         let tangentY = cos(angle) * mid * 270.0
         
-        splatForce(commandBuffer: commandBuffer, pos: splatPos,
+        splatForce(encoder: encoder, pos: splatPos,
                    force: SIMD3<Float>(tangentX, tangentY, 0), radius: 90.0)
+        encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
         
         let hueOffset = Float(i) * 0.33
         let dyeColor = SIMD3<Float>(mid * 0.2 + hueOffset * 0.3,
                                      mid * 0.8,
                                      mid * 1.2)
-        splatDye(commandBuffer: commandBuffer, pos: splatPos,
+        splatDye(encoder: encoder, pos: splatPos,
                  color: dyeColor, radius: 72.0)
+        encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
       }
     }
     
@@ -197,14 +330,16 @@ final class NavierStokesRenderer {
         let sparkForce = high * 135.0
         let forceDir = SIMD3<Float>(cos(hashAngle + 1.5) * sparkForce,
                                      sin(hashAngle + 1.5) * sparkForce, 0)
-        splatForce(commandBuffer: commandBuffer, pos: splatPos,
+        splatForce(encoder: encoder, pos: splatPos,
                    force: forceDir, radius: 48.0)
+        encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
         
         let dyeColor = SIMD3<Float>(high * 0.5 + audioEnergy * 0.5,
                                      high * 0.7,
                                      high * 1.5)
-        splatDye(commandBuffer: commandBuffer, pos: splatPos,
+        splatDye(encoder: encoder, pos: splatPos,
                  color: dyeColor, radius: 36.0)
+        encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
       }
     }
   }
@@ -212,114 +347,86 @@ final class NavierStokesRenderer {
 }
 
 extension NavierStokesRenderer {
-  private func splatForce(commandBuffer: MTLCommandBuffer, pos: SIMD2<Float>,
+  private func splatForce(encoder: any MTL4ComputeCommandEncoder, pos: SIMD2<Float>,
                           force: SIMD3<Float>, radius: Float) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setComputePipelineState(splatPipeline)
-    encoder.setTexture(velocityA, index: 0)
-    
-    var point = pos
-    var value = force
-    var rad = radius
-    encoder.setBytes(&point, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
-    encoder.setBytes(&value, length: MemoryLayout<SIMD3<Float>>.size, index: 1)
-    encoder.setBytes(&rad, length: MemoryLayout<Float>.size, index: 2)
-    
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
+    argumentTable.setAddress(writeUniform(pos), index: 0)
+    argumentTable.setAddress(writeUniform(force), index: 1)
+    argumentTable.setAddress(writeUniform(radius), index: 2)
     dispatchGrid(encoder: encoder, pipeline: splatPipeline)
-    encoder.endEncoding()
   }
   
-  private func splatDye(commandBuffer: MTLCommandBuffer, pos: SIMD2<Float>,
+  private func splatDye(encoder: any MTL4ComputeCommandEncoder, pos: SIMD2<Float>,
                         color: SIMD3<Float>, radius: Float) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setComputePipelineState(splatPipeline)
-    encoder.setTexture(dyeA, index: 0)
-    
-    var point = pos
-    var value = color
-    var rad = radius
-    encoder.setBytes(&point, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
-    encoder.setBytes(&value, length: MemoryLayout<SIMD3<Float>>.size, index: 1)
-    encoder.setBytes(&rad, length: MemoryLayout<Float>.size, index: 2)
-    
+    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
+    argumentTable.setAddress(writeUniform(pos), index: 0)
+    argumentTable.setAddress(writeUniform(color), index: 1)
+    argumentTable.setAddress(writeUniform(radius), index: 2)
     dispatchGrid(encoder: encoder, pipeline: splatPipeline)
-    encoder.endEncoding()
   }
   
-  private func advect(commandBuffer: MTLCommandBuffer,
+  private func advect(encoder: any MTL4ComputeCommandEncoder,
                       velocityIn: MTLTexture, fieldIn: MTLTexture, fieldOut: MTLTexture,
                       dissipation: Float) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setComputePipelineState(advectPipeline)
-    encoder.setTexture(velocityIn, index: 0)
-    encoder.setTexture(fieldIn, index: 1)
-    encoder.setTexture(fieldOut, index: 2)
+    argumentTable.setTexture(velocityIn.gpuResourceID, index: 0)
+    argumentTable.setTexture(fieldIn.gpuResourceID, index: 1)
+    argumentTable.setTexture(fieldOut.gpuResourceID, index: 2)
     
-    var dtVal = dt * 40.0
-    var dissVal = dissipation
-    encoder.setBytes(&dtVal, length: MemoryLayout<Float>.size, index: 0)
-    encoder.setBytes(&dissVal, length: MemoryLayout<Float>.size, index: 1)
+    let dtVal = dt * 40.0
+    argumentTable.setAddress(writeUniform(dtVal), index: 0)
+    argumentTable.setAddress(writeUniform(dissipation), index: 1)
     
     dispatchGrid(encoder: encoder, pipeline: advectPipeline)
-    encoder.endEncoding()
   }
   
-  private func computeDivergence(commandBuffer: MTLCommandBuffer) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+  private func computeDivergence(encoder: any MTL4ComputeCommandEncoder) {
     encoder.setComputePipelineState(divergencePipeline)
-    encoder.setTexture(velocityA, index: 0)
-    encoder.setTexture(divergenceTexture, index: 1)
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
+    argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
     
     dispatchGrid(encoder: encoder, pipeline: divergencePipeline)
-    encoder.endEncoding()
   }
   
-  private func jacobiIteration(commandBuffer: MTLCommandBuffer) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+  private func jacobiIteration(encoder: any MTL4ComputeCommandEncoder) {
     encoder.setComputePipelineState(jacobiPipeline)
-    encoder.setTexture(pressure, index: 0)
-    encoder.setTexture(divergenceTexture, index: 1)
-    encoder.setTexture(pressureTemp, index: 2)
+    argumentTable.setTexture(pressure.gpuResourceID, index: 0)
+    argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
+    argumentTable.setTexture(pressureTemp.gpuResourceID, index: 2)
     
     dispatchGrid(encoder: encoder, pipeline: jacobiPipeline)
-    encoder.endEncoding()
   }
   
-  private func gradientSubtract(commandBuffer: MTLCommandBuffer) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+  private func gradientSubtract(encoder: any MTL4ComputeCommandEncoder) {
     encoder.setComputePipelineState(gradientSubtractPipeline)
-    encoder.setTexture(pressure, index: 0)
-    encoder.setTexture(velocityA, index: 1)
+    argumentTable.setTexture(pressure.gpuResourceID, index: 0)
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
     
     dispatchGrid(encoder: encoder, pipeline: gradientSubtractPipeline)
-    encoder.endEncoding()
   }
   
-  private func blurDyeH(commandBuffer: MTLCommandBuffer) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+  private func blurDyeH(encoder: any MTL4ComputeCommandEncoder) {
     encoder.setComputePipelineState(blurHPipeline)
-    encoder.setTexture(dyeA, index: 0)
-    encoder.setTexture(dyeB, index: 1)
+    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
+    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
     
     dispatchGrid(encoder: encoder, pipeline: blurHPipeline)
-    encoder.endEncoding()
   }
   
-  private func blurDyeV(commandBuffer: MTLCommandBuffer) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+  private func blurDyeV(encoder: any MTL4ComputeCommandEncoder) {
     encoder.setComputePipelineState(blurVPipeline)
-    encoder.setTexture(dyeA, index: 0)
-    encoder.setTexture(dyeB, index: 1)
+    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
+    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
     
     dispatchGrid(encoder: encoder, pipeline: blurVPipeline)
-    encoder.endEncoding()
   }
   
-  private func render(commandBuffer: MTLCommandBuffer, output: MTLTexture) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+  private func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture) {
     encoder.setComputePipelineState(renderPipeline)
-    encoder.setTexture(dyeA, index: 0)
-    encoder.setTexture(output, index: 1)
+    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
+    argumentTable.setTexture(output.gpuResourceID, index: 1)
     
     let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
     let threadGroups = MTLSize(
@@ -327,17 +434,19 @@ extension NavierStokesRenderer {
       height: (output.height + 15) / 16,
       depth: 1
     )
-    encoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
-    encoder.endEncoding()
+    encoder.dispatchThreadgroups(threadgroupsPerGrid: threadGroups,
+                                threadsPerThreadgroup: threadGroupSize)
   }
   
-  private func dispatchGrid(encoder: MTLComputeCommandEncoder, pipeline: MTLComputePipelineState) {
+  private func dispatchGrid(encoder: any MTL4ComputeCommandEncoder,
+                            pipeline: MTLComputePipelineState) {
     let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
     let threadGroups = MTLSize(
       width: (gridSize + 15) / 16,
       height: (gridSize + 15) / 16,
       depth: 1
     )
-    encoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
+    encoder.dispatchThreadgroups(threadgroupsPerGrid: threadGroups,
+                                threadsPerThreadgroup: threadGroupSize)
   }
 }

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import MetalKit
+import QuartzCore
 
 struct NavierStokesMetalView: UIViewRepresentable {
   let renderer: NavierStokesRenderer
@@ -24,6 +25,12 @@ struct NavierStokesMetalView: UIViewRepresentable {
     mtkView.isPaused = false
     mtkView.enableSetNeedsDisplay = false
     mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0.02, alpha: 1)
+    
+    // Add the layer's residency set so the GPU can access drawable textures
+    if let metalLayer = mtkView.layer as? CAMetalLayer {
+      renderer.commandQueue.addResidencySet(metalLayer.residencySet)
+    }
+    
     return mtkView
   }
   
@@ -54,32 +61,8 @@ struct NavierStokesMetalView: UIViewRepresentable {
     
     func draw(in view: MTKView) {
       guard let drawable = view.currentDrawable else { return }
-      
       renderer.ensureOutputTexture(width: drawable.texture.width, height: drawable.texture.height)
-      
-      renderer.update(bass: bass, mid: mid, high: high)
-      
-      guard let commandBuffer = renderer.commandQueue.makeCommandBuffer(),
-            let outputTexture = renderer.outputTexture,
-            let blitEncoder = commandBuffer.makeBlitCommandEncoder() else { return }
-      
-      let srcSize = MTLSize(width: min(outputTexture.width, drawable.texture.width),
-                            height: min(outputTexture.height, drawable.texture.height),
-                            depth: 1)
-      
-      blitEncoder.copy(from: outputTexture,
-                       sourceSlice: 0,
-                       sourceLevel: 0,
-                       sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
-                       sourceSize: srcSize,
-                       to: drawable.texture,
-                       destinationSlice: 0,
-                       destinationLevel: 0,
-                       destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
-      blitEncoder.endEncoding()
-      
-      commandBuffer.present(drawable)
-      commandBuffer.commit()
+      renderer.update(bass: bass, mid: mid, high: high, drawable: drawable)
     }
   }
 }
