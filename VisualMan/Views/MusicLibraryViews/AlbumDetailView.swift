@@ -117,7 +117,6 @@ struct AlbumDetailView: View {
       }
     }
     .listStyle(.insetGrouped)
-    .navigationBarTitleDisplayMode(.inline)
   }
   
   private func formatDuration(_ duration: TimeInterval) -> String? {
