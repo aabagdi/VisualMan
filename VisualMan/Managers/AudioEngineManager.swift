@@ -48,8 +48,8 @@ final class AudioEngineManager {
     let initialID = uuid()
     currentPlaybackID = initialID
     
-    var continuation: AsyncStream<Void>.Continuation?
-    playbackCompleted = AsyncStream<Void> { continuation = $0 }
+    let (stream, continuation) = AsyncStream<Void>.makeStream()
+    playbackCompleted = stream
     playbackContinuation = continuation
     do {
       try setupAudioEngine()
@@ -59,6 +59,10 @@ final class AudioEngineManager {
       isInitialized = false
       failedToInitialize = true
     }
+  }
+  
+  deinit {
+    playbackContinuation?.finish()
   }
   
   private func setupAudioEngine() throws {

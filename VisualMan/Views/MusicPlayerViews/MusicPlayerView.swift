@@ -40,7 +40,7 @@ struct MusicPlayerView: View {
     case aurora = "Aurora Borealis"
     case oscilloscope = "Oscilloscope"
     case sphereMesh = "Sphere"
-    case terrain = "Terrain Flyover"
+
     case fluidSim = "Fluid"
     case navierStokes = "Navier-Stokes"
   }
@@ -221,8 +221,7 @@ struct MusicPlayerView: View {
       OscilloscopeVisualizerView(audioLevels: audioLevels)
     case .sphereMesh:
       SphereMeshVisualizerView(audioLevels: audioLevels)
-    case .terrain:
-      TerrainFlyoverVisualizerView(audioLevels: audioLevels)
+
     case .fluidSim:
       FluidSimVisualizerView(audioLevels: audioLevels)
     case .navierStokes:
