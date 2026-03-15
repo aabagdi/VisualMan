@@ -18,6 +18,7 @@ extension MusicPlayerView {
     
     @ObservationIgnored private var playbackListeningTask: Task<Void, Never>?
     @ObservationIgnored private var songTransitionTask: Task<Void, Never>?
+    @ObservationIgnored private var playTask: Task<Void, Never>?
     @ObservationIgnored private weak var playlistManager: AudioPlaylistManager?
         
     var failedPlaying: Bool = false
@@ -53,9 +54,9 @@ extension MusicPlayerView {
       playbackListeningTask = nil
       songTransitionTask?.cancel()
       songTransitionTask = nil
-      lockScreen.onPlayPause = nil
-      lockScreen.onNext = nil
-      lockScreen.onPrevious = nil
+      playTask?.cancel()
+      playTask = nil
+      lockScreen.cleanup()
     }
     
     func togglePlayback() {
@@ -92,9 +93,11 @@ extension MusicPlayerView {
     private func playCurrentSong() {
       guard let source = playlistManager?.currentAudioSource else { return }
       
-      Task {
+      playTask?.cancel()
+      playTask = Task {
         do {
           try await audioManager.play(source)
+          guard !Task.isCancelled else { return }
           updateNowPlayingInfo()
         } catch let error as VMError {
           playingError = error

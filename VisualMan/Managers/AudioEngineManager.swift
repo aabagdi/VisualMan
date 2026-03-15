@@ -13,7 +13,7 @@ import Dependencies
 
 @Observable
 @MainActor
-final class AudioEngineManager: @unchecked Sendable {
+final class AudioEngineManager {
   var audioLevels = [1024 of Float](repeating: 0.0)
   var visualizerBars = [32 of Float](repeating: 0.0)
   var isPlaying = false
@@ -36,12 +36,10 @@ final class AudioEngineManager: @unchecked Sendable {
   @ObservationIgnored private var isSeeking: Bool = false
   @ObservationIgnored private var hasHandledCompletion = false
   @ObservationIgnored private var currentPlaybackID: UUID
-  @ObservationIgnored private var nowPlayingTimer: Timer?
-  @ObservationIgnored private var lockScreenUpdateHandler: (() -> Void)?
+  @ObservationIgnored private var nowPlayingTask: Task<Void, Never>?
   @ObservationIgnored private var playbackContinuation: AsyncStream<Void>.Continuation?
   
-  private let dspProcessor = DSPProcessor()
-  private let isProcessingBuffer = Atomic<Bool>(false)
+  private let audioTapProcessor = AudioTapProcessor()
   
   let playbackCompleted: AsyncStream<Void>
   
@@ -97,7 +95,7 @@ final class AudioEngineManager: @unchecked Sendable {
     
     audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
-    await dspProcessor.reset()
+    await audioTapProcessor.reset()
     lastSeekFrame = 0
     
     guard let url = source.getPlaybackURL() else {
@@ -168,29 +166,19 @@ final class AudioEngineManager: @unchecked Sendable {
   
   private func installAudioTap(on engine: AVAudioEngine) {
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
+    let tapProcessor = audioTapProcessor
     
-    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable [weak self] buffer, _ in
-      guard let self else { return }
-      guard self.isProcessingBuffer.compareExchange(expected: false,
-                                                    desired: true,
-                                                    ordering: .acquiringAndReleasing).exchanged else { return }
-      guard let channelData = buffer.floatChannelData?[0] else {
-        self.isProcessingBuffer.store(false, ordering: .releasing)
-        return
-      }
-      
+    let sampleRate = Float(format.sampleRate)
+    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable buffer, _ in
+      guard let channelData = buffer.floatChannelData?[0] else { return }
       let frameLength = Int(buffer.frameLength)
       let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
-      let sampleRate = Float(format.sampleRate)
-      
-      Task {
-        let result = await self.dspProcessor.processSamples(samples, sampleRate: sampleRate)
-        await MainActor.run {
-          self.audioLevels = result.audioLevels
-          self.visualizerBars = result.visualizerBars
-          self.isProcessingBuffer.store(false, ordering: .releasing)
-        }
-      }
+      tapProcessor.processSamples(samples, sampleRate: sampleRate)
+    }
+    
+    audioTapProcessor.startForwarding { [weak self] result in
+      self?.audioLevels = result.audioLevels
+      self?.visualizerBars = result.visualizerBars
     }
   }
   
@@ -226,6 +214,7 @@ final class AudioEngineManager: @unchecked Sendable {
   func stop() {
     currentPlaybackID = uuid()
     player?.stop()
+    audioTapProcessor.stopForwarding()
     engine?.mainMixerNode.removeTap(onBus: 0)
     engine?.stop()
     isPlaying = false
@@ -291,20 +280,20 @@ final class AudioEngineManager: @unchecked Sendable {
 }
 
 extension AudioEngineManager {
-  func startNowPlayingTimer(updateHandler: @escaping () -> Void) {
+  func startNowPlayingTimer(updateHandler: @escaping @MainActor () -> Void) {
     stopNowPlayingTimer()
-    lockScreenUpdateHandler = updateHandler
-    nowPlayingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-      Task { @MainActor in
-        self?.lockScreenUpdateHandler?()
+    nowPlayingTask = Task { [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(1))
+        guard !Task.isCancelled, self != nil else { break }
+        updateHandler()
       }
     }
   }
   
   func stopNowPlayingTimer() {
-    nowPlayingTimer?.invalidate()
-    nowPlayingTimer = nil
-    lockScreenUpdateHandler = nil
+    nowPlayingTask?.cancel()
+    nowPlayingTask = nil
   }
   
   func startDisplayLink() {

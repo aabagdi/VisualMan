@@ -10,9 +10,10 @@ import Dependencies
 
 @main
 struct VisualManApp: App {
-  @Dependency(AudioEngineManager.self) private var audioEngineManager
   @State private var musicLibraryManager = MusicLibraryAccessManager()
   @State private var playlistManager = AudioPlaylistManager()
+  
+  @Dependency(AudioEngineManager.self) private var audioEngineManager
   
   var body: some Scene {
     WindowGroup {
