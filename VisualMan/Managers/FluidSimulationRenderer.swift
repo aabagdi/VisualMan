@@ -9,7 +9,6 @@ import Metal
 import MetalKit
 import simd
 
-@Observable
 @MainActor
 final class FluidSimulationRenderer {
   let device: MTLDevice
@@ -210,6 +209,9 @@ final class FluidSimulationRenderer {
     }
   }
   
+}
+
+extension FluidSimulationRenderer {
   private func splatForce(commandBuffer: MTLCommandBuffer, pos: SIMD2<Float>,
                           force: SIMD3<Float>, radius: Float) {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
