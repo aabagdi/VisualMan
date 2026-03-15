@@ -33,15 +33,20 @@ struct HomeScreenView: View {
       }
     }
     .tabBarMinimizeBehavior(.onScrollDown)
+    .navigationTitle(selectedTab == .musicLibrary ? "Library" : "")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar(selectedTab == .musicLibrary ? .visible : .hidden, for: .navigationBar)
     .toolbar {
-      ToolbarItem(placement: .topBarLeading) {
-        NavigationLink("Credits", destination: CreditsView())
-      }
-      
-      ToolbarItem(placement: .topBarTrailing) {
-        if selectedTab == .musicLibrary, audioManager.isPlaying || audioManager.currentTime > 0 {
-          NavigationLink(destination: MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)) {
-            Image(systemName: "play.fill")
+      if selectedTab == .musicLibrary {
+        ToolbarItem(placement: .topBarLeading) {
+          NavigationLink("Credits", destination: CreditsView())
+        }
+        
+        ToolbarItem(placement: .topBarTrailing) {
+          if audioManager.isPlaying || audioManager.currentTime > 0 {
+            NavigationLink(destination: MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)) {
+              Image(systemName: "play.fill")
+            }
           }
         }
       }
