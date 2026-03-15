@@ -8,8 +8,14 @@
 import SwiftUI
 
 extension View {
-  func voronoiShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float) -> some View {
-    modifier(VoronoiShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh))
+  func voronoiShader(time: Float,
+                     smoothedBass: Float,
+                     smoothedMid: Float,
+                     smoothedHigh: Float) -> some View {
+    modifier(VoronoiShader(time: time,
+                           smoothedBass: smoothedBass,
+                           smoothedMid: smoothedMid,
+                           smoothedHigh: smoothedHigh))
   }
 }
 
@@ -34,5 +40,3 @@ struct VoronoiShader: ViewModifier {
     }
   }
 }
-
-

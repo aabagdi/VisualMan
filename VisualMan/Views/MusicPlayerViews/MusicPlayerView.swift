@@ -154,13 +154,15 @@ struct MusicPlayerView: View {
     .onDisappear {
       viewModel.cleanup()
     }
-    .alert(viewModel.playingError?.errorDescription ?? "An unknown error occurred during playback.", isPresented: $viewModel.failedPlaying) {
+    .alert(viewModel.playingError?.errorDescription ?? "An unknown error occurred during playback.",
+           isPresented: $viewModel.failedPlaying) {
       Button("Okay", role: .cancel) {
         viewModel.failedPlaying = false
         viewModel.playingError = nil
       }
     }
-    .alert(audioManager.initializationError?.errorDescription ?? "An unknown error occurred during initialization.", isPresented: $audioManager.failedToInitialize) {
+    .alert(audioManager.initializationError?.errorDescription ?? "An unknown error occurred during initialization.",
+           isPresented: $audioManager.failedToInitialize) {
       Button("Okay", role: .cancel) {
         audioManager.failedToInitialize = false
         audioManager.initializationError = nil
@@ -188,7 +190,10 @@ struct MusicPlayerView: View {
   }
   
   @ViewBuilder
-  private func currentShader(currentVisualizer: Visualizers, visualizerBars: [32 of Float], audioLevels: [1024 of Float], albumArt: UIImage?) -> some View {
+  private func currentShader(currentVisualizer: Visualizers,
+                             visualizerBars: [32 of Float],
+                             audioLevels: [1024 of Float],
+                             albumArt: UIImage?) -> some View {
     switch currentVisualizer {
     case .bars:
       BarsVisualizerView(visualizerBars: visualizerBars)

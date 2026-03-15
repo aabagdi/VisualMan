@@ -8,8 +8,16 @@
 import SwiftUI
 
 extension View {
-  func fireworksShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float, peakLevel: Float) -> some View {
-    modifier(FireworksShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh, peakLevel: peakLevel))
+  func fireworksShader(time: Float,
+                       smoothedBass: Float,
+                       smoothedMid: Float,
+                       smoothedHigh: Float,
+                       peakLevel: Float) -> some View {
+    modifier(FireworksShader(time: time,
+                             smoothedBass: smoothedBass,
+                             smoothedMid: smoothedMid,
+                             smoothedHigh: smoothedHigh,
+                             peakLevel: peakLevel))
   }
 }
 

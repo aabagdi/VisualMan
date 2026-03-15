@@ -23,7 +23,7 @@ struct FilesTabView: View {
   @Environment(AudioPlaylistManager.self) private var playlistManager
   
   var body: some View {
-    UIDocumentBrowserViewControllerRepresentable(
+    DocumentBrowserRepresentable(
       onDocumentPicked: { url in
       Task { @MainActor in
         do {
@@ -58,7 +58,10 @@ struct FilesTabView: View {
       showVisualizerButton: audioManager.isPlaying || audioManager.currentTime > 0,
       onVisualizerTapped: { isShowingVisualizer = true }
     )
-    .alert(fileError?.errorDescription ?? "An unknown error occurred while loading the file.", isPresented: $fileLoadingFailed) {
+    .alert(
+      fileError?.errorDescription ?? "An unknown error occurred while loading the file.",
+      isPresented: $fileLoadingFailed
+    ) {
       Button("Okay", role: .cancel) {
         fileLoadingFailed = false
         fileError = nil

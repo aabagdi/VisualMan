@@ -16,7 +16,12 @@ struct CreditsView: View {
             .font(.title2)
             .fontWeight(.bold)
           
-          Text("Special thanks to [Point-Free](https://www.pointfree.co) for their [Dependencies](https://github.com/pointfreeco/swift-dependencies) library.")
+          Text("""
+            Special thanks to \
+            [Point-Free](https://www.pointfree.co) for their \
+            [Dependencies](https://github.com/pointfreeco/swift-dependencies) \
+            library.
+            """)
         }
         
         Divider()

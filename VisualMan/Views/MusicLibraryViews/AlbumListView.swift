@@ -20,7 +20,10 @@ struct AlbumListView: View {
     if searchText.isEmpty {
       return albums
     } else {
-      return albums.filter { $0.representativeItem?.albumTitle?.localizedStandardContains(searchText) ?? false || $0.representativeItem?.artist?.localizedStandardContains(searchText) ?? false }
+      return albums.filter {
+        $0.representativeItem?.albumTitle?.localizedStandardContains(searchText) ?? false
+        || $0.representativeItem?.artist?.localizedStandardContains(searchText) ?? false
+      }
     }
   }
   

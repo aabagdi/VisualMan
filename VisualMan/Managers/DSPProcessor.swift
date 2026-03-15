@@ -13,7 +13,7 @@ actor DSPProcessor {
     let audioLevels: [1024 of Float]
     let visualizerBars: [32 of Float]
   }
-  
+
   private nonisolated(unsafe) var dftSetup: OpaquePointer?
   private var audioLevels = [1024 of Float](repeating: 0.0)
   private var visualizerBars = [32 of Float](repeating: 0.0)
@@ -24,27 +24,27 @@ actor DSPProcessor {
   private var hannWindow = [2048 of Float](repeating: 0.0)
   private var aWeightTable = [1024 of Float](repeating: 0.0)
   private var cachedSampleRate: Float = 0.0
-  
+
   private let numberOfBars = 32
   private let smoothingFactor: Float = 0.8
   private let attackTime: Float = 0.1
   private let releaseTime: Float = 0.6
   private let peakHoldDuration: Float = 10.0
   private let gainHistorySize = 30
-  
+
   init() {
     dftSetup = vDSP_DFT_zop_CreateSetup(nil, 2048, vDSP_DFT_Direction.FORWARD)
     hannWindow.withUnsafeElementPointer { hann in
       vDSP_hann_window(hann, 2048, Int32(vDSP_HANN_NORM))
     }
   }
-  
+
   deinit {
     if let dftSetup {
       vDSP_DFT_DestroySetup(dftSetup)
     }
   }
-  
+
   func reset() {
     audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
@@ -53,8 +53,29 @@ actor DSPProcessor {
     gainHistory = []
     currentGain = 1.0
   }
-  
+
   func processSamples(_ samples: [Float], sampleRate: Float) -> DSPResult {
+    guard let magnitudes = computeFFTMagnitudes(samples) else {
+      return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
+    }
+    
+    var logMagnitudes = normalizeToLogScale(magnitudes, sampleRate: sampleRate)
+    
+    audioLevels.withUnsafeElementPointer { al in
+      logMagnitudes.withUnsafeElementPointer { lm in
+        var interpolation: Float = 0.2
+        vDSP_vintb(al, 1, lm, 1, &interpolation, al, 1, 1024)
+      }
+    }
+    
+    let newBars = createVisualizerBars(from: audioLevels, sampleRate: sampleRate)
+    updateAutomaticGainControl(bars: newBars)
+    smoothVisualizerBars(newBars)
+    
+    return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
+  }
+  
+  private func computeFFTMagnitudes(_ samples: [Float]) -> [1024 of Float]? {
     var realIn = [2048 of Float](repeating: 0.0)
     var imagIn = [2048 of Float](repeating: 0.0)
     var realOut = [2048 of Float](repeating: 0.0)
@@ -70,7 +91,7 @@ actor DSPProcessor {
       }
     }
     
-    guard let dftSetup else { return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars) }
+    guard let dftSetup else { return nil }
     
     realIn.withUnsafeElementPointer { ri in
       imagIn.withUnsafeElementPointer { ii in
@@ -98,6 +119,11 @@ actor DSPProcessor {
       vDSP_vsmul(mag, 1, &scaleFactor, mag, 1, 1024)
     }
     
+    return magnitudes
+  }
+  
+  private func normalizeToLogScale(_ magnitudes: [1024 of Float], sampleRate: Float) -> [1024 of Float] {
+    var magnitudes = magnitudes
     if sampleRate != cachedSampleRate {
       rebuildAWeightTable(sampleRate: sampleRate)
       cachedSampleRate = sampleRate
@@ -134,17 +160,10 @@ actor DSPProcessor {
       }
     }
     
-    audioLevels.withUnsafeElementPointer { al in
-      logMagnitudes.withUnsafeElementPointer { lm in
-        var interpolation: Float = 0.2
-        vDSP_vintb(al, 1, lm, 1, &interpolation, al, 1, 1024)
-      }
-    }
-    
-    let newBars = createVisualizerBars(from: audioLevels, sampleRate: sampleRate)
-    
-    updateAutomaticGainControl(bars: newBars)
-    
+    return logMagnitudes
+  }
+  
+  private func smoothVisualizerBars(_ newBars: [32 of Float]) {
     for i in 0..<numberOfBars {
       let currentLevel = visualizerBars[i]
       let targetLevel = newBars[i] * currentGain
@@ -166,8 +185,6 @@ actor DSPProcessor {
         peakLevels[i] *= 0.95
       }
     }
-    
-    return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
   }
   
   private func updateAutomaticGainControl(bars: [32 of Float]) {

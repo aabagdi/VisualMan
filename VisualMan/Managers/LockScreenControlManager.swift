@@ -63,7 +63,12 @@ final class LockScreenControlManager: @unchecked Sendable {
     audioManager.seek(to: time)
   }
   
-  func updateNowPlayingInfo(title: String?, artist: String?, albumArt: UIImage?, duration: TimeInterval, currentTime: TimeInterval, isPlaying: Bool) {
+  func updateNowPlayingInfo(title: String?,
+                            artist: String?,
+                            albumArt: UIImage?,
+                            duration: TimeInterval,
+                            currentTime: TimeInterval,
+                            isPlaying: Bool) {
     let artwork: UIImage = albumArt ?? placeholder
     
     var nowPlayingInfo = [String: Any]()

@@ -88,7 +88,6 @@ final class AudioEngineManager: @unchecked Sendable {
     engine.connect(player, to: engine.mainMixerNode, format: format)
   }
   
-  
   func play(_ source: AudioSource) async throws {
     if currentAudioSourceURL == source.getPlaybackURL() && isPlaying { return }
     
@@ -162,11 +161,19 @@ final class AudioEngineManager: @unchecked Sendable {
       throw VMError.failedToPlay
     }
     
+    installAudioTap(on: engine)
+    
+    player.play()
+  }
+  
+  private func installAudioTap(on engine: AVAudioEngine) {
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
     
     engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable [weak self] buffer, _ in
       guard let self else { return }
-      guard self.isProcessingBuffer.compareExchange(expected: false, desired: true, ordering: .acquiringAndReleasing).exchanged else { return }
+      guard self.isProcessingBuffer.compareExchange(expected: false,
+                                                    desired: true,
+                                                    ordering: .acquiringAndReleasing).exchanged else { return }
       guard let channelData = buffer.floatChannelData?[0] else {
         self.isProcessingBuffer.store(false, ordering: .releasing)
         return
@@ -185,8 +192,6 @@ final class AudioEngineManager: @unchecked Sendable {
         }
       }
     }
-    
-    player.play()
   }
   
   private func stopSecurityScopedAccess() {
@@ -283,6 +288,9 @@ final class AudioEngineManager: @unchecked Sendable {
     isSeeking = false
   }
   
+}
+
+extension AudioEngineManager {
   func startNowPlayingTimer(updateHandler: @escaping () -> Void) {
     stopNowPlayingTimer()
     lockScreenUpdateHandler = updateHandler

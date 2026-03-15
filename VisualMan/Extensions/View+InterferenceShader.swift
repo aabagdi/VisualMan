@@ -8,8 +8,14 @@
 import SwiftUI
 
 extension View {
-  func interferenceShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float) -> some View {
-    modifier(InterferenceShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh))
+  func interferenceShader(time: Float,
+                          smoothedBass: Float,
+                          smoothedMid: Float,
+                          smoothedHigh: Float) -> some View {
+    modifier(InterferenceShader(time: time,
+                                smoothedBass: smoothedBass,
+                                smoothedMid: smoothedMid,
+                                smoothedHigh: smoothedHigh))
   }
 }
 

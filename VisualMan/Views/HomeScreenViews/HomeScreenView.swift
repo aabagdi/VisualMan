@@ -32,7 +32,8 @@ struct HomeScreenView: View {
               }
               ToolbarItem(placement: .topBarTrailing) {
                 if audioManager.isPlaying || audioManager.currentTime > 0 {
-                  NavigationLink(destination: MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)) {
+                  NavigationLink(destination: MusicPlayerView(playlistManager.audioSources,
+                                                              startingIndex: playlistManager.currentIndex)) {
                     Image(systemName: "play.fill")
                   }
                 }
