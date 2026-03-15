@@ -16,7 +16,7 @@ struct HomeScreenView: View {
   @Environment(MusicLibraryAccessManager.self) private var library
   @Environment(AudioPlaylistManager.self) private var playlistManager
   
-  enum VMTab {
+  private enum VMTab {
     case musicLibrary
     case files
   }

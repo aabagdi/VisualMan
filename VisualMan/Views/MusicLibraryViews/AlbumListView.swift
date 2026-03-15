@@ -10,6 +10,7 @@ import MediaPlayer
 
 struct AlbumListView: View {
   @State private var searchText: String = ""
+  
   @Environment(MusicLibraryAccessManager.self) private var library
 
   let albums: [MPMediaItemCollection]
