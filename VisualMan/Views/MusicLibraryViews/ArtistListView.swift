@@ -27,15 +27,11 @@ struct ArtistListView: View {
   var body: some View {
     Section {
       if !artists.isEmpty {
-        List {
-          Section {
-            ForEach(searchResults, id: \.representativeItem?.persistentID) { artist in
-              NavigationLink(destination: ArtistDetailView(albums: albums.filter { album in
-                album.representativeItem?.artist == artist.representativeItem?.artist
-              })) {
-                Text(artist.representativeItem?.artist ?? "Unknown")
-              }
-            }
+        List(searchResults, id: \.representativeItem?.persistentID) { artist in
+          NavigationLink(destination: ArtistDetailView(albums: albums.filter { album in
+            album.representativeItem?.artist == artist.representativeItem?.artist
+          })) {
+            Text(artist.representativeItem?.artist ?? "Unknown")
           }
         }
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
