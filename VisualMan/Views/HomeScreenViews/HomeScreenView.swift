@@ -12,14 +12,14 @@ struct HomeScreenView: View {
   @State private var isShowingMusicPlayer = false
   @State private var selectedTab: VMTab = .musicLibrary
   
+  @Environment(AudioEngineManager.self) private var audioManager
+  @Environment(MusicLibraryAccessManager.self) private var library
+  @Environment(AudioPlaylistManager.self) private var playlistManager
+  
   enum VMTab {
     case musicLibrary
     case files
   }
-  
-  @Environment(AudioEngineManager.self) private var audioManager
-  @Environment(MusicLibraryAccessManager.self) private var library
-  @Environment(AudioPlaylistManager.self) private var playlistManager
   
   var body: some View {
     TabView(selection: $selectedTab) {
