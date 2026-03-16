@@ -24,7 +24,10 @@ struct NavierStokesMetalView: UIViewRepresentable {
     mtkView.framebufferOnly = false
     mtkView.isPaused = false
     mtkView.enableSetNeedsDisplay = false
-    mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0.02, alpha: 1)
+    mtkView.clearColor = MTLClearColor(red: 0,
+                                        green: 0,
+                                        blue: 0.02,
+                                        alpha: 1)
     
     if let metalLayer = mtkView.layer as? CAMetalLayer {
       renderer.commandQueue.addResidencySet(metalLayer.residencySet)
@@ -58,7 +61,10 @@ struct NavierStokesMetalView: UIViewRepresentable {
     
     func draw(in view: MTKView) {
       guard let drawable = view.currentDrawable else { return }
-      renderer.update(bass: bass, mid: mid, high: high, drawable: drawable)
+      renderer.update(bass: bass,
+                      mid: mid,
+                      high: high,
+                      drawable: drawable)
     }
   }
 }

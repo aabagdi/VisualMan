@@ -140,7 +140,10 @@ struct OscilloscopeVisualizerView: View {
         for layer in glowLayers {
           context.stroke(
             waveform,
-            with: .color(Color(hue: 0.33, saturation: 0.8, brightness: brightness, opacity: layer.opacity)),
+            with: .color(Color(hue: 0.33,
+                              saturation: 0.8,
+                              brightness: brightness,
+                              opacity: layer.opacity)),
             lineWidth: layer.width
           )
         }

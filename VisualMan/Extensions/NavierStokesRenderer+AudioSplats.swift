@@ -22,12 +22,24 @@ extension NavierStokesRenderer {
     prevBass = bass
     prevMid = mid
 
-    injectVortex(encoder: encoder, center: center, s: s, audioEnergy: audioEnergy)
-    injectBass(encoder: encoder, center: center, s: s,
-               bass: bass, bassOnset: bassOnset)
-    injectMid(encoder: encoder, center: center, s: s,
-              mid: mid, midOnset: midOnset)
-    injectHigh(encoder: encoder, center: center, s: s, high: high)
+    injectVortex(encoder: encoder,
+                 center: center,
+                 s: s,
+                 audioEnergy: audioEnergy)
+    injectBass(encoder: encoder,
+               center: center,
+               s: s,
+               bass: bass,
+               bassOnset: bassOnset)
+    injectMid(encoder: encoder,
+              center: center,
+              s: s,
+              mid: mid,
+              midOnset: midOnset)
+    injectHigh(encoder: encoder,
+               center: center,
+               s: s,
+               high: high)
   }
 
   private func injectVortex(encoder: any MTL4ComputeCommandEncoder,
@@ -41,8 +53,10 @@ extension NavierStokesRenderer {
       if i > 0 { encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch) }
       let a = vortexAngle + Float(i) * .pi
       let pos = SIMD2<Float>(center + cos(a) * vortexR, center + sin(a) * vortexR)
-      splatForce(encoder: encoder, pos: pos,
-                 force: SIMD3<Float>(-sin(a) * strength, cos(a) * strength, 0), radius: 100.0 * s)
+      splatForce(encoder: encoder,
+                 pos: pos,
+                 force: SIMD3<Float>(-sin(a) * strength, cos(a) * strength, 0),
+                 radius: 100.0 * s)
     }
     let hue = fmod(time * 0.1, 1.0)
     let color = SIMD3<Float>(
@@ -50,8 +64,10 @@ extension NavierStokesRenderer {
       0.15 + 0.2 * sin(hue * .pi * 2.0 + 2.094),
       0.25 + 0.2 * sin(hue * .pi * 2.0 + 4.189)
     )
-    splatDye(encoder: encoder, pos: SIMD2<Float>(center, center),
-             color: color * (0.3 + audioEnergy * 0.7), radius: 90.0 * s)
+    splatDye(encoder: encoder,
+             pos: SIMD2<Float>(center, center),
+             color: color * (0.3 + audioEnergy * 0.7),
+             radius: 90.0 * s)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
   }
 
@@ -65,19 +81,20 @@ extension NavierStokesRenderer {
 
     guard bass > 0.03 else { return }
 
-    // Radial shockwave
     let angle = time * 0.5
     let pulseR: Float = 100.0 * s + b2 * 120.0 * s
     let pulsePos = SIMD2<Float>(center + cos(angle) * pulseR * 0.3,
                                  center + sin(angle) * pulseR * 0.3)
     let forceScale: Float = bassBeat ? 350.0 : 200.0
-    splatForce(encoder: encoder, pos: pulsePos,
+    splatForce(encoder: encoder,
+               pos: pulsePos,
                force: SIMD3<Float>(cos(angle) * b2 * forceScale * s,
                                     sin(angle) * b2 * forceScale * s, 0),
                radius: (80.0 + b2 * 80.0) * s)
     let bassHue = fmod(time * 0.15, 1.0)
     let bright: Float = bassBeat ? 3.0 : 1.5
-    splatDye(encoder: encoder, pos: pulsePos,
+    splatDye(encoder: encoder,
+             pos: pulsePos,
              color: SIMD3<Float>(b2 * bright * (1.5 + 0.5 * sin(bassHue * .pi * 2.0)),
                                   b2 * bright * (0.4 + 0.4 * sin(bassHue * .pi * 2.0 + 1.0)),
                                   b2 * bright * (0.15 + 0.3 * sin(bassHue * .pi * 2.0 + 2.5))),
@@ -91,8 +108,10 @@ extension NavierStokesRenderer {
         let a = burstAngle + Float(i) * 2.094
         let pos = SIMD2<Float>(center + cos(a) * 60.0 * s, center + sin(a) * 60.0 * s)
         let f = bassOnset * 300.0 * s
-        splatForce(encoder: encoder, pos: pos,
-                   force: SIMD3<Float>(cos(a) * f, sin(a) * f, 0), radius: 120.0 * s)
+        splatForce(encoder: encoder,
+                   pos: pos,
+                   force: SIMD3<Float>(cos(a) * f, sin(a) * f, 0),
+                   radius: 120.0 * s)
       }
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
@@ -115,19 +134,24 @@ extension NavierStokesRenderer {
       let pos = SIMD2<Float>(center + cos(angle) * orbitR, center + sin(angle) * orbitR)
       let tx = -sin(angle) * m2 * 250.0 * s
       let ty = cos(angle) * m2 * 250.0 * s
-      splatForce(encoder: encoder, pos: pos,
-                 force: SIMD3<Float>(tx, ty, 0), radius: (50.0 + m2 * 40.0) * s)
+      splatForce(encoder: encoder,
+                 pos: pos,
+                 force: SIMD3<Float>(tx, ty, 0),
+                 radius: (50.0 + m2 * 40.0) * s)
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
       let cAngle = angle + 0.5
       let cPos = SIMD2<Float>(center + cos(cAngle) * orbitR * 0.5,
                                center + sin(cAngle) * orbitR * 0.5)
-      splatForce(encoder: encoder, pos: cPos,
-                 force: SIMD3<Float>(-tx * 0.4, -ty * 0.4, 0), radius: 40.0 * s)
+      splatForce(encoder: encoder,
+                 pos: cPos,
+                 force: SIMD3<Float>(-tx * 0.4, -ty * 0.4, 0),
+                 radius: 40.0 * s)
 
       let midHue = fmod(time * 0.12 + Float(i) * 0.25, 1.0)
       let bright: Float = midBeat ? 2.5 : 1.2
-      splatDye(encoder: encoder, pos: pos,
+      splatDye(encoder: encoder,
+               pos: pos,
                color: SIMD3<Float>(m2 * bright * (0.3 + 0.5 * sin(midHue * .pi * 2.0)),
                                     m2 * bright * (0.8 + 0.5 * sin(midHue * .pi * 2.0 + 2.0)),
                                     m2 * bright * (1.2 + 0.4 * sin(midHue * .pi * 2.0 + 4.0))),
@@ -150,12 +174,14 @@ extension NavierStokesRenderer {
       let pos = SIMD2<Float>(center + cos(a) * r, center + sin(a) * r)
 
       let f = h2 * 150.0 * s
-      splatForce(encoder: encoder, pos: pos,
+      splatForce(encoder: encoder,
+                 pos: pos,
                  force: SIMD3<Float>(cos(a + 1.5) * f, sin(a + 1.5) * f, 0),
                  radius: (20.0 + h2 * 25.0) * s)
 
       let hue = fmod(time * 0.25 + Float(i) * 0.2, 1.0)
-      splatDye(encoder: encoder, pos: pos,
+      splatDye(encoder: encoder,
+               pos: pos,
                color: SIMD3<Float>(h2 * (1.2 + 1.0 * sin(hue * .pi * 2.0)),
                                     h2 * (0.8 + 1.2 * sin(hue * .pi * 2.0 + 2.094)),
                                     h2 * (1.5 + 1.0 * sin(hue * .pi * 2.0 + 4.189))),

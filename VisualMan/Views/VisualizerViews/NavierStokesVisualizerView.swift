@@ -56,9 +56,9 @@ struct NavierStokesVisualizerView: View {
       Group {
         if let renderer {
           NavierStokesMetalView(renderer: renderer,
-                         bass: smoothedBass,
-                         mid: smoothedMid,
-                         high: smoothedHigh)
+                                bass: smoothedBass,
+                                mid: smoothedMid,
+                                high: smoothedHigh)
         } else {
           Color.black
         }

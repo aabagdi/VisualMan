@@ -168,7 +168,10 @@ final class NavierStokesRenderer {
     return addr
   }
   
-  func update(bass: Float, mid: Float, high: Float, drawable: CAMetalDrawable) {
+  func update(bass: Float,
+              mid: Float,
+              high: Float,
+              drawable: CAMetalDrawable) {
     frameNumber += 1
     let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
     
@@ -188,6 +191,22 @@ final class NavierStokesRenderer {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
+    runSimulationPass(encoder: encoder, bass: bass, mid: mid, high: high,
+                      output: drawable.texture)
+    
+    encoder.endEncoding()
+    commandBuffer.endCommandBuffer()
+    
+    commandQueue.waitForDrawable(drawable)
+    commandQueue.commit([commandBuffer])
+    commandQueue.signalEvent(sharedEvent, value: frameNumber)
+    commandQueue.signalDrawable(drawable)
+    drawable.present()
+  }
+  
+  private func runSimulationPass(encoder: any MTL4ComputeCommandEncoder,
+                                 bass: Float, mid: Float, high: Float,
+                                 output: MTLTexture) {
     injectAudioSplats(encoder: encoder, bass: bass, mid: mid, high: high)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
@@ -202,18 +221,16 @@ final class NavierStokesRenderer {
     applyVorticityForce(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    advect(encoder: encoder,
-           velocityIn: velocityA, fieldIn: velocityA, fieldOut: velocityB,
-           dissipation: velocityDissipation)
+    advect(encoder: encoder, velocityIn: velocityA, fieldIn: velocityA,
+           fieldOut: velocityB, dissipation: velocityDissipation)
     swap(&velocityA, &velocityB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     project(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    advect(encoder: encoder,
-           velocityIn: velocityA, fieldIn: dyeA, fieldOut: dyeB,
-           dissipation: dyeDissipation)
+    advect(encoder: encoder, velocityIn: velocityA, fieldIn: dyeA,
+           fieldOut: dyeB, dissipation: dyeDissipation)
     swap(&dyeA, &dyeB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
@@ -224,43 +241,40 @@ final class NavierStokesRenderer {
     swap(&dyeA, &dyeB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    render(encoder: encoder, output: drawable.texture)
-    
-    encoder.endEncoding()
-    commandBuffer.endCommandBuffer()
-    
-    commandQueue.waitForDrawable(drawable)
-    commandQueue.commit([commandBuffer])
-    commandQueue.signalEvent(sharedEvent, value: frameNumber)
-    commandQueue.signalDrawable(drawable)
-    drawable.present()
+    render(encoder: encoder, output: output)
   }
   
 }
 
 extension NavierStokesRenderer {
-  func splatForce(encoder: any MTL4ComputeCommandEncoder, pos: SIMD2<Float>,
-                  force: SIMD3<Float>, radius: Float) {
+  func splatForce(encoder: any MTL4ComputeCommandEncoder,
+                  pos: SIMD2<Float>,
+                  force: SIMD3<Float>,
+                  radius: Float) {
     encoder.setComputePipelineState(splatPipeline)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
     argumentTable.setAddress(writeUniform(pos), index: 0)
     argumentTable.setAddress(writeUniform(force), index: 1)
     argumentTable.setAddress(writeUniform(radius), index: 2)
-    dispatchGrid(encoder: encoder, pipeline: splatPipeline)
+    dispatchGrid(encoder: encoder)
   }
   
-  func splatDye(encoder: any MTL4ComputeCommandEncoder, pos: SIMD2<Float>,
-                color: SIMD3<Float>, radius: Float) {
+  func splatDye(encoder: any MTL4ComputeCommandEncoder,
+                pos: SIMD2<Float>,
+                color: SIMD3<Float>,
+                radius: Float) {
     encoder.setComputePipelineState(splatPipeline)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setAddress(writeUniform(pos), index: 0)
     argumentTable.setAddress(writeUniform(color), index: 1)
     argumentTable.setAddress(writeUniform(radius), index: 2)
-    dispatchGrid(encoder: encoder, pipeline: splatPipeline)
+    dispatchGrid(encoder: encoder)
   }
   
   private func advect(encoder: any MTL4ComputeCommandEncoder,
-                      velocityIn: MTLTexture, fieldIn: MTLTexture, fieldOut: MTLTexture,
+                      velocityIn: MTLTexture,
+                      fieldIn: MTLTexture,
+                      fieldOut: MTLTexture,
                       dissipation: Float) {
     encoder.setComputePipelineState(advectPipeline)
     argumentTable.setTexture(velocityIn.gpuResourceID, index: 0)
@@ -271,14 +285,14 @@ extension NavierStokesRenderer {
     argumentTable.setAddress(writeUniform(dtVal), index: 0)
     argumentTable.setAddress(writeUniform(dissipation), index: 1)
     
-    dispatchGrid(encoder: encoder, pipeline: advectPipeline)
+    dispatchGrid(encoder: encoder)
   }
   
   private func computeVorticity(encoder: any MTL4ComputeCommandEncoder) {
     encoder.setComputePipelineState(vorticityPipeline)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
     argumentTable.setTexture(vorticityTexture.gpuResourceID, index: 1)
-    dispatchGrid(encoder: encoder, pipeline: vorticityPipeline)
+    dispatchGrid(encoder: encoder)
   }
   
   private func applyVorticityForce(encoder: any MTL4ComputeCommandEncoder) {
@@ -286,7 +300,7 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(vorticityTexture.gpuResourceID, index: 0)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
     argumentTable.setAddress(writeUniform(vorticityStrength), index: 0)
-    dispatchGrid(encoder: encoder, pipeline: vorticityForcePipeline)
+    dispatchGrid(encoder: encoder)
   }
   
   private func diffuseField(encoder: any MTL4ComputeCommandEncoder,
@@ -301,7 +315,7 @@ extension NavierStokesRenderer {
       argumentTable.setTexture(fieldB.gpuResourceID, index: 1)
       argumentTable.setAddress(writeUniform(alpha), index: 0)
       argumentTable.setAddress(writeUniform(rBeta), index: 1)
-      dispatchGrid(encoder: encoder, pipeline: diffusePipeline)
+      dispatchGrid(encoder: encoder)
       swap(&fieldA, &fieldB)
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
@@ -325,7 +339,7 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
     argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
     
-    dispatchGrid(encoder: encoder, pipeline: divergencePipeline)
+    dispatchGrid(encoder: encoder)
   }
   
   private func jacobiIteration(encoder: any MTL4ComputeCommandEncoder) {
@@ -334,7 +348,7 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
     argumentTable.setTexture(pressureTemp.gpuResourceID, index: 2)
     
-    dispatchGrid(encoder: encoder, pipeline: jacobiPipeline)
+    dispatchGrid(encoder: encoder)
   }
   
   private func gradientSubtract(encoder: any MTL4ComputeCommandEncoder) {
@@ -342,7 +356,7 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(pressure.gpuResourceID, index: 0)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
     
-    dispatchGrid(encoder: encoder, pipeline: gradientSubtractPipeline)
+    dispatchGrid(encoder: encoder)
   }
   
   private func blurDyeH(encoder: any MTL4ComputeCommandEncoder) {
@@ -350,7 +364,7 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
     
-    dispatchGrid(encoder: encoder, pipeline: blurHPipeline)
+    dispatchGrid(encoder: encoder)
   }
   
   private func blurDyeV(encoder: any MTL4ComputeCommandEncoder) {
@@ -358,30 +372,23 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
     
-    dispatchGrid(encoder: encoder, pipeline: blurVPipeline)
+    dispatchGrid(encoder: encoder)
   }
   
   private func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture) {
     encoder.setComputePipelineState(renderPipeline)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(output.gpuResourceID, index: 1)
-    
-    let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
-    let threadGroups = MTLSize(
-      width: (output.width + 15) / 16,
-      height: (output.height + 15) / 16,
-      depth: 1
-    )
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: threadGroups,
-                                threadsPerThreadgroup: threadGroupSize)
+    dispatchGrid(encoder: encoder, width: output.width, height: output.height)
   }
   
-  private func dispatchGrid(encoder: any MTL4ComputeCommandEncoder,
-                            pipeline: MTLComputePipelineState) {
+  private func dispatchGrid(encoder: any MTL4ComputeCommandEncoder, width: Int? = nil, height: Int? = nil) {
+    let w = width ?? gridSize
+    let h = height ?? gridSize
     let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
     let threadGroups = MTLSize(
-      width: (gridSize + 15) / 16,
-      height: (gridSize + 15) / 16,
+      width: (w + 15) / 16,
+      height: (h + 15) / 16,
       depth: 1
     )
     encoder.dispatchThreadgroups(threadgroupsPerGrid: threadGroups,

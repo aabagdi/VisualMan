@@ -54,7 +54,10 @@ struct JuliaVisualizerView: View {
   var body: some View {
     TimelineView(.animation) { timeline in
       Rectangle()
-        .juliaShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
+        .juliaShader(time: time,
+                     smoothedBass: smoothedBass,
+                     smoothedMid: smoothedMid,
+                     smoothedHigh: smoothedHigh)
         .onChange(of: timeline.date) {
           withAnimation(.easeInOut) {
             smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
