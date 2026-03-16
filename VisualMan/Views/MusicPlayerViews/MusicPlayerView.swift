@@ -41,6 +41,8 @@ struct MusicPlayerView: View {
     case oscilloscope = "Oscilloscope"
     case sphereMesh = "Sphere"
 
+    case plasma = "Plasma"
+    case metaball = "Lava Lamp"
     case fluidSim = "Fluid"
     case navierStokes = "Navier-Stokes"
   }
@@ -222,6 +224,10 @@ struct MusicPlayerView: View {
     case .sphereMesh:
       SphereMeshVisualizerView(audioLevels: audioLevels)
 
+    case .plasma:
+      PlasmaVisualizerView(audioLevels: audioLevels)
+    case .metaball:
+      MetaballVisualizerView(audioLevels: audioLevels)
     case .fluidSim:
       FluidSimVisualizerView(audioLevels: audioLevels)
     case .navierStokes:
