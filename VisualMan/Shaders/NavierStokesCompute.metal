@@ -40,6 +40,14 @@ kernel void fluidAdvect(texture2d<float, access::read> velocityIn [[texture(0)]]
   
   float2 pos = float2(gid) + 0.5;
   float4 vel = velocityIn.read(gid);
+  
+  if (any(isnan(vel.xy)) || any(isinf(vel.xy))) {
+    vel = float4(0);
+  }
+  float speed = length(vel.xy);
+  if (speed > 500.0) {
+    vel.xy *= 500.0 / speed;
+  }
   float2 backPos = pos - dt * vel.xy;
   
   float2 uv = backPos / float2(w, h);
@@ -116,6 +124,56 @@ kernel void fluidGradientSubtract(texture2d<float, access::read> pressure [[text
   velocity.write(vel, gid);
 }
 
+kernel void fluidVorticity(texture2d<float, access::read> velocity [[texture(0)]],
+                           texture2d<float, access::write> vorticityOut [[texture(1)]],
+                           uint2 gid [[thread_position_in_grid]]) {
+  uint w = velocity.get_width();
+  uint h = velocity.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  
+  uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
+  uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
+  uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
+  uint2 up    = uint2(gid.x, min(gid.y + 1, h - 1));
+  
+  float curl = 0.5 * (velocity.read(right).y - velocity.read(left).y
+                     - velocity.read(up).x    + velocity.read(down).x);
+  vorticityOut.write(float4(curl, 0, 0, 0), gid);
+}
+
+kernel void fluidVorticityForce(texture2d<float, access::read> vorticity [[texture(0)]],
+                                texture2d<float, access::read_write> velocity [[texture(1)]],
+                                constant float &strength [[buffer(0)]],
+                                uint2 gid [[thread_position_in_grid]]) {
+  uint w = vorticity.get_width();
+  uint h = vorticity.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  
+  uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
+  uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
+  uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
+  uint2 up    = uint2(gid.x, min(gid.y + 1, h - 1));
+  
+  float2 gradAbs = 0.5 * float2(abs(vorticity.read(right).x) - abs(vorticity.read(left).x),
+                                  abs(vorticity.read(up).x)    - abs(vorticity.read(down).x));
+  float len = length(gradAbs);
+  if (len < 1e-5) return;
+  
+  float2 N = gradAbs / len;
+  float curl = vorticity.read(gid).x;
+  
+  float2 force = strength * float2(N.y, -N.x) * curl;
+  
+  float4 vel = velocity.read(gid);
+  vel.xy += force;
+  
+  float newSpeed = length(vel.xy);
+  if (newSpeed > 400.0) {
+    vel.xy *= 400.0 / newSpeed;
+  }
+  velocity.write(vel, gid);
+}
+
 constant float blurWeights[9] = { 0.026, 0.066, 0.121, 0.176, 0.222, 0.176, 0.121, 0.066, 0.026 };
 
 kernel void fluidBlurH(texture2d<float, access::read> fieldIn [[texture(0)]],
@@ -127,7 +185,7 @@ kernel void fluidBlurH(texture2d<float, access::read> fieldIn [[texture(0)]],
   
   float4 sum = float4(0.0);
   for (int i = -4; i <= 4; i++) {
-    uint2 coord = uint2(clamp(int(gid.x) + i, 0, int(w - 1)), gid.y);
+    uint2 coord = uint2(clamp(int(gid.x) + i * 2, 0, int(w - 1)), gid.y);
     sum += fieldIn.read(coord) * blurWeights[i + 4];
   }
   fieldOut.write(sum, gid);
@@ -142,7 +200,7 @@ kernel void fluidBlurV(texture2d<float, access::read> fieldIn [[texture(0)]],
   
   float4 sum = float4(0.0);
   for (int i = -4; i <= 4; i++) {
-    uint2 coord = uint2(gid.x, clamp(int(gid.y) + i, 0, int(h - 1)));
+    uint2 coord = uint2(gid.x, clamp(int(gid.y) + i * 2, 0, int(h - 1)));
     sum += fieldIn.read(coord) * blurWeights[i + 4];
   }
   fieldOut.write(sum, gid);
@@ -194,8 +252,14 @@ kernel void fluidRender(texture2d<float, access::read> dye [[texture(0)]],
   float4 color = sampleBicubic(dye, uv);
   
   float3 bg = float3(0.0, 0.0, 0.02);
-  float3 finalColor = bg + color.rgb;
-  finalColor = tanh(finalColor * 1.5);
+  float3 c = bg + color.rgb;
   
-  output.write(float4(finalColor, 1.0), gid);
+  float luminance = dot(c, float3(0.299, 0.587, 0.114));
+  c = mix(float3(luminance), c, 1.4);
+  
+  c = c / (1.0 + c);
+  
+  c = smoothstep(0.0, 1.0, c);
+  
+  output.write(float4(c, 1.0), gid);
 }

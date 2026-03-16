@@ -12,6 +12,7 @@ import Dependencies
 struct VisualManApp: App {
   @State private var musicLibraryManager = MusicLibraryAccessManager()
   @State private var playlistManager = AudioPlaylistManager()
+  @State private var showLowPowerAlert = false
   
   @Dependency(AudioEngineManager.self) private var audioEngineManager
   
@@ -20,10 +21,23 @@ struct VisualManApp: App {
       HomeScreenView()
         .onAppear {
           musicLibraryManager.requestMusicLibraryAccess()
+          if ProcessInfo.processInfo.isLowPowerModeEnabled {
+            showLowPowerAlert = true
+          }
         }
-      .environment(musicLibraryManager)
-      .environment(playlistManager)
-      .environment(audioEngineManager)
+        .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
+          if ProcessInfo.processInfo.isLowPowerModeEnabled {
+            showLowPowerAlert = true
+          }
+        }
+        .alert("Low Power Mode Enabled", isPresented: $showLowPowerAlert) {
+          Button("OK") { }
+        } message: {
+          Text("VisualMan performs best with Low Power Mode turned off.")
+        }
+        .environment(musicLibraryManager)
+        .environment(playlistManager)
+        .environment(audioEngineManager)
     }
   }
 }

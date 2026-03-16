@@ -54,13 +54,10 @@ struct NavierStokesMetalView: UIViewRepresentable {
       self.renderer = renderer
     }
     
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-      renderer.ensureOutputTexture(width: Int(size.width), height: Int(size.height))
-    }
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
     
     func draw(in view: MTKView) {
       guard let drawable = view.currentDrawable else { return }
-      renderer.ensureOutputTexture(width: drawable.texture.width, height: drawable.texture.height)
       renderer.update(bass: bass, mid: mid, high: high, drawable: drawable)
     }
   }

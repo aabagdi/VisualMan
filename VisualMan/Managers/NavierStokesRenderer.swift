@@ -14,10 +14,12 @@ final class NavierStokesRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
   
-  private let gridSize: Int = 1536
+  private let gridSize: Int = 1680
   
   private var splatPipeline: MTLComputePipelineState!
   private var advectPipeline: MTLComputePipelineState!
+  private var vorticityPipeline: MTLComputePipelineState!
+  private var vorticityForcePipeline: MTLComputePipelineState!
   private var divergencePipeline: MTLComputePipelineState!
   private var jacobiPipeline: MTLComputePipelineState!
   private var gradientSubtractPipeline: MTLComputePipelineState!
@@ -32,16 +34,15 @@ final class NavierStokesRenderer {
   private var divergenceTexture: MTLTexture!
   private var dyeA: MTLTexture!
   private var dyeB: MTLTexture!
-  
-  private(set) var outputTexture: MTLTexture?
+  private var vorticityTexture: MTLTexture!
   
   private var time: Float = 0
   private let dt: Float = 1.0 / 60.0
-  private let velocityDissipation: Float = 0.995
-  private let dyeDissipation: Float = 0.99
-  private let jacobiIterations: Int = 20
+  private let velocityDissipation: Float = 0.99
+  private let dyeDissipation: Float = 0.98
+  private let jacobiIterations: Int = 10
+  private let vorticityStrength: Float = 3.0
   
-  // Metal 4 infrastructure — triple-buffered
   private static let maxFramesInFlight: UInt64 = 3
   private var commandAllocators: [any MTL4CommandAllocator] = []
   private var commandBuffer: any MTL4CommandBuffer
@@ -101,9 +102,10 @@ final class NavierStokesRenderer {
     residencySet.addAllocation(divergenceTexture!)
     residencySet.addAllocation(dyeA!)
     residencySet.addAllocation(dyeB!)
-    for buf in uniformBuffers {
-      residencySet.addAllocation(buf)
-    }
+    residencySet.addAllocation(vorticityTexture!)
+    
+    for buf in uniformBuffers { residencySet.addAllocation(buf) }
+    
     residencySet.commit()
     
     commandQueue.addResidencySet(residencySet)
@@ -119,6 +121,8 @@ final class NavierStokesRenderer {
     
     splatPipeline = makePipeline("fluidSplat")
     advectPipeline = makePipeline("fluidAdvect")
+    vorticityPipeline = makePipeline("fluidVorticity")
+    vorticityForcePipeline = makePipeline("fluidVorticityForce")
     divergencePipeline = makePipeline("fluidDivergence")
     jacobiPipeline = makePipeline("fluidJacobi")
     gradientSubtractPipeline = makePipeline("fluidGradientSubtract")
@@ -135,6 +139,7 @@ final class NavierStokesRenderer {
     divergenceTexture = makeTexture(format: .r16Float)
     dyeA = makeTexture(format: .rgba16Float)
     dyeB = makeTexture(format: .rgba16Float)
+    vorticityTexture = makeTexture(format: .r16Float)
   }
   
   private func makeTexture(format: MTLPixelFormat) -> MTLTexture? {
@@ -149,27 +154,6 @@ final class NavierStokesRenderer {
     return device.makeTexture(descriptor: desc)
   }
   
-  func ensureOutputTexture(width: Int, height: Int) {
-    if let existing = outputTexture,
-       existing.width == width, existing.height == height {
-      return
-    }
-    let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm,
-      width: width,
-      height: height,
-      mipmapped: false
-    )
-    desc.usage = [.shaderRead, .shaderWrite, .renderTarget]
-    desc.storageMode = .private
-    outputTexture = device.makeTexture(descriptor: desc)
-    
-    if let outputTexture {
-      residencySet.addAllocation(outputTexture)
-      residencySet.commit()
-    }
-  }
-  
   private func writeUniform<T>(_ value: T) -> MTLGPUAddress {
     let aligned = (uniformOffset + 15) & ~15
     (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
@@ -182,8 +166,6 @@ final class NavierStokesRenderer {
     frameNumber += 1
     let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
     
-    // Wait only for the frame that previously used this allocator/buffer slot.
-    // For the first maxFramesInFlight frames, the wait value is <= 0 (already signaled).
     let waitValue = frameNumber > Self.maxFramesInFlight
       ? frameNumber - Self.maxFramesInFlight
       : 0
@@ -208,6 +190,13 @@ final class NavierStokesRenderer {
            velocityIn: velocityA, fieldIn: velocityA, fieldOut: velocityB,
            dissipation: velocityDissipation)
     swap(&velocityA, &velocityB)
+    
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
+    // Vorticity confinement: amplify existing swirls for structured, artistic flow
+    computeVorticity(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    applyVorticityForce(encoder: encoder)
     
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
@@ -240,30 +229,7 @@ final class NavierStokesRenderer {
     
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    if let output = outputTexture {
-      render(encoder: encoder, output: output)
-    }
-    
-    if let output = outputTexture {
-      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit)
-      
-      let srcSize = MTLSize(
-        width: min(output.width, drawable.texture.width),
-        height: min(output.height, drawable.texture.height),
-        depth: 1
-      )
-      encoder.copy(
-        sourceTexture: output,
-        sourceSlice: 0,
-        sourceLevel: 0,
-        sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
-        sourceSize: srcSize,
-        destinationTexture: drawable.texture,
-        destinationSlice: 0,
-        destinationLevel: 0,
-        destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0)
-      )
-    }
+    render(encoder: encoder, output: drawable.texture)
     
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -278,67 +244,99 @@ final class NavierStokesRenderer {
   private func injectAudioSplats(encoder: any MTL4ComputeCommandEncoder,
                                  bass: Float, mid: Float, high: Float) {
     let center = Float(gridSize) / 2.0
+    let s = Float(gridSize) / 1536.0
     let audioEnergy = (bass + mid + high) / 3.0
+    
+    let vortexAngle = time * 0.3
+    let vortexR: Float = 80.0 * s
+    let vortexStrength: Float = 8.0 * s * (0.3 + audioEnergy * 0.7)
+    for i in 0..<2 {
+      let a = vortexAngle + Float(i) * .pi
+      let pos = SIMD2<Float>(center + cos(a) * vortexR, center + sin(a) * vortexR)
+      let tangent = SIMD3<Float>(-sin(a) * vortexStrength, cos(a) * vortexStrength, 0)
+      splatForce(encoder: encoder, pos: pos, force: tangent, radius: 100.0 * s)
+    }
+
+    let hue = fmod(time * 0.1, 1.0)
+    let ambientColor = SIMD3<Float>(
+      0.15 + 0.1 * sin(hue * .pi * 2.0),
+      0.08 + 0.1 * sin(hue * .pi * 2.0 + 2.094),
+      0.12 + 0.1 * sin(hue * .pi * 2.0 + 4.189)
+    )
+    splatDye(encoder: encoder, pos: SIMD2<Float>(center, center),
+             color: ambientColor * (0.3 + audioEnergy * 0.7), radius: 90.0 * s)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     if bass > 0.01 {
       let angle = time * 0.5
-      let forceX = cos(angle) * bass * 450.0
-      let forceY = sin(angle) * bass * 450.0
-      let offset = bass * 120.0
-      let splatPos = SIMD2<Float>(center + cos(angle) * offset, center + sin(angle) * offset)
-      
-      splatForce(encoder: encoder, pos: splatPos,
-                 force: SIMD3<Float>(forceX, forceY, 0), radius: 150.0 + bass * 90.0)
-      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-      
-      let dyeColor = SIMD3<Float>(bass * 1.5, bass * 0.3, bass * 0.1)
-      splatDye(encoder: encoder, pos: splatPos,
-               color: dyeColor, radius: 120.0 + bass * 60.0)
+      let pulseR: Float = 100.0 * s + bass * 80.0 * s
+      let pulsePos = SIMD2<Float>(center + cos(angle) * pulseR * 0.3,
+                                   center + sin(angle) * pulseR * 0.3)
+      // Radial outward push (like a shockwave)
+      let radialX = cos(angle) * bass * 180.0 * s
+      let radialY = sin(angle) * bass * 180.0 * s
+      splatForce(encoder: encoder, pos: pulsePos,
+                 force: SIMD3<Float>(radialX, radialY, 0), radius: (100.0 + bass * 50.0) * s)
+      // Warm dye with time-varying hue
+      let bassHue = fmod(time * 0.15, 1.0)
+      let dyeColor = SIMD3<Float>(
+        bass * (1.2 + 0.3 * sin(bassHue * .pi * 2.0)),
+        bass * (0.3 + 0.4 * sin(bassHue * .pi * 2.0 + 1.0)),
+        bass * (0.1 + 0.3 * sin(bassHue * .pi * 2.0 + 2.5))
+      )
+      splatDye(encoder: encoder, pos: pulsePos,
+               color: dyeColor, radius: (80.0 + bass * 40.0) * s)
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
     
     if mid > 0.01 {
       for i in 0..<3 {
-        let angle = time * 1.2 + Float(i) * 2.094
-        let orbitRadius: Float = 300.0 + mid * 120.0
-        let splatPos = SIMD2<Float>(center + cos(angle) * orbitRadius,
-                                     center + sin(angle) * orbitRadius)
-        let tangentX = -sin(angle) * mid * 270.0
-        let tangentY = cos(angle) * mid * 270.0
+        let angle = time * 0.8 + Float(i) * 2.094
+        let orbitR = (250.0 + mid * 100.0) * s
+        let pos = SIMD2<Float>(center + cos(angle) * orbitR,
+                                center + sin(angle) * orbitR)
+        let tangentX = -sin(angle) * mid * 120.0 * s
+        let tangentY = cos(angle) * mid * 120.0 * s
+        splatForce(encoder: encoder, pos: pos,
+                   force: SIMD3<Float>(tangentX, tangentY, 0), radius: 70.0 * s)
         
-        splatForce(encoder: encoder, pos: splatPos,
-                   force: SIMD3<Float>(tangentX, tangentY, 0), radius: 90.0)
-        encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+        let counterAngle = angle + 0.4
+        let counterR = orbitR * 0.6
+        let counterPos = SIMD2<Float>(center + cos(counterAngle) * counterR,
+                                       center + sin(counterAngle) * counterR)
+        splatForce(encoder: encoder, pos: counterPos,
+                   force: SIMD3<Float>(-tangentX * 0.5, -tangentY * 0.5, 0), radius: 50.0 * s)
         
-        let hueOffset = Float(i) * 0.33
-        let dyeColor = SIMD3<Float>(mid * 0.2 + hueOffset * 0.3,
-                                     mid * 0.8,
-                                     mid * 1.2)
-        splatDye(encoder: encoder, pos: splatPos,
-                 color: dyeColor, radius: 72.0)
+        let midHue = fmod(time * 0.12 + Float(i) * 0.33, 1.0)
+        let dyeColor = SIMD3<Float>(
+          mid * (0.2 + 0.3 * sin(midHue * .pi * 2.0)),
+          mid * (0.6 + 0.4 * sin(midHue * .pi * 2.0 + 2.0)),
+          mid * (1.0 + 0.3 * sin(midHue * .pi * 2.0 + 4.0))
+        )
+        splatDye(encoder: encoder, pos: pos, color: dyeColor, radius: 55.0 * s)
         encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
       }
     }
     
     if high > 0.05 {
       for i in 0..<4 {
-        let hashAngle = time * 3.0 + Float(i) * 1.57 + sin(time * 2.3 + Float(i)) * 2.0
-        let hashRadius = 180.0 + sin(time * 1.7 + Float(i) * 3.0) * 240.0
-        let splatPos = SIMD2<Float>(center + cos(hashAngle) * Float(hashRadius),
-                                     center + sin(hashAngle) * Float(hashRadius))
+        let hashAngle = time * 2.5 + Float(i) * 1.57 + sin(time * 1.8 + Float(i)) * 1.5
+        let hashRadius = (150.0 + sin(time * 1.3 + Float(i) * 2.7) * 200.0) * s
+        let pos = SIMD2<Float>(center + cos(hashAngle) * Float(hashRadius),
+                                center + sin(hashAngle) * Float(hashRadius))
         
-        let sparkForce = high * 135.0
+        let sparkForce = high * 80.0 * s
         let forceDir = SIMD3<Float>(cos(hashAngle + 1.5) * sparkForce,
                                      sin(hashAngle + 1.5) * sparkForce, 0)
-        splatForce(encoder: encoder, pos: splatPos,
-                   force: forceDir, radius: 48.0)
-        encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+        splatForce(encoder: encoder, pos: pos, force: forceDir, radius: 35.0 * s)
         
-        let dyeColor = SIMD3<Float>(high * 0.5 + audioEnergy * 0.5,
-                                     high * 0.7,
-                                     high * 1.5)
-        splatDye(encoder: encoder, pos: splatPos,
-                 color: dyeColor, radius: 36.0)
+        let sparkHue = fmod(time * 0.2 + Float(i) * 0.25, 1.0)
+        let dyeColor = SIMD3<Float>(
+          high * (0.4 + 0.6 * sin(sparkHue * .pi * 2.0)),
+          high * (0.3 + 0.7 * sin(sparkHue * .pi * 2.0 + 2.094)),
+          high * (0.5 + 0.8 * sin(sparkHue * .pi * 2.0 + 4.189))
+        )
+        splatDye(encoder: encoder, pos: pos, color: dyeColor, radius: 26.0 * s)
         encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
       }
     }
@@ -380,6 +378,21 @@ extension NavierStokesRenderer {
     argumentTable.setAddress(writeUniform(dissipation), index: 1)
     
     dispatchGrid(encoder: encoder, pipeline: advectPipeline)
+  }
+  
+  private func computeVorticity(encoder: any MTL4ComputeCommandEncoder) {
+    encoder.setComputePipelineState(vorticityPipeline)
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
+    argumentTable.setTexture(vorticityTexture.gpuResourceID, index: 1)
+    dispatchGrid(encoder: encoder, pipeline: vorticityPipeline)
+  }
+  
+  private func applyVorticityForce(encoder: any MTL4ComputeCommandEncoder) {
+    encoder.setComputePipelineState(vorticityForcePipeline)
+    argumentTable.setTexture(vorticityTexture.gpuResourceID, index: 0)
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
+    argumentTable.setAddress(writeUniform(vorticityStrength), index: 0)
+    dispatchGrid(encoder: encoder, pipeline: vorticityForcePipeline)
   }
   
   private func computeDivergence(encoder: any MTL4ComputeCommandEncoder) {
