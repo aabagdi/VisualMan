@@ -185,7 +185,7 @@ kernel void fluidBlurH(texture2d<float, access::read> fieldIn [[texture(0)]],
   
   float4 sum = float4(0.0);
   for (int i = -4; i <= 4; i++) {
-    uint2 coord = uint2(clamp(int(gid.x) + i * 2, 0, int(w - 1)), gid.y);
+    uint2 coord = uint2(clamp(int(gid.x) + i, 0, int(w - 1)), gid.y);
     sum += fieldIn.read(coord) * blurWeights[i + 4];
   }
   fieldOut.write(sum, gid);
@@ -200,7 +200,7 @@ kernel void fluidBlurV(texture2d<float, access::read> fieldIn [[texture(0)]],
   
   float4 sum = float4(0.0);
   for (int i = -4; i <= 4; i++) {
-    uint2 coord = uint2(gid.x, clamp(int(gid.y) + i * 2, 0, int(h - 1)));
+    uint2 coord = uint2(gid.x, clamp(int(gid.y) + i, 0, int(h - 1)));
     sum += fieldIn.read(coord) * blurWeights[i + 4];
   }
   fieldOut.write(sum, gid);
@@ -240,26 +240,26 @@ float4 sampleBicubic(texture2d<float, access::read> tex, float2 coord) {
   return result;
 }
 
-kernel void fluidRender(texture2d<float, access::read> dye [[texture(0)]],
+kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::write> output [[texture(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
   uint w = output.get_width();
   uint h = output.get_height();
   if (gid.x >= w || gid.y >= h) return;
   
+  constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
   float2 uv = (float2(gid) + 0.5) / float2(w, h);
   
-  float4 color = sampleBicubic(dye, uv);
+  float4 color = dye.sample(bilinear, uv);
   
   float3 bg = float3(0.0, 0.0, 0.02);
-  float3 c = bg + color.rgb;
+  float3 c = bg + max(color.rgb, float3(0.0));
   
   float luminance = dot(c, float3(0.299, 0.587, 0.114));
-  c = mix(float3(luminance), c, 1.4);
+  c = mix(float3(luminance), c, 1.5);
   
+  c *= 1.8;
   c = c / (1.0 + c);
-  
-  c = smoothstep(0.0, 1.0, c);
   
   output.write(float4(c, 1.0), gid);
 }

@@ -14,7 +14,7 @@ final class NavierStokesRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
   
-  private let gridSize: Int = 1680
+  private let gridSize: Int = 1024
   
   private var splatPipeline: MTLComputePipelineState!
   private var advectPipeline: MTLComputePipelineState!
@@ -41,7 +41,7 @@ final class NavierStokesRenderer {
   private let velocityDissipation: Float = 0.99
   private let dyeDissipation: Float = 0.98
   private let jacobiIterations: Int = 10
-  private let vorticityStrength: Float = 3.0
+  private let vorticityStrength: Float = 8.0
   
   private static let maxFramesInFlight: UInt64 = 3
   private var commandAllocators: [any MTL4CommandAllocator] = []
@@ -193,13 +193,6 @@ final class NavierStokesRenderer {
     
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    // Vorticity confinement: amplify existing swirls for structured, artistic flow
-    computeVorticity(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    applyVorticityForce(encoder: encoder)
-    
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
     computeDivergence(encoder: encoder)
     
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
@@ -249,8 +242,11 @@ final class NavierStokesRenderer {
     
     let vortexAngle = time * 0.3
     let vortexR: Float = 80.0 * s
-    let vortexStrength: Float = 8.0 * s * (0.3 + audioEnergy * 0.7)
+    let vortexStrength: Float = 30.0 * s * (0.3 + audioEnergy * 0.7)
     for i in 0..<2 {
+      if i > 0 {
+        encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+      }
       let a = vortexAngle + Float(i) * .pi
       let pos = SIMD2<Float>(center + cos(a) * vortexR, center + sin(a) * vortexR)
       let tangent = SIMD3<Float>(-sin(a) * vortexStrength, cos(a) * vortexStrength, 0)
@@ -259,12 +255,12 @@ final class NavierStokesRenderer {
 
     let hue = fmod(time * 0.1, 1.0)
     let ambientColor = SIMD3<Float>(
-      0.15 + 0.1 * sin(hue * .pi * 2.0),
-      0.08 + 0.1 * sin(hue * .pi * 2.0 + 2.094),
-      0.12 + 0.1 * sin(hue * .pi * 2.0 + 4.189)
+      0.4 + 0.25 * sin(hue * .pi * 2.0),
+      0.2 + 0.25 * sin(hue * .pi * 2.0 + 2.094),
+      0.3 + 0.25 * sin(hue * .pi * 2.0 + 4.189)
     )
     splatDye(encoder: encoder, pos: SIMD2<Float>(center, center),
-             color: ambientColor * (0.3 + audioEnergy * 0.7), radius: 90.0 * s)
+             color: ambientColor * (0.5 + audioEnergy * 0.5), radius: 90.0 * s)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     if bass > 0.01 {
@@ -272,17 +268,17 @@ final class NavierStokesRenderer {
       let pulseR: Float = 100.0 * s + bass * 80.0 * s
       let pulsePos = SIMD2<Float>(center + cos(angle) * pulseR * 0.3,
                                    center + sin(angle) * pulseR * 0.3)
-      // Radial outward push (like a shockwave)
-      let radialX = cos(angle) * bass * 180.0 * s
-      let radialY = sin(angle) * bass * 180.0 * s
+      
+      let radialX = cos(angle) * bass * 280.0 * s
+      let radialY = sin(angle) * bass * 280.0 * s
       splatForce(encoder: encoder, pos: pulsePos,
                  force: SIMD3<Float>(radialX, radialY, 0), radius: (100.0 + bass * 50.0) * s)
-      // Warm dye with time-varying hue
+
       let bassHue = fmod(time * 0.15, 1.0)
       let dyeColor = SIMD3<Float>(
-        bass * (1.2 + 0.3 * sin(bassHue * .pi * 2.0)),
-        bass * (0.3 + 0.4 * sin(bassHue * .pi * 2.0 + 1.0)),
-        bass * (0.1 + 0.3 * sin(bassHue * .pi * 2.0 + 2.5))
+        bass * (2.0 + 0.5 * sin(bassHue * .pi * 2.0)),
+        bass * (0.6 + 0.6 * sin(bassHue * .pi * 2.0 + 1.0)),
+        bass * (0.2 + 0.5 * sin(bassHue * .pi * 2.0 + 2.5))
       )
       splatDye(encoder: encoder, pos: pulsePos,
                color: dyeColor, radius: (80.0 + bass * 40.0) * s)
@@ -295,10 +291,11 @@ final class NavierStokesRenderer {
         let orbitR = (250.0 + mid * 100.0) * s
         let pos = SIMD2<Float>(center + cos(angle) * orbitR,
                                 center + sin(angle) * orbitR)
-        let tangentX = -sin(angle) * mid * 120.0 * s
-        let tangentY = cos(angle) * mid * 120.0 * s
+        let tangentX = -sin(angle) * mid * 200.0 * s
+        let tangentY = cos(angle) * mid * 200.0 * s
         splatForce(encoder: encoder, pos: pos,
                    force: SIMD3<Float>(tangentX, tangentY, 0), radius: 70.0 * s)
+        encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
         
         let counterAngle = angle + 0.4
         let counterR = orbitR * 0.6
@@ -309,9 +306,9 @@ final class NavierStokesRenderer {
         
         let midHue = fmod(time * 0.12 + Float(i) * 0.33, 1.0)
         let dyeColor = SIMD3<Float>(
-          mid * (0.2 + 0.3 * sin(midHue * .pi * 2.0)),
-          mid * (0.6 + 0.4 * sin(midHue * .pi * 2.0 + 2.0)),
-          mid * (1.0 + 0.3 * sin(midHue * .pi * 2.0 + 4.0))
+          mid * (0.5 + 0.5 * sin(midHue * .pi * 2.0)),
+          mid * (1.0 + 0.6 * sin(midHue * .pi * 2.0 + 2.0)),
+          mid * (1.5 + 0.5 * sin(midHue * .pi * 2.0 + 4.0))
         )
         splatDye(encoder: encoder, pos: pos, color: dyeColor, radius: 55.0 * s)
         encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
@@ -332,9 +329,9 @@ final class NavierStokesRenderer {
         
         let sparkHue = fmod(time * 0.2 + Float(i) * 0.25, 1.0)
         let dyeColor = SIMD3<Float>(
-          high * (0.4 + 0.6 * sin(sparkHue * .pi * 2.0)),
-          high * (0.3 + 0.7 * sin(sparkHue * .pi * 2.0 + 2.094)),
-          high * (0.5 + 0.8 * sin(sparkHue * .pi * 2.0 + 4.189))
+          high * (0.8 + 0.8 * sin(sparkHue * .pi * 2.0)),
+          high * (0.6 + 1.0 * sin(sparkHue * .pi * 2.0 + 2.094)),
+          high * (1.0 + 1.0 * sin(sparkHue * .pi * 2.0 + 4.189))
         )
         splatDye(encoder: encoder, pos: pos, color: dyeColor, radius: 26.0 * s)
         encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
