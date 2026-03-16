@@ -261,7 +261,7 @@ final class NavierStokesRenderer {
     
     computeVorticity(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    applyVorticityForce(encoder: encoder)
+    applyVorticityForce(encoder: encoder, bass: bass)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     advect(encoder: encoder, velocityIn: velocityA, fieldIn: velocityA,
@@ -272,8 +272,9 @@ final class NavierStokesRenderer {
     project(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
+    let dynamicDyeDissipation = dyeDissipation + bass * 0.015
     advect(encoder: encoder, velocityIn: velocityA, fieldIn: dyeA,
-           fieldOut: dyeB, dissipation: dyeDissipation)
+           fieldOut: dyeB, dissipation: dynamicDyeDissipation)
     swap(&dyeA, &dyeB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
@@ -284,7 +285,7 @@ final class NavierStokesRenderer {
     swap(&dyeA, &dyeB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    render(encoder: encoder, output: output)
+    render(encoder: encoder, output: output, bass: bass)
   }
   
 }

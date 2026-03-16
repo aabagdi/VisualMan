@@ -305,6 +305,7 @@ kernel void fluidBlurV(texture2d<float, access::read> fieldIn [[texture(0)]],
 
 kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::write> output [[texture(1)]],
+                        constant float &bass [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]]) {
   uint w = output.get_width();
   uint h = output.get_height();
@@ -325,9 +326,9 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float3 c = bg + max(color.rgb, float3(0.0));
   
   float luminance = dot(c, float3(0.299, 0.587, 0.114));
-  c = mix(float3(luminance), c, 1.5);
+  c = mix(float3(luminance), c, 1.5 + bass * 0.5);
   
-  c *= 1.8;
+  c *= 1.8 * (1.0 + bass * 1.2);
   
   float peak = max(c.r, max(c.g, c.b));
   if (peak > 0.0) {

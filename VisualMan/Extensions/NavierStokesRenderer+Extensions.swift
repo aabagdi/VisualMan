@@ -201,11 +201,12 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder)
   }
   
-  func applyVorticityForce(encoder: any MTL4ComputeCommandEncoder) {
+  func applyVorticityForce(encoder: any MTL4ComputeCommandEncoder, bass: Float) {
     encoder.setComputePipelineState(vorticityForcePipeline)
     argumentTable.setTexture(vorticityTexture.gpuResourceID, index: 0)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
-    argumentTable.setAddress(writeUniform(vorticityStrength), index: 0)
+    let dynamicVorticity = vorticityStrength * (1.0 + bass * 1.0)
+    argumentTable.setAddress(writeUniform(dynamicVorticity), index: 0)
     dispatchGrid(encoder: encoder)
   }
   
@@ -280,10 +281,11 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder)
   }
   
-  func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture) {
+  func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture, bass: Float) {
     encoder.setComputePipelineState(renderPipeline)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(output.gpuResourceID, index: 1)
+    argumentTable.setAddress(writeUniform(bass), index: 0)
     dispatchGrid(encoder: encoder, width: output.width, height: output.height)
   }
   
