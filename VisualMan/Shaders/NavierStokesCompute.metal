@@ -8,8 +8,6 @@
 #include <metal_stdlib>
 using namespace metal;
 
-// --- Bicubic sampling helpers (used by advection and render) ---
-
 float4 cubicWeights(float t) {
   float t2 = t * t;
   float t3 = t2 * t;
@@ -185,7 +183,6 @@ kernel void fluidVorticityForce(texture2d<float, access::read> vorticity [[textu
   uint h = vorticity.get_height();
   if (gid.x >= w || gid.y >= h) return;
   
-  // Wide ±2 stencil to avoid amplifying single-pixel noise
   uint2 left  = uint2(max(int(gid.x) - 2, 0), gid.y);
   uint2 right = uint2(min(gid.x + 2, w - 1), gid.y);
   uint2 down  = uint2(gid.x, max(int(gid.y) - 2, 0));
@@ -252,10 +249,8 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   
   constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
   float2 center = (float2(gid) + 0.5) / float2(w, h);
-  // Sample offsets in dye-texel space to anti-alias grid-cell edges
   float2 texel = 1.0 / float2(dye.get_width(), dye.get_height());
   
-  // 2x2 rotated-grid supersampling spanning one grid cell
   float4 color = float4(0);
   color += dye.sample(bilinear, center + float2(-0.25, -0.75) * texel);
   color += dye.sample(bilinear, center + float2( 0.75, -0.25) * texel);

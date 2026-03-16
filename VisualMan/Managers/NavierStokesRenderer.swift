@@ -40,7 +40,7 @@ final class NavierStokesRenderer {
   private let dt: Float = 1.0 / 60.0
   private let velocityDissipation: Float = 0.99
   private let dyeDissipation: Float = 0.98
-  private let jacobiIterations: Int = 15
+  private let jacobiIterations: Int = 10
   private let vorticityStrength: Float = 1.5
   
   private static let maxFramesInFlight: UInt64 = 3
@@ -181,42 +181,31 @@ final class NavierStokesRenderer {
     commandBuffer.beginCommandBuffer(allocator: allocator)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
-    
+
     injectAudioSplats(encoder: encoder, bass: bass, mid: mid, high: high)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
+    project(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
+    computeVorticity(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    applyVorticityForce(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     advect(encoder: encoder,
            velocityIn: velocityA, fieldIn: velocityA, fieldOut: velocityB,
            dissipation: velocityDissipation)
     swap(&velocityA, &velocityB)
-    
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    computeVorticity(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    applyVorticityForce(encoder: encoder)
-    
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    computeDivergence(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    for _ in 0..<jacobiIterations {
-      jacobiIteration(encoder: encoder)
-      swap(&pressure, &pressureTemp)
-      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    }
-    
-    gradientSubtract(encoder: encoder)
-    
+    project(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     advect(encoder: encoder,
            velocityIn: velocityA, fieldIn: dyeA, fieldOut: dyeB,
            dissipation: dyeDissipation)
     swap(&dyeA, &dyeB)
-    
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     blurDyeH(encoder: encoder)
@@ -224,7 +213,6 @@ final class NavierStokesRenderer {
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     blurDyeV(encoder: encoder)
     swap(&dyeA, &dyeB)
-    
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     render(encoder: encoder, output: drawable.texture)
@@ -395,6 +383,19 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
     argumentTable.setAddress(writeUniform(vorticityStrength), index: 0)
     dispatchGrid(encoder: encoder, pipeline: vorticityForcePipeline)
+  }
+  
+  private func project(encoder: any MTL4ComputeCommandEncoder) {
+    computeDivergence(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
+    for _ in 0..<jacobiIterations {
+      jacobiIteration(encoder: encoder)
+      swap(&pressure, &pressureTemp)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    }
+    
+    gradientSubtract(encoder: encoder)
   }
   
   private func computeDivergence(encoder: any MTL4ComputeCommandEncoder) {
