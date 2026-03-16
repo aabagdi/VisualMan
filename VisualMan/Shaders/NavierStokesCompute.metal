@@ -42,6 +42,14 @@ float4 sampleBicubic(texture2d<float, access::read> tex, float2 coord) {
   return result;
 }
 
+struct SplatParams {
+  float2 position;
+  float radius;
+  float _pad;
+  float3 value;
+  float _pad2;
+};
+
 kernel void fluidSplat(texture2d<float, access::read_write> field [[texture(0)]],
                        constant float2 &point [[buffer(0)]],
                        constant float3 &value [[buffer(1)]],
@@ -57,6 +65,39 @@ kernel void fluidSplat(texture2d<float, access::read_write> field [[texture(0)]]
   
   float4 current = field.read(gid);
   current.xyz += value * falloff;
+  field.write(current, gid);
+}
+
+kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture(0)]],
+                            constant SplatParams *splats [[buffer(0)]],
+                            constant uint &splatCount [[buffer(1)]],
+                            uint2 gid [[thread_position_in_grid]]) {
+  uint w = field.get_width();
+  uint h = field.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  
+  float2 pos = float2(gid) + 0.5;
+  
+  // Early exit: check if this thread is near any splat
+  // exp(-6) ≈ 0.0025, negligible contribution beyond this
+  bool anyNearby = false;
+  for (uint i = 0; i < splatCount; i++) {
+    float2 diff = pos - splats[i].position;
+    if (dot(diff, diff) < 6.0 * splats[i].radius * splats[i].radius) {
+      anyNearby = true;
+      break;
+    }
+  }
+  if (!anyNearby) return;
+  
+  float4 current = field.read(gid);
+  for (uint i = 0; i < splatCount; i++) {
+    float2 diff = pos - splats[i].position;
+    float dist2 = dot(diff, diff);
+    float r2 = splats[i].radius * splats[i].radius;
+    float falloff = exp(-dist2 / r2);
+    current.xyz += splats[i].value * falloff;
+  }
   field.write(current, gid);
 }
 

@@ -9,6 +9,20 @@ import Metal
 import MetalKit
 import simd
 
+struct SplatParams {
+  var position: SIMD2<Float>
+  var radius: Float
+  var padding: Float = 0
+  var value: SIMD3<Float>
+  var padding2: Float = 0
+
+  init(position: SIMD2<Float>, value: SIMD3<Float>, radius: Float) {
+    self.position = position
+    self.value = value
+    self.radius = radius
+  }
+}
+
 @MainActor
 final class NavierStokesRenderer {
   let device: MTLDevice
@@ -24,6 +38,7 @@ final class NavierStokesRenderer {
   var divergencePipeline: MTLComputePipelineState!
   var jacobiPipeline: MTLComputePipelineState!
   var gradientSubtractPipeline: MTLComputePipelineState!
+  var splatBatchPipeline: MTLComputePipelineState!
   var blurHPipeline: MTLComputePipelineState!
   var blurVPipeline: MTLComputePipelineState!
   var renderPipeline: MTLComputePipelineState!
@@ -133,6 +148,7 @@ final class NavierStokesRenderer {
     }
     
     splatPipeline = makePipeline("fluidSplat")
+    splatBatchPipeline = makePipeline("fluidSplatBatch")
     diffusePipeline = makePipeline("fluidDiffuse")
     advectPipeline = makePipeline("fluidAdvect")
     vorticityPipeline = makePipeline("fluidVorticity")
@@ -175,6 +191,21 @@ final class NavierStokesRenderer {
     precondition(end <= Self.uniformBufferSize,
                  "Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
     (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
+    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
+    uniformOffset = end
+    return addr
+  }
+
+  func writeUniformArray<T>(_ values: [T]) -> MTLGPUAddress {
+    let aligned = (uniformOffset + 15) & ~15
+    let size = MemoryLayout<T>.stride * values.count
+    let end = aligned + size
+    precondition(end <= Self.uniformBufferSize,
+                 "Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+    let ptr = currentUniformBuffer.contents() + aligned
+    _ = values.withUnsafeBufferPointer { buf in
+      memcpy(ptr, buf.baseAddress!, size)
+    }
     let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
     uniformOffset = end
     return addr
