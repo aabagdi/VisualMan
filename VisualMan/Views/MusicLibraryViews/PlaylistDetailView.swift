@@ -11,7 +11,7 @@ import MediaPlayer
 struct PlaylistDetailView: View {
   let playlist: MPMediaItemCollection
   
-  private var audioManager: AudioEngineManager { AudioEngineManager.shared }
+  @Environment(AudioEngineManager.self) private var audioManager
   
   var body: some View {
     List(Array(playlist.items.enumerated()), id: \.1.persistentID) { index, song in

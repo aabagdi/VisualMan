@@ -9,12 +9,11 @@ import Foundation
 import AVFoundation
 import MediaPlayer
 import Synchronization
+import Dependencies
 
 @Observable
 @MainActor
 final class AudioEngineManager {
-  static let shared = AudioEngineManager()
-  
   var audioLevels = [1024 of Float](repeating: 0.0)
   var visualizerBars = [32 of Float](repeating: 0.0)
   var isPlaying = false
@@ -25,6 +24,8 @@ final class AudioEngineManager {
   var initializationError: VMError?
   var currentAudioSourceURL: URL?
   
+  @ObservationIgnored @Dependency(\.uuid) var uuid
+  
   @ObservationIgnored private var engine: AVAudioEngine?
   @ObservationIgnored private var player: AVAudioPlayerNode?
   @ObservationIgnored private var audioFile: AVAudioFile?
@@ -33,19 +34,22 @@ final class AudioEngineManager {
   @ObservationIgnored private var securityScopedURL: URL?
   @ObservationIgnored private var lastSeekFrame: AVAudioFramePosition = 0
   @ObservationIgnored private var isSeeking: Bool = false
-  @ObservationIgnored private let dspProcessor = DSPProcessor()
   @ObservationIgnored private var hasHandledCompletion = false
-  @ObservationIgnored private var currentPlaybackID = UUID()
-  @ObservationIgnored private var nowPlayingTimer: Timer?
-  @ObservationIgnored private var lockScreenUpdateHandler: (() -> Void)?
-  private let isProcessingBuffer = Atomic<Bool>(false)
-  
+  @ObservationIgnored private var currentPlaybackID: UUID
+  @ObservationIgnored private var nowPlayingTask: Task<Void, Never>?
   @ObservationIgnored private var playbackContinuation: AsyncStream<Void>.Continuation?
-  @ObservationIgnored let playbackCompleted: AsyncStream<Void>
   
-  private init() {
-    var continuation: AsyncStream<Void>.Continuation?
-    playbackCompleted = AsyncStream<Void> { continuation = $0 }
+  private let audioTapProcessor = AudioTapProcessor()
+  
+  let playbackCompleted: AsyncStream<Void>
+  
+  init() {
+    @Dependency(\.uuid) var uuid
+    let initialID = uuid()
+    currentPlaybackID = initialID
+    
+    let (stream, continuation) = AsyncStream<Void>.makeStream()
+    playbackCompleted = stream
     playbackContinuation = continuation
     do {
       try setupAudioEngine()
@@ -55,6 +59,10 @@ final class AudioEngineManager {
       isInitialized = false
       failedToInitialize = true
     }
+  }
+  
+  deinit {
+    playbackContinuation?.finish()
   }
   
   private func setupAudioEngine() throws {
@@ -82,7 +90,6 @@ final class AudioEngineManager {
     engine.connect(player, to: engine.mainMixerNode, format: format)
   }
   
-  
   func play(_ source: AudioSource) async throws {
     if currentAudioSourceURL == source.getPlaybackURL() && isPlaying { return }
     
@@ -92,7 +99,7 @@ final class AudioEngineManager {
     
     audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
-    await dspProcessor.reset()
+    await audioTapProcessor.reset()
     lastSeekFrame = 0
     
     guard let url = source.getPlaybackURL() else {
@@ -122,7 +129,7 @@ final class AudioEngineManager {
     
     hasHandledCompletion = false
     
-    let playbackID = UUID()
+    let playbackID = uuid()
     currentPlaybackID = playbackID
     
     do {
@@ -156,31 +163,27 @@ final class AudioEngineManager {
       throw VMError.failedToPlay
     }
     
-    let format = engine.mainMixerNode.outputFormat(forBus: 0)
-    
-    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable [weak self] buffer, _ in
-      guard let self else { return }
-      guard self.isProcessingBuffer.compareExchange(expected: false, desired: true, ordering: .acquiringAndReleasing).exchanged else { return }
-      guard let channelData = buffer.floatChannelData?[0] else {
-        self.isProcessingBuffer.store(false, ordering: .releasing)
-        return
-      }
-      
-      let frameLength = Int(buffer.frameLength)
-      let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
-      let sampleRate = Float(format.sampleRate)
-      
-      Task {
-        let result = await self.dspProcessor.processSamples(samples, sampleRate: sampleRate)
-        await MainActor.run {
-          self.audioLevels = result.audioLevels
-          self.visualizerBars = result.visualizerBars
-          self.isProcessingBuffer.store(false, ordering: .releasing)
-        }
-      }
-    }
+    installAudioTap(on: engine)
     
     player.play()
+  }
+  
+  private func installAudioTap(on engine: AVAudioEngine) {
+    let format = engine.mainMixerNode.outputFormat(forBus: 0)
+    let tapProcessor = audioTapProcessor
+    
+    let sampleRate = Float(format.sampleRate)
+    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable buffer, _ in
+      guard let channelData = buffer.floatChannelData?[0] else { return }
+      let frameLength = Int(buffer.frameLength)
+      let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
+      tapProcessor.processSamples(samples, sampleRate: sampleRate)
+    }
+    
+    audioTapProcessor.startForwarding { [weak self] result in
+      self?.audioLevels = result.audioLevels
+      self?.visualizerBars = result.visualizerBars
+    }
   }
   
   private func stopSecurityScopedAccess() {
@@ -213,8 +216,9 @@ final class AudioEngineManager {
   }
   
   func stop() {
-    currentPlaybackID = UUID()
+    currentPlaybackID = uuid()
     player?.stop()
+    audioTapProcessor.stopForwarding()
     engine?.mainMixerNode.removeTap(onBus: 0)
     engine?.stop()
     isPlaying = false
@@ -235,7 +239,7 @@ final class AudioEngineManager {
     
     isSeeking = true
     
-    currentPlaybackID = UUID()
+    currentPlaybackID = uuid()
     hasHandledCompletion = false
     
     let sampleRate = audioFile.fileFormat.sampleRate
@@ -277,20 +281,23 @@ final class AudioEngineManager {
     isSeeking = false
   }
   
-  func startNowPlayingTimer(updateHandler: @escaping () -> Void) {
+}
+
+extension AudioEngineManager {
+  func startNowPlayingTimer(updateHandler: @escaping @MainActor () -> Void) {
     stopNowPlayingTimer()
-    lockScreenUpdateHandler = updateHandler
-    nowPlayingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-      Task { @MainActor in
-        self?.lockScreenUpdateHandler?()
+    nowPlayingTask = Task { [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(1))
+        guard !Task.isCancelled, self != nil else { break }
+        updateHandler()
       }
     }
   }
   
   func stopNowPlayingTimer() {
-    nowPlayingTimer?.invalidate()
-    nowPlayingTimer = nil
-    lockScreenUpdateHandler = nil
+    nowPlayingTask?.cancel()
+    nowPlayingTask = nil
   }
   
   func startDisplayLink() {
@@ -323,17 +330,16 @@ final class AudioEngineManager {
       
       guard sampleTime >= 0 else { return }
       
-      let currentFrame = lastSeekFrame + sampleTime
-      let newTime = Double(currentFrame) / audioFile.fileFormat.sampleRate
+      let playerSeconds = Double(sampleTime) / playerTime.sampleRate
+      let seekSeconds = Double(lastSeekFrame) / audioFile.fileFormat.sampleRate
+      let newTime = seekSeconds + playerSeconds
       
       if newTime >= 0 && newTime <= duration {
         currentTime = newTime
       }
       
       if currentTime >= duration - 0.05 && !isSeeking && !hasHandledCompletion {
-        if currentFrame >= audioFile.length - Int64(audioFile.fileFormat.sampleRate * 0.05) {
-          handlePlaybackCompleted()
-        }
+        handlePlaybackCompleted()
       }
     }
   }
@@ -348,6 +354,7 @@ private final class DisplayLinkStream: NSObject {
     let (stream, continuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
     self.continuation = continuation
     let link = CADisplayLink(target: self, selector: #selector(onFrame))
+    link.preferredFrameRateRange = CAFrameRateRange.init(minimum: 60, maximum: 120, preferred: 120)
     link.add(to: .current, forMode: .common)
     self.displayLink = link
     return stream

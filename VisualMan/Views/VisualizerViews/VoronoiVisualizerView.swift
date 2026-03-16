@@ -50,24 +50,24 @@ struct VoronoiVisualizerView: View {
     let highAvg = highResult / Float(highRange.count)
     return highMax * 0.7 + highAvg * 0.3
   }
-
+  
   var body: some View {
-    GeometryReader { g in
-      TimelineView(.animation) { timeline in
-        Rectangle()
-          .voronoiShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
-          .onChange(of: timeline.date) {
-            withAnimation(.smooth) {
-              smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
-              smoothedMid = smoothedMid * 0.6 + midLevel * 0.4
-              smoothedHigh = smoothedHigh * 0.4 + highLevel * 0.6
-              time += 0.016 * (1.0 + smoothedBass * 0.5)
-            }
+    TimelineView(.animation) { timeline in
+      Rectangle()
+        .voronoiShader(time: time,
+                       smoothedBass: smoothedBass,
+                       smoothedMid: smoothedMid,
+                       smoothedHigh: smoothedHigh)
+        .onChange(of: timeline.date) {
+          withAnimation(.smooth) {
+            smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
+            smoothedMid = smoothedMid * 0.6 + midLevel * 0.4
+            smoothedHigh = smoothedHigh * 0.4 + highLevel * 0.6
+            time += 0.016 * (1.0 + smoothedBass * 0.5)
           }
-          .ignoresSafeArea()
-      }
+        }
+        .ignoresSafeArea()
     }
-    //.debugOverlay(smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
+    // .debugOverlay(smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
   }
 }
-

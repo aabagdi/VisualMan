@@ -11,7 +11,8 @@ import MediaPlayer
 struct AlbumDetailView: View {
   let album: MPMediaItemCollection
   
-  private var audioManager: AudioEngineManager { AudioEngineManager.shared }
+  @Environment(AudioEngineManager.self) private var audioManager
+  
   private let placeholder = UIImage(named: "Art Placeholder")!
   
   private var year: String {
@@ -71,7 +72,7 @@ struct AlbumDetailView: View {
       }
       
       Section {
-        ForEach(Array(sortedSongs.enumerated()), id: \.element.persistentID) { index, song in
+        ForEach(sortedSongs.enumerated(), id: \.element.persistentID) { index, song in
           let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
           NavigationLink(destination: MusicPlayerView(sortedSongs, startingIndex: index)) {
             HStack(spacing: 12) {
@@ -116,7 +117,6 @@ struct AlbumDetailView: View {
       }
     }
     .listStyle(.insetGrouped)
-    .navigationBarTitleDisplayMode(.inline)
   }
   
   private func formatDuration(_ duration: TimeInterval) -> String? {

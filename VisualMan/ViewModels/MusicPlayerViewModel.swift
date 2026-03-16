@@ -6,18 +6,21 @@
 //
 
 import Foundation
+import Dependencies
 
 extension MusicPlayerView {
   @Observable
   @MainActor
   final class MusicPlayerViewModel {
-    private let audioManager = AudioEngineManager.shared
-    private let lockScreen = LockScreenControlManager.shared
+    @ObservationIgnored @Dependency(AudioEngineManager.self) private var audioManager
+    @ObservationIgnored @Dependency(LockScreenControlManager.self) private var lockScreen
+    @ObservationIgnored @Dependency(\.continuousClock) var clock
     
     @ObservationIgnored private var playbackListeningTask: Task<Void, Never>?
     @ObservationIgnored private var songTransitionTask: Task<Void, Never>?
+    @ObservationIgnored private var playTask: Task<Void, Never>?
     @ObservationIgnored private weak var playlistManager: AudioPlaylistManager?
-    
+        
     var failedPlaying: Bool = false
     var playingError: VMError?
     
@@ -51,9 +54,9 @@ extension MusicPlayerView {
       playbackListeningTask = nil
       songTransitionTask?.cancel()
       songTransitionTask = nil
-      lockScreen.onPlayPause = nil
-      lockScreen.onNext = nil
-      lockScreen.onPrevious = nil
+      playTask?.cancel()
+      playTask = nil
+      lockScreen.cleanup()
     }
     
     func togglePlayback() {
@@ -90,9 +93,11 @@ extension MusicPlayerView {
     private func playCurrentSong() {
       guard let source = playlistManager?.currentAudioSource else { return }
       
-      Task {
+      playTask?.cancel()
+      playTask = Task {
         do {
           try await audioManager.play(source)
+          guard !Task.isCancelled else { return }
           updateNowPlayingInfo()
         } catch let error as VMError {
           playingError = error
@@ -111,7 +116,7 @@ extension MusicPlayerView {
       if playlistManager.hasNext {
         songTransitionTask?.cancel()
         songTransitionTask = Task {
-          try? await Task.sleep(for: .milliseconds(100))
+          try? await clock.sleep(for: .milliseconds(100))
           guard !Task.isCancelled else { return }
           playlistManager.moveToNext()
           playCurrentSong()

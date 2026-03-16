@@ -34,7 +34,8 @@ struct ThreeDBarsVisualizerView: View {
         
         let barMesh = MeshResource.generateBox(size: [0.2, 1.0, 0.2])
         var material = PhysicallyBasedMaterial()
-        material.baseColor = PhysicallyBasedMaterial.BaseColor(tint: barColor(index: index, totalBars: visualizerBars.count))
+        material.baseColor = PhysicallyBasedMaterial.BaseColor(tint: barColor(index: index,
+                                                                              totalBars: visualizerBars.count))
         let barEntity = ModelEntity(mesh: barMesh, materials: [material])
         
         barEntity.position.y = 0.5
@@ -75,7 +76,7 @@ struct ThreeDBarsVisualizerView: View {
         .onChanged { value in
           let zoomSensitivity: Float = 0.5
           let targetDistance = cameraDistance / Float(value)
-          cameraDistance = cameraDistance + (targetDistance - cameraDistance) * zoomSensitivity
+          cameraDistance += (targetDistance - cameraDistance) * zoomSensitivity
           cameraDistance = max(10.0, min(30.0, cameraDistance))
           updateCameraPosition()
         }

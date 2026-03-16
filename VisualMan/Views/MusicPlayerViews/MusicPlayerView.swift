@@ -9,12 +9,13 @@ import SwiftUI
 import MediaPlayer
 
 struct MusicPlayerView: View {
-  @Environment(AudioPlaylistManager.self) private var playlistManager
-  
-  @State private var audioManager = AudioEngineManager.shared
   @State private var viewModel = MusicPlayerViewModel()
   @State private var currentVisualizer = Visualizers.bars
   @State private var isTapped: Bool = false
+  
+  @Environment(AudioEngineManager.self) private var audioManager
+  @Environment(AudioPlaylistManager.self) private var playlistManager
+  
   private let sliderColor: Color = .white
   
   private var normalFillColor: Color {
@@ -36,6 +37,14 @@ struct MusicPlayerView: View {
     case fireworks = "Fireworks"
     case interference = "Interference Pattern"
     case voronoi = "Voronoi Diagram"
+    case aurora = "Aurora Borealis"
+    case oscilloscope = "Oscilloscope"
+    case sphereMesh = "Sphere"
+
+    case plasma = "Plasma"
+    case metaball = "Lava Lamp"
+    case fluidSim = "Fluid"
+    case navierStokes = "Navier-Stokes"
   }
   
   init(_ audioSources: [any AudioSource], startingIndex: Int) {
@@ -53,6 +62,8 @@ struct MusicPlayerView: View {
   private let _startingIndex: Int
   
   var body: some View {
+    @Bindable var audioManager = audioManager
+    
     ZStack {
       currentShader(currentVisualizer: currentVisualizer,
                     visualizerBars: audioManager.visualizerBars,
@@ -151,13 +162,15 @@ struct MusicPlayerView: View {
     .onDisappear {
       viewModel.cleanup()
     }
-    .alert(viewModel.playingError?.errorDescription ?? "An unknown error occurred during playback.", isPresented: $viewModel.failedPlaying) {
+    .alert(viewModel.playingError?.errorDescription ?? "An unknown error occurred during playback.",
+           isPresented: $viewModel.failedPlaying) {
       Button("Okay", role: .cancel) {
         viewModel.failedPlaying = false
         viewModel.playingError = nil
       }
     }
-    .alert(audioManager.initializationError?.errorDescription ?? "An unknown error occurred during initialization.", isPresented: $audioManager.failedToInitialize) {
+    .alert(audioManager.initializationError?.errorDescription ?? "An unknown error occurred during initialization.",
+           isPresented: $audioManager.failedToInitialize) {
       Button("Okay", role: .cancel) {
         audioManager.failedToInitialize = false
         audioManager.initializationError = nil
@@ -185,7 +198,10 @@ struct MusicPlayerView: View {
   }
   
   @ViewBuilder
-  private func currentShader(currentVisualizer: Visualizers, visualizerBars: [32 of Float], audioLevels: [1024 of Float], albumArt: UIImage?) -> some View {
+  private func currentShader(currentVisualizer: Visualizers,
+                             visualizerBars: [32 of Float],
+                             audioLevels: [1024 of Float],
+                             albumArt: UIImage?) -> some View {
     switch currentVisualizer {
     case .bars:
       BarsVisualizerView(visualizerBars: visualizerBars)
@@ -201,6 +217,21 @@ struct MusicPlayerView: View {
       InterferenceVisualizerView(audioLevels: audioLevels)
     case .voronoi:
       VoronoiVisualizerView(audioLevels: audioLevels)
+    case .aurora:
+      AuroraBorealisVisualizerView(audioLevels: audioLevels)
+    case .oscilloscope:
+      OscilloscopeVisualizerView(audioLevels: audioLevels)
+    case .sphereMesh:
+      SphereMeshVisualizerView(audioLevels: audioLevels)
+
+    case .plasma:
+      PlasmaVisualizerView(audioLevels: audioLevels)
+    case .metaball:
+      MetaballVisualizerView(audioLevels: audioLevels)
+    case .fluidSim:
+      FluidSimVisualizerView(audioLevels: audioLevels)
+    case .navierStokes:
+      NavierStokesVisualizerView(audioLevels: audioLevels)
     }
   }
 }

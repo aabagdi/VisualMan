@@ -61,7 +61,10 @@ struct AlbumArtWaveVisualizerView: View {
           .scaledToFill()
           .scaleEffect(1.2)
           .frame(width: g.size.width, height: g.size.height)
-          .albumArtWaveShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
+          .albumArtWaveShader(time: time,
+                              smoothedBass: smoothedBass,
+                              smoothedMid: smoothedMid,
+                              smoothedHigh: smoothedHigh)
           .onChange(of: timeline.date) {
             withAnimation(.smooth) {
               smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
@@ -73,6 +76,6 @@ struct AlbumArtWaveVisualizerView: View {
           .ignoresSafeArea()
       }
     }
-    //.debugOverlay(smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
+    // .debugOverlay(smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
   }
 }
