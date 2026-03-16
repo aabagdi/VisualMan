@@ -1,25 +1,25 @@
 //
-//  View+VoronoiShader.swift
+//  View+PlasmaShader.swift
 //  VisualMan
 //
-//  Created by Aadit Bagdi on 7/29/25.
+//  Created by Aadit Bagdi on 3/16/26.
 //
 
 import SwiftUI
 
 extension View {
-  func voronoiShader(time: Float,
-                     smoothedBass: Float,
-                     smoothedMid: Float,
-                     smoothedHigh: Float) -> some View {
-    modifier(VoronoiShader(time: time,
+  func plasmaShader(time: Float,
+                    smoothedBass: Float,
+                    smoothedMid: Float,
+                    smoothedHigh: Float) -> some View {
+    modifier(PlasmaShader(time: time,
                            smoothedBass: smoothedBass,
                            smoothedMid: smoothedMid,
                            smoothedHigh: smoothedHigh))
   }
 }
 
-struct VoronoiShader: ViewModifier {
+struct PlasmaShader: ViewModifier {
   var time: Float
   var smoothedBass: Float
   var smoothedMid: Float
@@ -29,7 +29,7 @@ struct VoronoiShader: ViewModifier {
     content.visualEffect { content, proxy in
       content
         .colorEffect(
-          ShaderLibrary.voronoi(
+          ShaderLibrary.plasma(
             .float(time),
             .float(smoothedBass),
             .float(smoothedMid),

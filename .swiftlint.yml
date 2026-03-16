@@ -1,0 +1,11 @@
+disabled_rules:
+ - identifier_name
+ - trailing_whitespace
+ - function_parameter_count
+ - trailing_comma
+ - cyclomatic_complexity
+
+excluded:
+ - .git
+ - images
+ - VisualMan.xcodeproj

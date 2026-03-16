@@ -15,7 +15,11 @@ struct FileAudioSource: AudioSource {
   let duration: TimeInterval?
   let albumArt: UIImage?
   
-  init(url: URL, title: String? = nil, artist: String? = nil, duration: TimeInterval? = nil, albumArt: UIImage? = nil) {
+  init(url: URL,
+       title: String? = nil,
+       artist: String? = nil,
+       duration: TimeInterval? = nil,
+       albumArt: UIImage? = nil) {
     self.url = url
     self.title = title ?? url.deletingPathExtension().lastPathComponent
     self.artist = artist

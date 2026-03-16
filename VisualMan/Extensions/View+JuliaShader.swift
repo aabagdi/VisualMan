@@ -8,8 +8,14 @@
 import SwiftUI
 
 extension View {
-  func juliaShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float) -> some View {
-    modifier(JuliaShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh))
+  func juliaShader(time: Float,
+                   smoothedBass: Float,
+                   smoothedMid: Float,
+                   smoothedHigh: Float) -> some View {
+    modifier(JuliaShader(time: time,
+                         smoothedBass: smoothedBass,
+                         smoothedMid: smoothedMid,
+                         smoothedHigh: smoothedHigh))
   }
 }
 

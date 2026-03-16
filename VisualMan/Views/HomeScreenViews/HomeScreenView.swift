@@ -8,22 +8,32 @@
 import SwiftUI
 
 struct HomeScreenView: View {
+  @State private var isShowingBarPlayer: Bool = true
+  @State private var isShowingMusicPlayer = false
+  @State private var selectedTab: VMTab = .musicLibrary
+  
+  @Environment(AudioEngineManager.self) private var audioManager
   @Environment(MusicLibraryAccessManager.self) private var library
   @Environment(AudioPlaylistManager.self) private var playlistManager
   
-  @State private var isShowingBarPlayer: Bool = true
-  @State private var audioManager = AudioEngineManager.shared
-  @State private var isShowingMusicPlayer = false
+  private enum VMTab {
+    case musicLibrary
+    case files
+  }
   
   var body: some View {
-    TabView {
-      Tab("Music Library", systemImage: "music.note.list") {
+    TabView(selection: $selectedTab) {
+      Tab("Music Library", systemImage: "music.note.list", value: .musicLibrary) {
         NavigationStack {
           AlbumListView(albums: library.albums)
             .toolbar {
-              ToolbarItem(placement: .navigationBarTrailing) {
+              ToolbarItem(placement: .topBarLeading) {
+                NavigationLink("Credits", destination: CreditsView())
+              }
+              ToolbarItem(placement: .topBarTrailing) {
                 if audioManager.isPlaying || audioManager.currentTime > 0 {
-                  NavigationLink(destination: MusicPlayerView(playlistManager.audioSources, startingIndex: playlistManager.currentIndex)) {
+                  NavigationLink(destination: MusicPlayerView(playlistManager.audioSources,
+                                                              startingIndex: playlistManager.currentIndex)) {
                     Image(systemName: "play.fill")
                   }
                 }
@@ -32,11 +42,11 @@ struct HomeScreenView: View {
         }
       }
       
-      Tab("Files", systemImage: "folder.fill") {
+      Tab("Files", systemImage: "folder.fill", value: .files) {
         NavigationStack {
           FilesTabView()
-            .toolbar(.hidden, for: .navigationBar)
             .ignoresSafeArea()
+            .toolbar(.hidden, for: .navigationBar)
         }
       }
     }

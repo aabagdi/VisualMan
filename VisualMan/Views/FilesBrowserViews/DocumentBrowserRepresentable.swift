@@ -1,5 +1,5 @@
 //
-//  UIDocumentBrowserViewControllerRepresentable.swift
+//  DocumentBrowserRepresentable.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 3/13/26.
@@ -8,10 +8,10 @@
 import SwiftUI
 internal import UniformTypeIdentifiers
 
-struct UIDocumentBrowserViewControllerRepresentable: UIViewControllerRepresentable {
+struct DocumentBrowserRepresentable: UIViewControllerRepresentable {
   var onDocumentPicked: (URL) -> Void
   var showVisualizerButton: Bool = false
-  var onVisualizerTapped: (() -> Void)? = nil
+  var onVisualizerTapped: (() -> Void)?
   
   func makeCoordinator() -> Coordinator {
     Coordinator(onDocumentPicked: onDocumentPicked, onVisualizerTapped: onVisualizerTapped)

@@ -28,7 +28,11 @@ struct GenreListView: View {
     Section {
       if !genres.isEmpty {
         List(searchResults, id: \.representativeItem?.persistentID) { genre in
-          NavigationLink(destination: GenreDetailView(genre: genre.representativeItem?.genre ?? "Unknown", albums: albums.filter { $0.representativeItem?.genre == genre.representativeItem?.genre })) {
+          let genreName = genre.representativeItem?.genre ?? "Unknown"
+          let genreAlbums = albums.filter {
+            $0.representativeItem?.genre == genre.representativeItem?.genre
+          }
+          NavigationLink(destination: GenreDetailView(genre: genreName, albums: genreAlbums)) {
             Text(genre.representativeItem?.genre ?? "Unknown")
           }
         }

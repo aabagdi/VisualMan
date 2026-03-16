@@ -15,8 +15,8 @@ struct BarView: View {
   let minHeight: CGFloat
   
   private var barHeight: CGFloat {
-    let height = CGFloat(level) * maxHeight
-    return max(minHeight, height)
+    let height = CGFloat(level) * maxHeight * 0.85
+    return min(maxHeight, max(minHeight, height))
   }
   
   private var barColor: Color {
@@ -48,14 +48,11 @@ struct BarView: View {
   
   var body: some View {
     GeometryReader { g in
-      VStack {
-        Spacer(minLength: 0)
-        RoundedRectangle(cornerRadius: g.size.width * 0.2077922078)
-          .fill(barColor)
-          .frame(height: barHeight)
-          .animation(.easeOut(duration: 0.1), value: barHeight)
-        Spacer()
-      }
+      RoundedRectangle(cornerRadius: g.size.width * 0.2077922078)
+        .fill(barColor)
+        .frame(height: barHeight)
+        .animation(.easeOut(duration: 0.1), value: barHeight)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
   }
 }

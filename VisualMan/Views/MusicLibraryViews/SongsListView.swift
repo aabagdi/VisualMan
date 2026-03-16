@@ -11,15 +11,18 @@ import MediaPlayer
 struct SongsListView: View {
   @State private var searchText: String = ""
   
-  let songs: [MPMediaItem]
+  @Environment(AudioEngineManager.self) private var audioManager
   
-  private var audioManager: AudioEngineManager { AudioEngineManager.shared }
+  let songs: [MPMediaItem]
   
   private var searchResults: [MPMediaItem] {
     if searchText.isEmpty {
       return songs
     } else {
-      return songs.filter { $0.title?.localizedStandardContains(searchText) ?? false || $0.artist?.localizedStandardContains(searchText) ?? false }
+      return songs.filter {
+        $0.title?.localizedStandardContains(searchText) ?? false
+        || $0.artist?.localizedStandardContains(searchText) ?? false
+      }
     }
   }
   

@@ -8,8 +8,14 @@
 import SwiftUI
 
 extension View {
-  func albumArtWaveShader(time: Float, smoothedBass: Float, smoothedMid: Float, smoothedHigh: Float) -> some View {
-    modifier(AlbumArtWaveShader(time: time, smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh))
+  func albumArtWaveShader(time: Float,
+                          smoothedBass: Float,
+                          smoothedMid: Float,
+                          smoothedHigh: Float) -> some View {
+    modifier(AlbumArtWaveShader(time: time,
+                                smoothedBass: smoothedBass,
+                                smoothedMid: smoothedMid,
+                                smoothedHigh: smoothedHigh))
   }
 }
 
