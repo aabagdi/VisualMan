@@ -14,7 +14,7 @@ final class NavierStokesRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
   
-  private let gridSize: Int = 1024
+  private let gridSize: Int = 1536
   
   private var splatPipeline: MTLComputePipelineState!
   private var advectPipeline: MTLComputePipelineState!
@@ -40,8 +40,8 @@ final class NavierStokesRenderer {
   private let dt: Float = 1.0 / 60.0
   private let velocityDissipation: Float = 0.99
   private let dyeDissipation: Float = 0.98
-  private let jacobiIterations: Int = 10
-  private let vorticityStrength: Float = 8.0
+  private let jacobiIterations: Int = 15
+  private let vorticityStrength: Float = 1.5
   
   private static let maxFramesInFlight: UInt64 = 3
   private var commandAllocators: [any MTL4CommandAllocator] = []
@@ -193,8 +193,13 @@ final class NavierStokesRenderer {
     
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    computeDivergence(encoder: encoder)
+    computeVorticity(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    applyVorticityForce(encoder: encoder)
     
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
+    computeDivergence(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     for _ in 0..<jacobiIterations {

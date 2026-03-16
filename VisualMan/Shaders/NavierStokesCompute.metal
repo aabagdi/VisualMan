@@ -8,6 +8,42 @@
 #include <metal_stdlib>
 using namespace metal;
 
+// --- Bicubic sampling helpers (used by advection and render) ---
+
+float4 cubicWeights(float t) {
+  float t2 = t * t;
+  float t3 = t2 * t;
+  return float4(
+    -0.5*t3 + t2 - 0.5*t,
+     1.5*t3 - 2.5*t2 + 1.0,
+    -1.5*t3 + 2.0*t2 + 0.5*t,
+     0.5*t3 - 0.5*t2
+  );
+}
+
+float4 sampleBicubic(texture2d<float, access::read> tex, float2 coord) {
+  float2 texSize = float2(tex.get_width(), tex.get_height());
+  
+  float2 pixel = coord * texSize - 0.5;
+  float2 origin = floor(pixel);
+  float2 frac = pixel - origin;
+  
+  float4 wx = cubicWeights(frac.x);
+  float4 wy = cubicWeights(frac.y);
+  
+  float4 result = float4(0.0);
+  for (int j = -1; j <= 2; j++) {
+    float wY = wy[j + 1];
+    for (int i = -1; i <= 2; i++) {
+      float wX = wx[i + 1];
+      int2 sampleCoord = int2(origin) + int2(i, j);
+      sampleCoord = clamp(sampleCoord, int2(0), int2(texSize) - 1);
+      result += tex.read(uint2(sampleCoord)) * wX * wY;
+    }
+  }
+  return result;
+}
+
 kernel void fluidSplat(texture2d<float, access::read_write> field [[texture(0)]],
                        constant float2 &point [[buffer(0)]],
                        constant float3 &value [[buffer(1)]],
@@ -149,15 +185,16 @@ kernel void fluidVorticityForce(texture2d<float, access::read> vorticity [[textu
   uint h = vorticity.get_height();
   if (gid.x >= w || gid.y >= h) return;
   
-  uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
-  uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
-  uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
-  uint2 up    = uint2(gid.x, min(gid.y + 1, h - 1));
+  // Wide ±2 stencil to avoid amplifying single-pixel noise
+  uint2 left  = uint2(max(int(gid.x) - 2, 0), gid.y);
+  uint2 right = uint2(min(gid.x + 2, w - 1), gid.y);
+  uint2 down  = uint2(gid.x, max(int(gid.y) - 2, 0));
+  uint2 up    = uint2(gid.x, min(gid.y + 2, h - 1));
   
-  float2 gradAbs = 0.5 * float2(abs(vorticity.read(right).x) - abs(vorticity.read(left).x),
-                                  abs(vorticity.read(up).x)    - abs(vorticity.read(down).x));
+  float2 gradAbs = 0.25 * float2(abs(vorticity.read(right).x) - abs(vorticity.read(left).x),
+                                   abs(vorticity.read(up).x)    - abs(vorticity.read(down).x));
   float len = length(gradAbs);
-  if (len < 1e-5) return;
+  if (len < 1e-4) return;
   
   float2 N = gradAbs / len;
   float curl = vorticity.read(gid).x;
@@ -206,40 +243,6 @@ kernel void fluidBlurV(texture2d<float, access::read> fieldIn [[texture(0)]],
   fieldOut.write(sum, gid);
 }
 
-float4 cubicWeights(float t) {
-  float t2 = t * t;
-  float t3 = t2 * t;
-  return float4(
-    -0.5*t3 + t2 - 0.5*t,
-     1.5*t3 - 2.5*t2 + 1.0,
-    -1.5*t3 + 2.0*t2 + 0.5*t,
-     0.5*t3 - 0.5*t2
-  );
-}
-
-float4 sampleBicubic(texture2d<float, access::read> tex, float2 coord) {
-  float2 texSize = float2(tex.get_width(), tex.get_height());
-  
-  float2 pixel = coord * texSize - 0.5;
-  float2 origin = floor(pixel);
-  float2 frac = pixel - origin;
-  
-  float4 wx = cubicWeights(frac.x);
-  float4 wy = cubicWeights(frac.y);
-  
-  float4 result = float4(0.0);
-  for (int j = -1; j <= 2; j++) {
-    float wY = wy[j + 1];
-    for (int i = -1; i <= 2; i++) {
-      float wX = wx[i + 1];
-      int2 sampleCoord = int2(origin) + int2(i, j);
-      sampleCoord = clamp(sampleCoord, int2(0), int2(texSize) - 1);
-      result += tex.read(uint2(sampleCoord)) * wX * wY;
-    }
-  }
-  return result;
-}
-
 kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::write> output [[texture(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
@@ -248,9 +251,17 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   if (gid.x >= w || gid.y >= h) return;
   
   constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
-  float2 uv = (float2(gid) + 0.5) / float2(w, h);
+  float2 center = (float2(gid) + 0.5) / float2(w, h);
+  // Sample offsets in dye-texel space to anti-alias grid-cell edges
+  float2 texel = 1.0 / float2(dye.get_width(), dye.get_height());
   
-  float4 color = dye.sample(bilinear, uv);
+  // 2x2 rotated-grid supersampling spanning one grid cell
+  float4 color = float4(0);
+  color += dye.sample(bilinear, center + float2(-0.25, -0.75) * texel);
+  color += dye.sample(bilinear, center + float2( 0.75, -0.25) * texel);
+  color += dye.sample(bilinear, center + float2(-0.75,  0.25) * texel);
+  color += dye.sample(bilinear, center + float2( 0.25,  0.75) * texel);
+  color *= 0.25;
   
   float3 bg = float3(0.0, 0.0, 0.02);
   float3 c = bg + max(color.rgb, float3(0.0));
