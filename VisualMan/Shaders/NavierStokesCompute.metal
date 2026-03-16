@@ -60,6 +60,28 @@ kernel void fluidSplat(texture2d<float, access::read_write> field [[texture(0)]]
   field.write(current, gid);
 }
 
+kernel void fluidDiffuse(texture2d<float, access::read> fieldIn [[texture(0)]],
+                         texture2d<float, access::write> fieldOut [[texture(1)]],
+                         constant float &alpha [[buffer(0)]],
+                         constant float &rBeta [[buffer(1)]],
+                         uint2 gid [[thread_position_in_grid]]) {
+  uint w = fieldIn.get_width();
+  uint h = fieldIn.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  
+  uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
+  uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
+  uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
+  uint2 up    = uint2(gid.x, min(gid.y + 1, h - 1));
+  
+  float4 center = fieldIn.read(gid);
+  float4 sum = fieldIn.read(left) + fieldIn.read(right) +
+               fieldIn.read(down) + fieldIn.read(up);
+  
+  float4 result = (center + alpha * sum) * rBeta;
+  fieldOut.write(result, gid);
+}
+
 kernel void fluidAdvect(texture2d<float, access::read> velocityIn [[texture(0)]],
                         texture2d<float, access::sample> fieldIn [[texture(1)]],
                         texture2d<float, access::write> fieldOut [[texture(2)]],
@@ -265,7 +287,12 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   c = mix(float3(luminance), c, 1.5);
   
   c *= 1.8;
-  c = c / (1.0 + c);
+  
+  float peak = max(c.r, max(c.g, c.b));
+  if (peak > 0.0) {
+    float mappedPeak = peak / (1.0 + peak);
+    c *= mappedPeak / peak;
+  }
   
   output.write(float4(c, 1.0), gid);
 }

@@ -64,9 +64,18 @@ struct NavierStokesVisualizerView: View {
         }
       }
       .onChange(of: timeline.date) {
-        smoothedBass = smoothedBass * 0.5 + bassLevel * 0.5
-        smoothedMid = smoothedMid * 0.6 + midLevel * 0.4
-        smoothedHigh = smoothedHigh * 0.4 + highLevel * 0.6
+        // Asymmetric envelope: fast attack, slow release
+        let bTarget = bassLevel
+        let bSmooth: Float = bTarget > smoothedBass ? 0.2 : 0.85
+        smoothedBass = smoothedBass * bSmooth + bTarget * (1.0 - bSmooth)
+        
+        let mTarget = midLevel
+        let mSmooth: Float = mTarget > smoothedMid ? 0.25 : 0.8
+        smoothedMid = smoothedMid * mSmooth + mTarget * (1.0 - mSmooth)
+        
+        let hTarget = highLevel
+        let hSmooth: Float = hTarget > smoothedHigh ? 0.15 : 0.75
+        smoothedHigh = smoothedHigh * hSmooth + hTarget * (1.0 - hSmooth)
       }
       .ignoresSafeArea()
     }
