@@ -17,7 +17,6 @@ extension NavierStokesRenderer {
     let s = Float(gridSize) / 1536.0
     let audioEnergy = (bass + mid + high) / 3.0
 
-    // Beat detection: onset = rapid increase in level
     let bassOnset = max(bass - prevBass, 0)
     let midOnset = max(mid - prevMid, 0)
     prevBass = bass
@@ -85,7 +84,6 @@ extension NavierStokesRenderer {
              radius: (60.0 + b2 * 60.0) * s)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    // Beat impulse: explosive radial burst on transients
     if bassBeat {
       let burstAngle = time * 1.7
       for i in 0..<3 {
