@@ -354,6 +354,7 @@ private final class DisplayLinkStream: NSObject {
     let (stream, continuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
     self.continuation = continuation
     let link = CADisplayLink(target: self, selector: #selector(onFrame))
+    link.preferredFrameRateRange = CAFrameRateRange.init(minimum: 60, maximum: 120, preferred: 120)
     link.add(to: .current, forMode: .common)
     self.displayLink = link
     return stream

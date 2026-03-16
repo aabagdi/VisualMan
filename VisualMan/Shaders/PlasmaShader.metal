@@ -37,7 +37,7 @@ half3 hsv2rgb(float h, float s, float v) {
   float angle = atan2(uv.y, uv.x);
   float v4 = sin(angle * 3.0 + dist * 5.0 + time * 0.6 + audioEnergy * 5.0);
   
-  float plasma = (v1 + v2 + v3 + v4) * 0.25; // -1..1 range
+  float plasma = (v1 + v2 + v3 + v4) * 0.25;
   
   float hue = fract(plasma * 0.5 + 0.5 + time * 0.03);
   float sat = 0.6 + audioEnergy * 0.4;

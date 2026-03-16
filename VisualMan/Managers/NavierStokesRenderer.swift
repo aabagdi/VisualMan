@@ -16,44 +16,45 @@ final class NavierStokesRenderer {
   
   let gridSize: Int = 1024
   
-  private var splatPipeline: MTLComputePipelineState!
-  private var diffusePipeline: MTLComputePipelineState!
-  private var advectPipeline: MTLComputePipelineState!
-  private var vorticityPipeline: MTLComputePipelineState!
-  private var vorticityForcePipeline: MTLComputePipelineState!
-  private var divergencePipeline: MTLComputePipelineState!
-  private var jacobiPipeline: MTLComputePipelineState!
-  private var gradientSubtractPipeline: MTLComputePipelineState!
-  private var blurHPipeline: MTLComputePipelineState!
-  private var blurVPipeline: MTLComputePipelineState!
-  private var renderPipeline: MTLComputePipelineState!
+  var splatPipeline: MTLComputePipelineState!
+  var diffusePipeline: MTLComputePipelineState!
+  var advectPipeline: MTLComputePipelineState!
+  var vorticityPipeline: MTLComputePipelineState!
+  var vorticityForcePipeline: MTLComputePipelineState!
+  var divergencePipeline: MTLComputePipelineState!
+  var jacobiPipeline: MTLComputePipelineState!
+  var gradientSubtractPipeline: MTLComputePipelineState!
+  var blurHPipeline: MTLComputePipelineState!
+  var blurVPipeline: MTLComputePipelineState!
+  var renderPipeline: MTLComputePipelineState!
   
-  private var velocityA: MTLTexture!
+  var velocityA: MTLTexture!
   private var velocityB: MTLTexture!
-  private var pressure: MTLTexture!
-  private var pressureTemp: MTLTexture!
-  private var divergenceTexture: MTLTexture!
-  private var dyeA: MTLTexture!
-  private var dyeB: MTLTexture!
-  private var vorticityTexture: MTLTexture!
+  var pressure: MTLTexture!
+  var pressureTemp: MTLTexture!
+  var divergenceTexture: MTLTexture!
+  var dyeA: MTLTexture!
+  var dyeB: MTLTexture!
+  var vorticityTexture: MTLTexture!
   
   var time: Float = 0
-  private let dt: Float = 1.0 / 60.0
+  let dt: Float = 1.0 / 60.0
   var prevBass: Float = 0
   var prevMid: Float = 0
   private let velocityDissipation: Float = 0.99
   private let dyeDissipation: Float = 0.98
-  private let jacobiIterations: Int = 10
-  private let viscosity: Float = 0.0002
-  private let diffuseIterations: Int = 4
-  private let vorticityStrength: Float = 1.5
+  let jacobiIterations: Int = 10
+  let viscosity: Float = 0.0002
+  let diffuseIterations: Int = 4
+  let vorticityStrength: Float = 1.5
   
   private static let maxFramesInFlight: UInt64 = 3
   private var commandAllocators: [any MTL4CommandAllocator] = []
   private var commandBuffer: any MTL4CommandBuffer
-  private var argumentTable: any MTL4ArgumentTable
+  var argumentTable: any MTL4ArgumentTable
   private var uniformBuffers: [MTLBuffer] = []
   private var uniformOffset: Int = 0
+  private static let uniformBufferSize: Int = 16384
   private var sharedEvent: MTLSharedEvent!
   private var frameNumber: UInt64 = 0
   private var residencySet: MTLResidencySet!
@@ -64,7 +65,8 @@ final class NavierStokesRenderer {
     guard let device = MTLCreateSystemDefaultDevice(),
           let commandQueue = device.makeMTL4CommandQueue(),
           let commandBuffer = device.makeCommandBuffer(),
-          let sharedEvent = device.makeSharedEvent() else {
+          let sharedEvent = device.makeSharedEvent(),
+          let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
       return nil
     }
     self.device = device
@@ -75,7 +77,7 @@ final class NavierStokesRenderer {
     
     for _ in 0..<Self.maxFramesInFlight {
       guard let allocator = device.makeCommandAllocator(),
-            let uniformBuf = device.makeBuffer(length: 4096, options: .storageModeShared) else {
+            let uniformBuf = device.makeBuffer(length: Self.uniformBufferSize, options: .storageModeShared) else {
         return nil
       }
       commandAllocators.append(allocator)
@@ -90,7 +92,7 @@ final class NavierStokesRenderer {
     }
     self.argumentTable = argumentTable
     
-    setupPipelines()
+    setupPipelines(compiler: compiler)
     setupTextures()
     
     let setDesc = MTLResidencySetDescriptor()
@@ -116,12 +118,18 @@ final class NavierStokesRenderer {
     commandQueue.addResidencySet(residencySet)
   }
   
-  private func setupPipelines() {
+  private func setupPipelines(compiler: any MTL4Compiler) {
     guard let library = device.makeDefaultLibrary() else { return }
     
     func makePipeline(_ name: String) -> MTLComputePipelineState? {
-      guard let function = library.makeFunction(name: name) else { return nil }
-      return try? device.makeComputePipelineState(function: function)
+      let functionDesc = MTL4LibraryFunctionDescriptor()
+      functionDesc.name = name
+      functionDesc.library = library
+      
+      let pipelineDesc = MTL4ComputePipelineDescriptor()
+      pipelineDesc.computeFunctionDescriptor = functionDesc
+      
+      return try? compiler.makeComputePipelineState(descriptor: pipelineDesc)
     }
     
     splatPipeline = makePipeline("fluidSplat")
@@ -138,33 +146,37 @@ final class NavierStokesRenderer {
   }
   
   private func setupTextures() {
-    velocityA = makeTexture(format: .rg16Float)
-    velocityB = makeTexture(format: .rg16Float)
-    pressure = makeTexture(format: .r16Float)
-    pressureTemp = makeTexture(format: .r16Float)
-    divergenceTexture = makeTexture(format: .r16Float)
-    dyeA = makeTexture(format: .rgba16Float)
-    dyeB = makeTexture(format: .rgba16Float)
-    vorticityTexture = makeTexture(format: .r16Float)
+    velocityA = makeTexture(format: .rg16Float, usage: [.shaderRead, .shaderWrite])
+    velocityB = makeTexture(format: .rg16Float, usage: [.shaderRead, .shaderWrite])
+    pressure = makeTexture(format: .r16Float, usage: [.shaderRead, .shaderWrite])
+    pressureTemp = makeTexture(format: .r16Float, usage: [.shaderRead, .shaderWrite])
+    divergenceTexture = makeTexture(format: .r16Float, usage: [.shaderRead, .shaderWrite])
+    dyeA = makeTexture(format: .rgba16Float, usage: [.shaderRead, .shaderWrite])
+    dyeB = makeTexture(format: .rgba16Float, usage: [.shaderRead, .shaderWrite])
+    vorticityTexture = makeTexture(format: .r16Float, usage: [.shaderRead, .shaderWrite])
   }
   
-  private func makeTexture(format: MTLPixelFormat) -> MTLTexture? {
+  private func makeTexture(format: MTLPixelFormat,
+                           usage: MTLTextureUsage = [.shaderRead, .shaderWrite]) -> MTLTexture? {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: format,
       width: gridSize,
       height: gridSize,
       mipmapped: false
     )
-    desc.usage = [.shaderRead, .shaderWrite]
+    desc.usage = usage
     desc.storageMode = .private
     return device.makeTexture(descriptor: desc)
   }
   
-  private func writeUniform<T>(_ value: T) -> MTLGPUAddress {
+  func writeUniform<T>(_ value: T) -> MTLGPUAddress {
     let aligned = (uniformOffset + 15) & ~15
+    let end = aligned + MemoryLayout<T>.size
+    precondition(end <= Self.uniformBufferSize,
+                 "Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
     (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
     let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
-    uniformOffset = aligned + MemoryLayout<T>.size
+    uniformOffset = end
     return addr
   }
   
@@ -244,154 +256,4 @@ final class NavierStokesRenderer {
     render(encoder: encoder, output: output)
   }
   
-}
-
-extension NavierStokesRenderer {
-  func splatForce(encoder: any MTL4ComputeCommandEncoder,
-                  pos: SIMD2<Float>,
-                  force: SIMD3<Float>,
-                  radius: Float) {
-    encoder.setComputePipelineState(splatPipeline)
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
-    argumentTable.setAddress(writeUniform(pos), index: 0)
-    argumentTable.setAddress(writeUniform(force), index: 1)
-    argumentTable.setAddress(writeUniform(radius), index: 2)
-    dispatchGrid(encoder: encoder)
-  }
-  
-  func splatDye(encoder: any MTL4ComputeCommandEncoder,
-                pos: SIMD2<Float>,
-                color: SIMD3<Float>,
-                radius: Float) {
-    encoder.setComputePipelineState(splatPipeline)
-    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
-    argumentTable.setAddress(writeUniform(pos), index: 0)
-    argumentTable.setAddress(writeUniform(color), index: 1)
-    argumentTable.setAddress(writeUniform(radius), index: 2)
-    dispatchGrid(encoder: encoder)
-  }
-  
-  private func advect(encoder: any MTL4ComputeCommandEncoder,
-                      velocityIn: MTLTexture,
-                      fieldIn: MTLTexture,
-                      fieldOut: MTLTexture,
-                      dissipation: Float) {
-    encoder.setComputePipelineState(advectPipeline)
-    argumentTable.setTexture(velocityIn.gpuResourceID, index: 0)
-    argumentTable.setTexture(fieldIn.gpuResourceID, index: 1)
-    argumentTable.setTexture(fieldOut.gpuResourceID, index: 2)
-    
-    let dtVal = dt * 40.0
-    argumentTable.setAddress(writeUniform(dtVal), index: 0)
-    argumentTable.setAddress(writeUniform(dissipation), index: 1)
-    
-    dispatchGrid(encoder: encoder)
-  }
-  
-  private func computeVorticity(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(vorticityPipeline)
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
-    argumentTable.setTexture(vorticityTexture.gpuResourceID, index: 1)
-    dispatchGrid(encoder: encoder)
-  }
-  
-  private func applyVorticityForce(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(vorticityForcePipeline)
-    argumentTable.setTexture(vorticityTexture.gpuResourceID, index: 0)
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
-    argumentTable.setAddress(writeUniform(vorticityStrength), index: 0)
-    dispatchGrid(encoder: encoder)
-  }
-  
-  private func diffuseField(encoder: any MTL4ComputeCommandEncoder,
-                            fieldA: inout MTLTexture!,
-                            fieldB: inout MTLTexture!) {
-    let alpha = viscosity * dt * Float(gridSize * gridSize)
-    let rBeta = 1.0 / (1.0 + 4.0 * alpha)
-    
-    for _ in 0..<diffuseIterations {
-      encoder.setComputePipelineState(diffusePipeline)
-      argumentTable.setTexture(fieldA.gpuResourceID, index: 0)
-      argumentTable.setTexture(fieldB.gpuResourceID, index: 1)
-      argumentTable.setAddress(writeUniform(alpha), index: 0)
-      argumentTable.setAddress(writeUniform(rBeta), index: 1)
-      dispatchGrid(encoder: encoder)
-      swap(&fieldA, &fieldB)
-      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    }
-  }
-  
-  private func project(encoder: any MTL4ComputeCommandEncoder) {
-    computeDivergence(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    for _ in 0..<jacobiIterations {
-      jacobiIteration(encoder: encoder)
-      swap(&pressure, &pressureTemp)
-      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    }
-    
-    gradientSubtract(encoder: encoder)
-  }
-  
-  private func computeDivergence(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(divergencePipeline)
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
-    argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
-    
-    dispatchGrid(encoder: encoder)
-  }
-  
-  private func jacobiIteration(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(jacobiPipeline)
-    argumentTable.setTexture(pressure.gpuResourceID, index: 0)
-    argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
-    argumentTable.setTexture(pressureTemp.gpuResourceID, index: 2)
-    
-    dispatchGrid(encoder: encoder)
-  }
-  
-  private func gradientSubtract(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(gradientSubtractPipeline)
-    argumentTable.setTexture(pressure.gpuResourceID, index: 0)
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
-    
-    dispatchGrid(encoder: encoder)
-  }
-  
-  private func blurDyeH(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(blurHPipeline)
-    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
-    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
-    
-    dispatchGrid(encoder: encoder)
-  }
-  
-  private func blurDyeV(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(blurVPipeline)
-    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
-    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
-    
-    dispatchGrid(encoder: encoder)
-  }
-  
-  private func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture) {
-    encoder.setComputePipelineState(renderPipeline)
-    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
-    argumentTable.setTexture(output.gpuResourceID, index: 1)
-    dispatchGrid(encoder: encoder, width: output.width, height: output.height)
-  }
-  
-  private func dispatchGrid(encoder: any MTL4ComputeCommandEncoder, width: Int? = nil, height: Int? = nil) {
-    let w = width ?? gridSize
-    let h = height ?? gridSize
-    let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
-    let threadGroups = MTLSize(
-      width: (w + 15) / 16,
-      height: (h + 15) / 16,
-      depth: 1
-    )
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: threadGroups,
-                                threadsPerThreadgroup: threadGroupSize)
-  }
 }

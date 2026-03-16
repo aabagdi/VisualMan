@@ -64,7 +64,6 @@ struct NavierStokesVisualizerView: View {
         }
       }
       .onChange(of: timeline.date) {
-        // Asymmetric envelope: fast attack, slow release
         let bTarget = bassLevel
         let bSmooth: Float = bTarget > smoothedBass ? 0.2 : 0.85
         smoothedBass = smoothedBass * bSmooth + bTarget * (1.0 - bSmooth)
