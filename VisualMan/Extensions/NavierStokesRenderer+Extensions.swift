@@ -31,7 +31,9 @@ extension NavierStokesRenderer {
   }
   
   private func injectBassSplats(encoder: any MTL4ComputeCommandEncoder,
-                                bass: Float, center: Float, gs: Float) {
+                                bass: Float,
+                                center: Float,
+                                gs: Float) {
     let bassForce = bass * 300.0
     let bassRadius = gs * 0.08 * (1.0 + bass * 0.5)
     
@@ -66,7 +68,9 @@ extension NavierStokesRenderer {
   }
   
   private func injectMidSplats(encoder: any MTL4ComputeCommandEncoder,
-                               mid: Float, center: Float, gs: Float) {
+                               mid: Float,
+                               center: Float,
+                               gs: Float) {
     let midForce = mid * 200.0
     let midRadius = gs * 0.04 * (1.0 + mid * 0.3)
     
@@ -95,7 +99,9 @@ extension NavierStokesRenderer {
   }
   
   private func injectHighSplats(encoder: any MTL4ComputeCommandEncoder,
-                                high: Float, center: Float, gs: Float) {
+                                high: Float,
+                                center: Float,
+                                gs: Float) {
     let highForce = high * 120.0
     let highRadius = gs * 0.02
     
