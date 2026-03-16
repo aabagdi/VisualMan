@@ -15,6 +15,10 @@ extension NavierStokesRenderer {
                          high: Float) {
     let center = Float(gridSize) * 0.5
     let gs = Float(gridSize)
+    let s = gs / 1024.0
+    
+    let audioEnergy = (bass + mid + high) / 3.0
+    injectVortex(encoder: encoder, center: center, s: s, audioEnergy: audioEnergy)
     
     if bass > 0.01 {
       injectBassSplats(encoder: encoder, bass: bass, center: center, gs: gs)
