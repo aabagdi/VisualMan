@@ -78,8 +78,6 @@ kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture
   
   float2 pos = float2(gid) + 0.5;
   
-  // Early exit: check if this thread is near any splat
-  // exp(-6) ≈ 0.0025, negligible contribution beyond this
   bool anyNearby = false;
   for (uint i = 0; i < splatCount; i++) {
     float2 diff = pos - splats[i].position;

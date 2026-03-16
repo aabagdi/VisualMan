@@ -39,11 +39,9 @@ extension NavierStokesRenderer {
                         forceSplats: &forceSplats, dyeSplats: &dyeSplats)
     }
 
-    // Dispatch all force splats in one batch
     if !forceSplats.isEmpty {
       dispatchBatchedSplats(encoder: encoder, texture: velocityA, splats: forceSplats)
     }
-    // Dye splats target a different texture, no barrier needed before this
     if !dyeSplats.isEmpty {
       dispatchBatchedSplats(encoder: encoder, texture: dyeA, splats: dyeSplats)
     }
