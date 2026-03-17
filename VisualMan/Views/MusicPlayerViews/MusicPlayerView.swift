@@ -16,11 +16,14 @@ struct MusicPlayerView: View {
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(AudioPlaylistManager.self) private var playlistManager
   
+  private let _audioSources: [any AudioSource]
+  private let _startingIndex: Int
   private let sliderColor: Color = .white
   
   private var normalFillColor: Color {
     sliderColor.opacity(0.5)
   }
+  
   private var emptyColor: Color {
     sliderColor.opacity(0.3)
   }
@@ -57,9 +60,6 @@ struct MusicPlayerView: View {
     _audioSources = sources
     _startingIndex = 0
   }
-  
-  private let _audioSources: [any AudioSource]
-  private let _startingIndex: Int
   
   var body: some View {
     @Bindable var audioManager = audioManager
