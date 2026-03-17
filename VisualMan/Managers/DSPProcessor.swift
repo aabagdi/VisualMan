@@ -24,6 +24,13 @@ actor DSPProcessor {
   private var hannWindow = [2048 of Float](repeating: 0.0)
   private var aWeightTable = [1024 of Float](repeating: 0.0)
   private var cachedSampleRate: Float = 0.0
+  private var realIn = [2048 of Float](repeating: 0.0)
+  private var imagIn = [2048 of Float](repeating: 0.0)
+  private var realOut = [2048 of Float](repeating: 0.0)
+  private var imagOut = [2048 of Float](repeating: 0.0)
+  private var magnitudes = [1024 of Float](repeating: 0.0)
+  private var weightedMagnitudes = [1024 of Float](repeating: 0.0)
+  private var logMagnitudes = [1024 of Float](repeating: 0.0)
 
   private let numberOfBars = 32
   private let smoothingFactor: Float = 0.8
@@ -50,16 +57,23 @@ actor DSPProcessor {
     visualizerBars = [32 of Float](repeating: 0.0)
     peakLevels = [32 of Float](repeating: 0.0)
     peakHoldTime = [32 of Float](repeating: 0.0)
+    realIn = [2048 of Float](repeating: 0.0)
+    imagIn = [2048 of Float](repeating: 0.0)
+    realOut = [2048 of Float](repeating: 0.0)
+    imagOut = [2048 of Float](repeating: 0.0)
+    magnitudes = [1024 of Float](repeating: 0.0)
+    weightedMagnitudes = [1024 of Float](repeating: 0.0)
+    logMagnitudes = [1024 of Float](repeating: 0.0)
     gainHistory = []
     currentGain = 1.0
   }
 
   func processSamples(_ samples: [Float], sampleRate: Float) -> DSPResult {
-    guard let magnitudes = computeFFTMagnitudes(samples) else {
+    guard computeFFTMagnitudes(samples) else {
       return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
     }
     
-    var logMagnitudes = normalizeToLogScale(magnitudes, sampleRate: sampleRate)
+    normalizeToLogScale(sampleRate: sampleRate)
     
     audioLevels.withUnsafeElementPointer { al in
       logMagnitudes.withUnsafeElementPointer { lm in
@@ -75,12 +89,7 @@ actor DSPProcessor {
     return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
   }
   
-  private func computeFFTMagnitudes(_ samples: [Float]) -> [1024 of Float]? {
-    var realIn = [2048 of Float](repeating: 0.0)
-    var imagIn = [2048 of Float](repeating: 0.0)
-    var realOut = [2048 of Float](repeating: 0.0)
-    var imagOut = [2048 of Float](repeating: 0.0)
-    
+  private func computeFFTMagnitudes(_ samples: [Float]) -> Bool {
     let sampleCount = min(samples.count, 2048)
     realIn.withUnsafeElementPointer { ri in
       hannWindow.withUnsafeElementPointer { hann in
@@ -91,7 +100,7 @@ actor DSPProcessor {
       }
     }
     
-    guard let dftSetup else { return nil }
+    guard let dftSetup else { return false }
     
     realIn.withUnsafeElementPointer { ri in
       imagIn.withUnsafeElementPointer { ii in
@@ -102,8 +111,6 @@ actor DSPProcessor {
         }
       }
     }
-    
-    var magnitudes = [1024 of Float](repeating: 0.0)
     
     realOut.withUnsafeElementPointer { ro in
       imagOut.withUnsafeElementPointer { io in
@@ -119,17 +126,14 @@ actor DSPProcessor {
       vDSP_vsmul(mag, 1, &scaleFactor, mag, 1, 1024)
     }
     
-    return magnitudes
+    return true
   }
   
-  private func normalizeToLogScale(_ magnitudes: [1024 of Float], sampleRate: Float) -> [1024 of Float] {
-    var magnitudes = magnitudes
+  private func normalizeToLogScale(sampleRate: Float) {
     if sampleRate != cachedSampleRate {
       rebuildAWeightTable(sampleRate: sampleRate)
       cachedSampleRate = sampleRate
     }
-    
-    var weightedMagnitudes = [1024 of Float](repeating: 0.0)
     
     magnitudes.withUnsafeElementPointer { mag in
       aWeightTable.withUnsafeElementPointer { aw in
@@ -141,8 +145,6 @@ actor DSPProcessor {
         }
       }
     }
-    
-    var logMagnitudes = [1024 of Float](repeating: 0.0)
     
     weightedMagnitudes.withUnsafeElementPointer { wm in
       logMagnitudes.withUnsafeElementPointer { lm in
@@ -159,8 +161,6 @@ actor DSPProcessor {
         vDSP_vclip(lm, 1, &low, &high, lm, 1, 1024)
       }
     }
-    
-    return logMagnitudes
   }
   
   private func smoothVisualizerBars(_ newBars: [32 of Float]) {

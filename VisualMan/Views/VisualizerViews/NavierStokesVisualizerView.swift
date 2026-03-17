@@ -25,5 +25,8 @@ struct NavierStokesVisualizerView: View {
     .onAppear {
       renderer = NavierStokesRenderer()
     }
+    .onDisappear {
+      renderer = nil
+    }
   }
 }

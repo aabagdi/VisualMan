@@ -19,7 +19,7 @@ struct NavierStokesMetalView: UIViewRepresentable {
     mtkView.delegate = context.coordinator
     mtkView.preferredFramesPerSecond = 60
     mtkView.colorPixelFormat = .bgra8Unorm
-    mtkView.framebufferOnly = false
+    mtkView.framebufferOnly = true
     mtkView.isPaused = false
     mtkView.enableSetNeedsDisplay = false
     mtkView.clearColor = MTLClearColor(red: 0,
