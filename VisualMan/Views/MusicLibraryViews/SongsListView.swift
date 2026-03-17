@@ -29,7 +29,7 @@ struct SongsListView: View {
   var body: some View {
     Section {
       if !songs.isEmpty {
-        List(Array(searchResults.enumerated()), id: \.element.persistentID) { index, song in
+        List(searchResults.enumerated(), id: \.element.persistentID) { index, song in
           let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
           NavigationLink(destination: MusicPlayerView(searchResults, startingIndex: index)) {
             HStack(spacing: 10) {

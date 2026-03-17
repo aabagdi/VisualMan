@@ -17,8 +17,6 @@ actor DSPProcessor {
   private nonisolated(unsafe) var dftSetup: OpaquePointer?
   private var audioLevels = [1024 of Float](repeating: 0.0)
   private var visualizerBars = [32 of Float](repeating: 0.0)
-  private var peakLevels = [32 of Float](repeating: 0.0)
-  private var peakHoldTime = [32 of Float](repeating: 0.0)
   private var gainHistory: [Float] = []
   private var currentGain: Float = 1.0
   private var hannWindow = [2048 of Float](repeating: 0.0)
