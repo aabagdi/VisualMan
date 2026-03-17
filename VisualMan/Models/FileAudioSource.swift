@@ -14,17 +14,20 @@ struct FileAudioSource: AudioSource {
   let artist: String?
   let duration: TimeInterval?
   let albumArt: UIImage?
+  let thumbnailImage: UIImage?
   
   init(url: URL,
        title: String? = nil,
        artist: String? = nil,
        duration: TimeInterval? = nil,
-       albumArt: UIImage? = nil) {
+       albumArt: UIImage? = nil,
+       thumbnailImage: UIImage? = nil) {
     self.url = url
     self.title = title ?? url.deletingPathExtension().lastPathComponent
     self.artist = artist
     self.duration = duration
     self.albumArt = albumArt
+    self.thumbnailImage = thumbnailImage
   }
   
   func getPlaybackURL() -> URL? {

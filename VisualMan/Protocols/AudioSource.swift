@@ -12,6 +12,7 @@ protocol AudioSource {
   var title: String? { get }
   var artist: String? { get }
   var duration: TimeInterval? { get }
+  var thumbnailImage: UIImage? { get }
   var albumArt: UIImage? { get }
   
   func getPlaybackURL() -> URL?

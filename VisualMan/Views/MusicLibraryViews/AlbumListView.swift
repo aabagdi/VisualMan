@@ -131,7 +131,7 @@ struct AlbumListView: View {
               ForEach(searchResults, id: \.persistentID) { album in
                 NavigationLink(destination: AlbumDetailView(album: album)) {
                   HStack {
-                    Image(uiImage: album.representativeItem?.albumArt ?? placeholder)
+                    Image(uiImage: album.representativeItem?.thumbnailImage ?? placeholder)
                       .resizable()
                       .clipShape(RoundedRectangle(cornerRadius: 8))
                       .frame(width: 60, height: 60)

@@ -74,6 +74,7 @@ struct MusicPlayerView: View {
           isTapped.toggle()
         }
       }
+      
       VStack {
         Spacer()
         if let current = currentAudioSource {
@@ -86,6 +87,7 @@ struct MusicPlayerView: View {
           .foregroundStyle(.white)
           .frame(height: 40)
         }
+        
         ProgressSliderView(value: $audioManager.currentTime,
                            inRange: TimeInterval.zero...max(audioManager.duration, 0.1),
                            activeFillColor: sliderColor,
@@ -99,6 +101,7 @@ struct MusicPlayerView: View {
         }
         .frame(height: 60)
         .padding()
+        
         HStack {
           Button {
             viewModel.skipBackwards()
