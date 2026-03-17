@@ -28,7 +28,7 @@ final class NavierStokesRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
   
-  let gridSize: Int = 1024
+  let gridSize: Int = 1536
   
   var splatPipeline: MTLComputePipelineState!
   var diffusePipeline: MTLComputePipelineState!
