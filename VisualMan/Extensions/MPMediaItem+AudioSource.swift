@@ -8,11 +8,11 @@
 import Foundation
 import MediaPlayer
 
-private var thumbnailCache: NSCache<NSNumber, UIImage> {
+private let thumbnailCache: NSCache<NSNumber, UIImage> = {
   let c = NSCache<NSNumber, UIImage>()
-  c.countLimit = 50
+  c.countLimit = 100
   return c
-}
+}()
 
 private let fullArtworkCache = NSCache<NSNumber, UIImage>()
 
