@@ -33,28 +33,29 @@ final class LockScreenControlManager: @unchecked Sendable {
     commandCenter.changePlaybackPositionCommand.isEnabled = true
     
     commandCenter.playCommand.addTarget { [weak self] _ in
-      self?.onPlayPause?()
+      Task { @MainActor in self?.onPlayPause?() }
       return .success
     }
     
     commandCenter.pauseCommand.addTarget { [weak self] _ in
-      self?.onPlayPause?()
+      Task { @MainActor in self?.onPlayPause?() }
       return .success
     }
     
     commandCenter.nextTrackCommand.addTarget { [weak self] _ in
-      self?.onNext?()
+      Task { @MainActor in self?.onNext?() }
       return .success
     }
     
     commandCenter.previousTrackCommand.addTarget { [weak self] _ in
-      self?.onPrevious?()
+      Task { @MainActor in self?.onPrevious?() }
       return .success
     }
     
     commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
-      guard let self, let positionEvent = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-      self.seek(to: positionEvent.positionTime)
+      guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+      let position = positionEvent.positionTime
+      Task { @MainActor in self?.seek(to: position) }
       return .success
     }
   }
@@ -63,26 +64,38 @@ final class LockScreenControlManager: @unchecked Sendable {
     audioManager.seek(to: time)
   }
   
-  func updateNowPlayingInfo(title: String?,
-                            artist: String?,
-                            albumArt: UIImage?,
-                            duration: TimeInterval,
-                            currentTime: TimeInterval,
-                            isPlaying: Bool) {
+  func updateTrackInfo(title: String?,
+                       artist: String?,
+                       albumArt: UIImage?,
+                       duration: TimeInterval) {
     let artwork: UIImage = albumArt ?? placeholder
     
-    var nowPlayingInfo = [String: Any]()
+    var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
     nowPlayingInfo[MPMediaItemPropertyTitle] = title ?? "Unknown"
     nowPlayingInfo[MPMediaItemPropertyArtist] = artist ?? "Unknown"
-    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
     nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
-    nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-    
     nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: artwork.size) { @Sendable _ in
       artwork
     }
     
     MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+  }
+  
+  func updatePlaybackPosition(currentTime: TimeInterval, isPlaying: Bool) {
+    var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
+    nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+    
+    MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+  }
+  
+  func activate() {
+    let commandCenter = MPRemoteCommandCenter.shared()
+    commandCenter.playCommand.isEnabled = true
+    commandCenter.pauseCommand.isEnabled = true
+    commandCenter.previousTrackCommand.isEnabled = true
+    commandCenter.nextTrackCommand.isEnabled = true
+    commandCenter.changePlaybackPositionCommand.isEnabled = true
   }
   
   func cleanup() {
@@ -92,6 +105,10 @@ final class LockScreenControlManager: @unchecked Sendable {
     commandCenter.previousTrackCommand.isEnabled = false
     commandCenter.nextTrackCommand.isEnabled = false
     commandCenter.changePlaybackPositionCommand.isEnabled = false
+    
+    onPlayPause = nil
+    onNext = nil
+    onPrevious = nil
     
     MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
   }

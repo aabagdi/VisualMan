@@ -11,42 +11,41 @@ import MediaPlayer
 @MainActor
 @Observable
 final class MusicLibraryAccessManager {
-  var songs: [MPMediaItem] = []
-  var playlists: [MPMediaItemCollection] = []
-  var albums: [MPMediaItemCollection] = []
-  var artists: [MPMediaItemCollection] = []
-  var compilations: [MPMediaItemCollection] = []
-  var genres: [MPMediaItemCollection] = []
   var authorizationStatus: MPMediaLibraryAuthorizationStatus = .notDetermined
-  var isLoading = false
+  
+  var songs: [MPMediaItem] {
+    MPMediaQuery.songs().items ?? []
+  }
+  
+  var playlists: [MPMediaItemCollection] {
+    MPMediaQuery.playlists().collections ?? []
+  }
+  
+  var albums: [MPMediaItemCollection] {
+    (MPMediaQuery.albums().collections ?? [])
+      .filter { !($0.representativeItem?.isCompilation ?? false) }
+      .sorted {
+        $0.representativeItem?.albumArtist ?? "Unknown" < $1.representativeItem?.albumArtist ?? "Unknown"
+      }
+  }
+  
+  var artists: [MPMediaItemCollection] {
+    MPMediaQuery.artists().collections ?? []
+  }
+  
+  var compilations: [MPMediaItemCollection] {
+    MPMediaQuery.compilations().collections ?? []
+  }
+  
+  var genres: [MPMediaItemCollection] {
+    MPMediaQuery.genres().collections ?? []
+  }
     
   func requestMusicLibraryAccess() {
     MPMediaLibrary.requestAuthorization { status in
       Task { @MainActor in
         self.authorizationStatus = status
-        if status == .authorized {
-          self.loadLibrary()
-        }
       }
     }
-  }
-  
-  func loadLibrary() {
-    isLoading = true
-    
-    songs = MPMediaQuery.songs().items ?? []
-    playlists = MPMediaQuery.playlists().collections ?? []
-    albums = MPMediaQuery.albums().collections ?? []
-    compilations = MPMediaQuery.compilations().collections ?? []
-    artists = MPMediaQuery.artists().collections ?? []
-    genres = MPMediaQuery.genres().collections ?? []
-    
-    albums = albums.filter { !($0.representativeItem?.isCompilation ?? false) }
-    
-    albums.sort {
-      $0.representativeItem?.albumArtist ?? "Unknown" < $1.representativeItem?.albumArtist ?? "Unknown"
-    }
-    
-    isLoading = false
   }
 }

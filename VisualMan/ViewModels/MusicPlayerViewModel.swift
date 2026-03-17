@@ -20,6 +20,7 @@ extension MusicPlayerView {
     @ObservationIgnored private var songTransitionTask: Task<Void, Never>?
     @ObservationIgnored private var playTask: Task<Void, Never>?
     @ObservationIgnored private weak var playlistManager: AudioPlaylistManager?
+    @ObservationIgnored private var lastArtworkSourceURL: URL?
         
     var failedPlaying: Bool = false
     var playingError: VMError?
@@ -56,7 +57,9 @@ extension MusicPlayerView {
       songTransitionTask = nil
       playTask?.cancel()
       playTask = nil
-      lockScreen.cleanup()
+      lockScreen.onPlayPause = nil
+      lockScreen.onNext = nil
+      lockScreen.onPrevious = nil
     }
     
     func togglePlayback() {
@@ -75,7 +78,7 @@ extension MusicPlayerView {
       if audioManager.currentTime >= 3 {
         audioManager.seek(to: 0)
       } else if playlistManager.hasPrevious {
-        audioManager.stop()
+        audioManager.stopForTransition()
         playlistManager.moveToPrevious()
         playCurrentSong()
       } else if playlistManager.currentIndex == 0 {
@@ -85,7 +88,7 @@ extension MusicPlayerView {
     
     func skipForwards() {
       guard let playlistManager, playlistManager.hasNext else { return }
-      audioManager.stop()
+      audioManager.stopForTransition()
       playlistManager.moveToNext()
       playCurrentSong()
     }
@@ -111,9 +114,9 @@ extension MusicPlayerView {
     
     private func onSongCompleted() {
       guard let playlistManager else { return }
-      audioManager.stop()
       
       if playlistManager.hasNext {
+        audioManager.stopForTransition()
         songTransitionTask?.cancel()
         songTransitionTask = Task {
           try? await clock.sleep(for: .milliseconds(100))
@@ -122,11 +125,15 @@ extension MusicPlayerView {
           playCurrentSong()
         }
       } else {
+        audioManager.stop()
+        lockScreen.cleanup()
         playlistManager.moveToIndex(0)
       }
     }
     
     private func setupLockScreenControls() {
+      lockScreen.activate()
+      
       lockScreen.onPlayPause = { [weak self] in
         self?.togglePlayback()
       }
@@ -143,11 +150,18 @@ extension MusicPlayerView {
     private func updateNowPlayingInfo() {
       guard let source = playlistManager?.currentAudioSource else { return }
       
-      lockScreen.updateNowPlayingInfo(
-        title: source.title,
-        artist: source.artist,
-        albumArt: source.albumArt,
-        duration: audioManager.duration,
+      let sourceURL = source.getPlaybackURL()
+      if sourceURL != lastArtworkSourceURL {
+        lastArtworkSourceURL = sourceURL
+        lockScreen.updateTrackInfo(
+          title: source.title,
+          artist: source.artist,
+          albumArt: source.albumArt,
+          duration: audioManager.duration
+        )
+      }
+      
+      lockScreen.updatePlaybackPosition(
         currentTime: audioManager.currentTime,
         isPlaying: audioManager.isPlaying
       )

@@ -59,6 +59,7 @@ final class AudioEngineManager {
       isInitialized = false
       failedToInitialize = true
     }
+    observeAudioSessionInterruptions()
   }
   
   deinit {
@@ -214,13 +215,12 @@ final class AudioEngineManager {
     isPlaying = true
     startDisplayLink()
   }
-  
-  func stop() {
+
+  func stopForTransition() {
     currentPlaybackID = uuid()
     player?.stop()
     audioTapProcessor.stopForwarding()
     engine?.mainMixerNode.removeTap(onBus: 0)
-    engine?.stop()
     isPlaying = false
     currentTime = 0
     stopDisplayLink()
@@ -229,8 +229,50 @@ final class AudioEngineManager {
       lastSeekFrame = 0
     }
     hasHandledCompletion = false
-    stopNowPlayingTimer()
     currentAudioSourceURL = nil
+  }
+  
+  func stop() {
+    stopForTransition()
+    engine?.stop()
+    stopNowPlayingTimer()
+  }
+  
+  private func observeAudioSessionInterruptions() {
+    NotificationCenter.default.addObserver(
+      forName: AVAudioSession.interruptionNotification,
+      object: AVAudioSession.sharedInstance(),
+      queue: .main
+    ) { [weak self] notification in
+      guard let userInfo = notification.userInfo,
+            let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+            let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+      let options: AVAudioSession.InterruptionOptions? = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt)
+        .map { AVAudioSession.InterruptionOptions(rawValue: $0) }
+      Task { @MainActor in
+        self?.handleInterruption(type: type, options: options)
+      }
+    }
+  }
+  
+  private func handleInterruption(type: AVAudioSession.InterruptionType, options: AVAudioSession.InterruptionOptions?) {
+    switch type {
+    case .began:
+      if isPlaying {
+        player?.pause()
+        isPlaying = false
+        stopDisplayLink()
+      }
+    case .ended:
+      if let options, options.contains(.shouldResume) {
+        try? AVAudioSession.sharedInstance().setActive(true)
+        player?.play()
+        isPlaying = true
+        startDisplayLink()
+      }
+    @unknown default:
+      break
+    }
   }
   
   func seek(to time: TimeInterval) {

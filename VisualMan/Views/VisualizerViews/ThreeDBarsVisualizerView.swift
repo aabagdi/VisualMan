@@ -82,13 +82,13 @@ struct ThreeDBarsVisualizerView: View {
         }
     )
     .onAppear {
-      model.startSmoothing(targetValues: visualizerBars)
+      model.startSmoothing()
     }
     .onDisappear {
       model.stopSmoothing()
     }
     .onChange(of: visualizerBars) { _, newValues in
-      model.startSmoothing(targetValues: newValues)
+      model.targetValues = newValues
     }
   }
   
