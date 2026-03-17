@@ -33,7 +33,6 @@ actor DSPProcessor {
   private let numberOfBars = 32
   private let attackTime: Float = 0.1
   private let releaseTime: Float = 0.6
-  private let peakHoldDuration: Float = 10.0
   private let gainHistorySize = 30
 
   init() {

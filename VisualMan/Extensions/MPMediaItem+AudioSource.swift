@@ -10,7 +10,7 @@ import MediaPlayer
 
 private let thumbnailCache: NSCache<NSNumber, UIImage> = {
   let c = NSCache<NSNumber, UIImage>()
-  c.countLimit = 100
+  c.countLimit = 75
   c.totalCostLimit = 10 * 1024 * 1024
   return c
 }()

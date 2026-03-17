@@ -14,38 +14,63 @@ final class MusicLibraryAccessManager {
   var authorizationStatus: MPMediaLibraryAuthorizationStatus
   private(set) var libraryChangeCount: Int = 0
   
+  @ObservationIgnored private var cachedSongs: [MPMediaItem]?
+  @ObservationIgnored private var cachedPlaylists: [MPMediaItemCollection]?
+  @ObservationIgnored private var cachedAlbums: [MPMediaItemCollection]?
+  @ObservationIgnored private var cachedArtists: [MPMediaItemCollection]?
+  @ObservationIgnored private var cachedCompilations: [MPMediaItemCollection]?
+  @ObservationIgnored private var cachedGenres: [MPMediaItemCollection]?
+  @ObservationIgnored private var lastCacheChangeCount: Int = -1
+  
   var songs: [MPMediaItem] {
     _ = libraryChangeCount
-    return MPMediaQuery.songs().items ?? []
+    validateCache()
+    return cachedSongs ?? []
   }
   
   var playlists: [MPMediaItemCollection] {
     _ = libraryChangeCount
-    return MPMediaQuery.playlists().collections ?? []
+    validateCache()
+    return cachedPlaylists ?? []
   }
   
   var albums: [MPMediaItemCollection] {
     _ = libraryChangeCount
-    return (MPMediaQuery.albums().collections ?? [])
-      .filter { !($0.representativeItem?.isCompilation ?? false) }
-      .sorted {
-        $0.representativeItem?.albumArtist ?? "Unknown" < $1.representativeItem?.albumArtist ?? "Unknown"
-      }
+    validateCache()
+    return cachedAlbums ?? []
   }
   
   var artists: [MPMediaItemCollection] {
     _ = libraryChangeCount
-    return MPMediaQuery.artists().collections ?? []
+    validateCache()
+    return cachedArtists ?? []
   }
   
   var compilations: [MPMediaItemCollection] {
     _ = libraryChangeCount
-    return MPMediaQuery.compilations().collections ?? []
+    validateCache()
+    return cachedCompilations ?? []
   }
   
   var genres: [MPMediaItemCollection] {
     _ = libraryChangeCount
-    return MPMediaQuery.genres().collections ?? []
+    validateCache()
+    return cachedGenres ?? []
+  }
+  
+  private func validateCache() {
+    guard lastCacheChangeCount != libraryChangeCount else { return }
+    cachedSongs = MPMediaQuery.songs().items ?? []
+    cachedPlaylists = MPMediaQuery.playlists().collections ?? []
+    cachedAlbums = (MPMediaQuery.albums().collections ?? [])
+      .filter { !($0.representativeItem?.isCompilation ?? false) }
+      .sorted {
+        $0.representativeItem?.albumArtist ?? "Unknown" < $1.representativeItem?.albumArtist ?? "Unknown"
+      }
+    cachedArtists = MPMediaQuery.artists().collections ?? []
+    cachedCompilations = MPMediaQuery.compilations().collections ?? []
+    cachedGenres = MPMediaQuery.genres().collections ?? []
+    lastCacheChangeCount = libraryChangeCount
   }
   
   init() {
