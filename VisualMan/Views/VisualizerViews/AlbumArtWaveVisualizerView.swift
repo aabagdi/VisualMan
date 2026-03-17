@@ -15,7 +15,7 @@ struct AlbumArtWaveVisualizerView: View {
   
   let audioLevels: [1024 of Float]
   let albumArt: UIImage?
-  let placeholder = UIImage(named: "Art Placeholder")!
+  let placeholder = UIImage(resource: .artPlaceholder)
   
   private var bassLevel: Float {
     guard audioLevels.count >= 512 else { return 0 }

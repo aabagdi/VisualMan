@@ -87,7 +87,9 @@ actor DSPProcessor {
     let sampleCount = min(samples.count, 2048)
     realIn.withUnsafeElementPointer { ri in
       hannWindow.withUnsafeElementPointer { hann in
-        ri.update(from: samples.baseAddress!, count: sampleCount)
+        if let baseAddress = samples.baseAddress {
+          ri.update(from: baseAddress, count: sampleCount)
+        }
         vDSP_vmul(ri, 1, hann, 1, ri, 1, vDSP_Length(sampleCount))
       }
     }

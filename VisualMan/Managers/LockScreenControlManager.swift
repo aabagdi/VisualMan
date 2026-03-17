@@ -13,7 +13,7 @@ import Dependencies
 final class LockScreenControlManager: @unchecked Sendable {
   
   @Dependency(AudioEngineManager.self) private var audioManager
-  private let placeholder = UIImage(named: "Art Placeholder")!
+  private let placeholder = UIImage(resource: .artPlaceholder)
   
   var onPlayPause: (() -> Void)?
   var onNext: (() -> Void)?

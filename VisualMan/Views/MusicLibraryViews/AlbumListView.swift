@@ -15,7 +15,7 @@ struct AlbumListView: View {
   
   let albums: [MPMediaItemCollection]
   
-  private let placeholder = UIImage(named: "Art Placeholder")!
+  private let placeholder = UIImage(resource: .artPlaceholder)
   
   private var searchResults: [MPMediaItemCollection] {
     if searchText.isEmpty {

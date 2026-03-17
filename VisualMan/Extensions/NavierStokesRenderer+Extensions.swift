@@ -209,8 +209,8 @@ extension NavierStokesRenderer {
   }
   
   func diffuseField(encoder: any MTL4ComputeCommandEncoder,
-                    fieldA: inout MTLTexture!,
-                    fieldB: inout MTLTexture!) {
+                    fieldA: inout MTLTexture,
+                    fieldB: inout MTLTexture) {
     let alpha = viscosity * dt * Float(gridSize * gridSize)
     let rBeta = 1.0 / (1.0 + 4.0 * alpha)
     

@@ -13,7 +13,7 @@ struct AlbumDetailView: View {
   
   @Environment(AudioEngineManager.self) private var audioManager
   
-  private let placeholder = UIImage(named: "Art Placeholder")!
+  private let placeholder = UIImage(resource: .artPlaceholder)
   
   private var year: String {
     if let year = album.representativeItem?.value(forProperty: "year") as? Int {

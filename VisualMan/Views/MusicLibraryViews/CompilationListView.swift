@@ -13,7 +13,7 @@ struct CompilationListView: View {
   
   let compilations: [MPMediaItemCollection]
   
-  private let placeholder = UIImage(named: "Art Placeholder")!
+  private let placeholder = UIImage(resource: .artPlaceholder)
   
   var searchResults: [MPMediaItemCollection] {
     if searchText.isEmpty {
