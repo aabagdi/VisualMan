@@ -8,7 +8,6 @@
 #include <metal_stdlib>
 using namespace metal;
 
-#define PI 3.141592653589793
 #define NUM_BLOBS 7
 
 float2 blobPosition(int index, float time, float bass, float mid) {

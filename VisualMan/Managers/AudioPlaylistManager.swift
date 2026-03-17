@@ -18,11 +18,6 @@ final class AudioPlaylistManager {
     self.currentIndex = startingIndex
   }
   
-  func clearPlaylist() {
-    self.audioSources = []
-    self.currentIndex = 0
-  }
-  
   var currentAudioSource: (any AudioSource)? {
     guard currentIndex >= 0 && currentIndex < audioSources.count else { return nil }
     return audioSources[currentIndex]

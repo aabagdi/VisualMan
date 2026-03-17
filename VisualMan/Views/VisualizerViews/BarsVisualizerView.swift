@@ -12,7 +12,6 @@ struct BarsVisualizerView: View {
   
   let barCount = 32
   let barSpacing: CGFloat = 2
-  let cornerRadius: CGFloat = 2
   let minBarHeight: CGFloat = 4
   
   var body: some View {

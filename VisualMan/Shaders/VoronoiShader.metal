@@ -81,7 +81,6 @@ half3 getSeedColor(int index,
   float minDist = 1000.0;
   float secondMinDist = 1000.0;
   int closestSeed = 0;
-  int secondClosestSeed = 0;
   
   for (int i = 0; i < numSeeds; i++) {
     float2 seedPos = getSeedPosition(i, time, bassLevel, midLevel, trebleLevel, viewSize);
@@ -89,12 +88,10 @@ half3 getSeedColor(int index,
     
     if (dist < minDist) {
       secondMinDist = minDist;
-      secondClosestSeed = closestSeed;
       minDist = dist;
       closestSeed = i;
     } else if (dist < secondMinDist) {
       secondMinDist = dist;
-      secondClosestSeed = i;
     }
   }
   

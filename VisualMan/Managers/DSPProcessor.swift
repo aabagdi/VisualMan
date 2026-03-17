@@ -33,7 +33,6 @@ actor DSPProcessor {
   private var logMagnitudes = [1024 of Float](repeating: 0.0)
 
   private let numberOfBars = 32
-  private let smoothingFactor: Float = 0.8
   private let attackTime: Float = 0.1
   private let releaseTime: Float = 0.6
   private let peakHoldDuration: Float = 10.0
@@ -55,8 +54,6 @@ actor DSPProcessor {
   func reset() {
     audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
-    peakLevels = [32 of Float](repeating: 0.0)
-    peakHoldTime = [32 of Float](repeating: 0.0)
     realIn = [2048 of Float](repeating: 0.0)
     imagIn = [2048 of Float](repeating: 0.0)
     realOut = [2048 of Float](repeating: 0.0)
@@ -175,15 +172,6 @@ actor DSPProcessor {
       }
       
       visualizerBars[i] = min(1.0, visualizerBars[i])
-      
-      if visualizerBars[i] > peakLevels[i] {
-        peakLevels[i] = visualizerBars[i]
-        peakHoldTime[i] = peakHoldDuration
-      } else if peakHoldTime[i] > 0 {
-        peakHoldTime[i] -= 1
-      } else {
-        peakLevels[i] *= 0.95
-      }
     }
   }
   

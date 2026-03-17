@@ -8,8 +8,6 @@
 import SwiftUI
 
 struct HomeScreenView: View {
-  @State private var isShowingBarPlayer: Bool = true
-  @State private var isShowingMusicPlayer = false
   @State private var selectedTab: VMTab = .musicLibrary
   
   @Environment(AudioEngineManager.self) private var audioManager

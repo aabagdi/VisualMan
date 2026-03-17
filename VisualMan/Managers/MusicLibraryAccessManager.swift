@@ -11,18 +11,22 @@ import MediaPlayer
 @MainActor
 @Observable
 final class MusicLibraryAccessManager {
-  var authorizationStatus: MPMediaLibraryAuthorizationStatus = .notDetermined
+  var authorizationStatus: MPMediaLibraryAuthorizationStatus
+  private(set) var libraryChangeCount: Int = 0
   
   var songs: [MPMediaItem] {
-    MPMediaQuery.songs().items ?? []
+    _ = libraryChangeCount
+    return MPMediaQuery.songs().items ?? []
   }
   
   var playlists: [MPMediaItemCollection] {
-    MPMediaQuery.playlists().collections ?? []
+    _ = libraryChangeCount
+    return MPMediaQuery.playlists().collections ?? []
   }
   
   var albums: [MPMediaItemCollection] {
-    (MPMediaQuery.albums().collections ?? [])
+    _ = libraryChangeCount
+    return (MPMediaQuery.albums().collections ?? [])
       .filter { !($0.representativeItem?.isCompilation ?? false) }
       .sorted {
         $0.representativeItem?.albumArtist ?? "Unknown" < $1.representativeItem?.albumArtist ?? "Unknown"
@@ -30,15 +34,33 @@ final class MusicLibraryAccessManager {
   }
   
   var artists: [MPMediaItemCollection] {
-    MPMediaQuery.artists().collections ?? []
+    _ = libraryChangeCount
+    return MPMediaQuery.artists().collections ?? []
   }
   
   var compilations: [MPMediaItemCollection] {
-    MPMediaQuery.compilations().collections ?? []
+    _ = libraryChangeCount
+    return MPMediaQuery.compilations().collections ?? []
   }
   
   var genres: [MPMediaItemCollection] {
-    MPMediaQuery.genres().collections ?? []
+    _ = libraryChangeCount
+    return MPMediaQuery.genres().collections ?? []
+  }
+  
+  init() {
+    authorizationStatus = MPMediaLibrary.authorizationStatus()
+    
+    NotificationCenter.default.addObserver(
+      forName: .MPMediaLibraryDidChange,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.libraryChangeCount += 1
+      }
+    }
+    MPMediaLibrary.default().beginGeneratingLibraryChangeNotifications()
   }
     
   func requestMusicLibraryAccess() {

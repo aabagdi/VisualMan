@@ -30,7 +30,6 @@ final class NavierStokesRenderer {
   
   let gridSize: Int = 1024
   
-  var splatPipeline: MTLComputePipelineState!
   var diffusePipeline: MTLComputePipelineState!
   var advectPipeline: MTLComputePipelineState!
   var vorticityPipeline: MTLComputePipelineState!
@@ -147,7 +146,6 @@ final class NavierStokesRenderer {
       return try? compiler.makeComputePipelineState(descriptor: pipelineDesc)
     }
     
-    splatPipeline = makePipeline("fluidSplat")
     splatBatchPipeline = makePipeline("fluidSplatBatch")
     diffusePipeline = makePipeline("fluidDiffuse")
     advectPipeline = makePipeline("fluidAdvect")

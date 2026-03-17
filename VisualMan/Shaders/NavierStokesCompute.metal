@@ -8,40 +8,6 @@
 #include <metal_stdlib>
 using namespace metal;
 
-float4 cubicWeights(float t) {
-  float t2 = t * t;
-  float t3 = t2 * t;
-  return float4(
-    -0.5*t3 + t2 - 0.5*t,
-     1.5*t3 - 2.5*t2 + 1.0,
-    -1.5*t3 + 2.0*t2 + 0.5*t,
-     0.5*t3 - 0.5*t2
-  );
-}
-
-float4 sampleBicubic(texture2d<float, access::read> tex, float2 coord) {
-  float2 texSize = float2(tex.get_width(), tex.get_height());
-  
-  float2 pixel = coord * texSize - 0.5;
-  float2 origin = floor(pixel);
-  float2 frac = pixel - origin;
-  
-  float4 wx = cubicWeights(frac.x);
-  float4 wy = cubicWeights(frac.y);
-  
-  float4 result = float4(0.0);
-  for (int j = -1; j <= 2; j++) {
-    float wY = wy[j + 1];
-    for (int i = -1; i <= 2; i++) {
-      float wX = wx[i + 1];
-      int2 sampleCoord = int2(origin) + int2(i, j);
-      sampleCoord = clamp(sampleCoord, int2(0), int2(texSize) - 1);
-      result += tex.read(uint2(sampleCoord)) * wX * wY;
-    }
-  }
-  return result;
-}
-
 struct SplatParams {
   float2 position;
   float radius;
@@ -49,24 +15,6 @@ struct SplatParams {
   float3 value;
   float _pad2;
 };
-
-kernel void fluidSplat(texture2d<float, access::read_write> field [[texture(0)]],
-                       constant float2 &point [[buffer(0)]],
-                       constant float3 &value [[buffer(1)]],
-                       constant float &radius [[buffer(2)]],
-                       uint2 gid [[thread_position_in_grid]]) {
-  if (gid.x >= field.get_width() || gid.y >= field.get_height()) return;
-  
-  float2 pos = float2(gid) + 0.5;
-  float2 diff = pos - point;
-  float dist2 = dot(diff, diff);
-  float r2 = radius * radius;
-  float falloff = exp(-dist2 / r2);
-  
-  float4 current = field.read(gid);
-  current.xyz += value * falloff;
-  field.write(current, gid);
-}
 
 kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture(0)]],
                             constant SplatParams *splats [[buffer(0)]],
