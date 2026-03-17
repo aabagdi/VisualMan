@@ -14,14 +14,15 @@ final class AudioTapProcessor: Sendable {
   private let resultContinuation = Mutex<AsyncStream<DSPProcessor.DSPResult>.Continuation?>(nil)
   private let forwardingTask = Mutex<Task<Void, Never>?>(nil)
   
-  nonisolated func processSamples(_ samples: [Float], sampleRate: Float) {
+  nonisolated func processSamples(_ samples: UnsafeBufferPointer<Float>, sampleRate: Float) {
     guard isProcessingBuffer.compareExchange(expected: false,
-                                              desired: true,
-                                              ordering: .acquiringAndReleasing).exchanged else { return }
+                                             desired: true,
+                                             ordering: .acquiringAndReleasing).exchanged else { return }
     let dsp = dspProcessor
+    let copied = Array(samples)
     
     Task {
-      let result = await dsp.processSamples(samples, sampleRate: sampleRate)
+      let result = await dsp.processSamples(copied, sampleRate: sampleRate)
       resultContinuation.withLock { _ = $0?.yield(result) }
       isProcessingBuffer.store(false, ordering: .releasing)
     }

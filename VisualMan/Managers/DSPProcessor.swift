@@ -64,7 +64,7 @@ actor DSPProcessor {
   }
 
   func processSamples(_ samples: [Float], sampleRate: Float) -> DSPResult {
-    guard computeFFTMagnitudes(samples) else {
+    guard samples.withUnsafeBufferPointer({ computeFFTMagnitudes($0) }) else {
       return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
     }
     
@@ -84,13 +84,11 @@ actor DSPProcessor {
     return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
   }
   
-  private func computeFFTMagnitudes(_ samples: [Float]) -> Bool {
+  private func computeFFTMagnitudes(_ samples: UnsafeBufferPointer<Float>) -> Bool {
     let sampleCount = min(samples.count, 2048)
     realIn.withUnsafeElementPointer { ri in
       hannWindow.withUnsafeElementPointer { hann in
-        samples.withUnsafeBufferPointer { srcBuf in
-          ri.update(from: srcBuf.baseAddress!, count: sampleCount)
-        }
+        ri.update(from: samples.baseAddress!, count: sampleCount)
         vDSP_vmul(ri, 1, hann, 1, ri, 1, vDSP_Length(sampleCount))
       }
     }

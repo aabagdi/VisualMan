@@ -177,7 +177,7 @@ final class AudioEngineManager {
     engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable buffer, _ in
       guard let channelData = buffer.floatChannelData?[0] else { return }
       let frameLength = Int(buffer.frameLength)
-      let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
+      let samples = UnsafeBufferPointer(start: channelData, count: frameLength)
       tapProcessor.processSamples(samples, sampleRate: sampleRate)
     }
     
