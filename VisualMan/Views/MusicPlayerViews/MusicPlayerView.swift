@@ -43,7 +43,6 @@ struct MusicPlayerView: View {
     case aurora = "Aurora Borealis"
     case oscilloscope = "Oscilloscope"
     case sphereMesh = "Sphere"
-
     case plasma = "Plasma"
     case metaball = "Lava Lamp"
     case fluidSim = "Fluid"
