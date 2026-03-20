@@ -11,7 +11,6 @@ import Dependencies
 
 @MainActor
 final class LockScreenControlManager: @unchecked Sendable {
-  
   @Dependency(AudioEngineManager.self) private var audioManager
   private let placeholder = UIImage(resource: .artPlaceholder)
   
