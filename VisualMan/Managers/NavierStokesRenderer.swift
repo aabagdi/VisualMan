@@ -28,18 +28,19 @@ final class NavierStokesRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
   
-  let gridSize: Int = 1024
+  static let gridSize: Int = 1024
+  var gridSize: Int { Self.gridSize }
   
   var diffusePipeline: MTLComputePipelineState
   var advectPipeline: MTLComputePipelineState
-  var vorticityPipeline: MTLComputePipelineState
-  var vorticityForcePipeline: MTLComputePipelineState
+  var vorticityConfinePipeline: MTLComputePipelineState
   var divergencePipeline: MTLComputePipelineState
   var jacobiPipeline: MTLComputePipelineState
   var gradientSubtractPipeline: MTLComputePipelineState
   var splatBatchPipeline: MTLComputePipelineState
   var blurHPipeline: MTLComputePipelineState
   var blurVPipeline: MTLComputePipelineState
+  var bloomThresholdPipeline: MTLComputePipelineState
   var renderPipeline: MTLComputePipelineState
   
   var velocityA: MTLTexture
@@ -49,7 +50,8 @@ final class NavierStokesRenderer {
   var divergenceTexture: MTLTexture
   var dyeA: MTLTexture
   var dyeB: MTLTexture
-  var vorticityTexture: MTLTexture
+  var bloomA: MTLTexture
+  var bloomB: MTLTexture
   
   var time: Float = 0
   let dt: Float = 1.0 / 60.0
@@ -57,10 +59,10 @@ final class NavierStokesRenderer {
   var prevMid: Float = 0
   private let velocityDissipation: Float = 0.99
   private let dyeDissipation: Float = 0.98
-  let jacobiIterations: Int = 10
+  let jacobiIterations: Int = 6
   let viscosity: Float = 0.0002
   let diffuseIterations: Int = 4
-  let vorticityStrength: Float = 1.5
+  let vorticityStrength: Float = 3.0
   
   private static let maxFramesInFlight: UInt64 = 3
   private var commandAllocators: [any MTL4CommandAllocator] = []
@@ -113,13 +115,13 @@ final class NavierStokesRenderer {
     self.splatBatchPipeline = pipelines.splatBatch
     self.diffusePipeline = pipelines.diffuse
     self.advectPipeline = pipelines.advect
-    self.vorticityPipeline = pipelines.vorticity
-    self.vorticityForcePipeline = pipelines.vorticityForce
+    self.vorticityConfinePipeline = pipelines.vorticityConfine
     self.divergencePipeline = pipelines.divergence
     self.jacobiPipeline = pipelines.jacobi
     self.gradientSubtractPipeline = pipelines.gradientSubtract
     self.blurHPipeline = pipelines.blurH
     self.blurVPipeline = pipelines.blurV
+    self.bloomThresholdPipeline = pipelines.bloomThreshold
     self.renderPipeline = pipelines.render
     self.velocityA = textures.velocityA
     self.velocityB = textures.velocityB
@@ -128,7 +130,8 @@ final class NavierStokesRenderer {
     self.divergenceTexture = textures.divergence
     self.dyeA = textures.dyeA
     self.dyeB = textures.dyeB
-    self.vorticityTexture = textures.vorticity
+    self.bloomA = textures.bloomA
+    self.bloomB = textures.bloomB
     self.residencySet = residencySet
     
     configureResidencySet()
@@ -207,12 +210,7 @@ final class NavierStokesRenderer {
     diffuseField(encoder: encoder, fieldA: &velocityA, fieldB: &velocityB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    project(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    computeVorticity(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    applyVorticityForce(encoder: encoder, bass: bass)
+    applyVorticityConfinement(encoder: encoder, bass: bass)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
     advect(encoder: encoder, velocityIn: velocityA, fieldIn: velocityA,
@@ -236,6 +234,13 @@ final class NavierStokesRenderer {
     swap(&dyeA, &dyeB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
+    bloomThreshold(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    blurBloomH(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    blurBloomV(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
     render(encoder: encoder, output: output, bass: bass)
   }
   
@@ -246,13 +251,13 @@ private extension NavierStokesRenderer {
     let splatBatch: MTLComputePipelineState
     let diffuse: MTLComputePipelineState
     let advect: MTLComputePipelineState
-    let vorticity: MTLComputePipelineState
-    let vorticityForce: MTLComputePipelineState
+    let vorticityConfine: MTLComputePipelineState
     let divergence: MTLComputePipelineState
     let jacobi: MTLComputePipelineState
     let gradientSubtract: MTLComputePipelineState
     let blurH: MTLComputePipelineState
     let blurV: MTLComputePipelineState
+    let bloomThreshold: MTLComputePipelineState
     let render: MTLComputePipelineState
   }
   
@@ -271,22 +276,23 @@ private extension NavierStokesRenderer {
     guard let splatBatch = makePipeline("fluidSplatBatch"),
           let diffuse = makePipeline("fluidDiffuse"),
           let advect = makePipeline("fluidAdvect"),
-          let vorticity = makePipeline("fluidVorticity"),
-          let vorticityForce = makePipeline("fluidVorticityForce"),
+          let vorticityConfine = makePipeline("fluidVorticityConfine"),
           let divergence = makePipeline("fluidDivergence"),
           let jacobi = makePipeline("fluidJacobi"),
           let gradientSubtract = makePipeline("fluidGradientSubtract"),
           let blurH = makePipeline("fluidBlurH"),
           let blurV = makePipeline("fluidBlurV"),
+          let bloomThreshold = makePipeline("fluidBloomThreshold"),
           let render = makePipeline("fluidRender") else {
       return nil
     }
     
     return Pipelines(splatBatch: splatBatch, diffuse: diffuse, advect: advect,
-                     vorticity: vorticity, vorticityForce: vorticityForce,
+                     vorticityConfine: vorticityConfine,
                      divergence: divergence, jacobi: jacobi,
                      gradientSubtract: gradientSubtract, blurH: blurH,
-                     blurV: blurV, render: render)
+                     blurV: blurV, bloomThreshold: bloomThreshold,
+                     render: render)
   }
   
   struct Textures {
@@ -297,11 +303,11 @@ private extension NavierStokesRenderer {
     let divergence: MTLTexture
     let dyeA: MTLTexture
     let dyeB: MTLTexture
-    let vorticity: MTLTexture
+    let bloomA: MTLTexture
+    let bloomB: MTLTexture
   }
   
   static func createTextures(device: MTLDevice) -> Textures? {
-    let gridSize = 1024
     func makeTexture(format: MTLPixelFormat,
                      usage: MTLTextureUsage = [.shaderRead, .shaderWrite]) -> MTLTexture? {
       let desc = MTLTextureDescriptor.texture2DDescriptor(
@@ -319,14 +325,15 @@ private extension NavierStokesRenderer {
           let divergence = makeTexture(format: .r16Float),
           let dyeA = makeTexture(format: .rgba16Float),
           let dyeB = makeTexture(format: .rgba16Float),
-          let vorticity = makeTexture(format: .r16Float) else {
+          let bloomA = makeTexture(format: .rgba16Float),
+          let bloomB = makeTexture(format: .rgba16Float) else {
       return nil
     }
     
     return Textures(velocityA: velocityA, velocityB: velocityB,
                     pressure: pressure, pressureTemp: pressureTemp,
                     divergence: divergence, dyeA: dyeA, dyeB: dyeB,
-                    vorticity: vorticity)
+                    bloomA: bloomA, bloomB: bloomB)
   }
   
   static func createAllocatorsAndBuffers(device: MTLDevice)
@@ -359,7 +366,8 @@ private extension NavierStokesRenderer {
     residencySet.addAllocation(divergenceTexture)
     residencySet.addAllocation(dyeA)
     residencySet.addAllocation(dyeB)
-    residencySet.addAllocation(vorticityTexture)
+    residencySet.addAllocation(bloomA)
+    residencySet.addAllocation(bloomB)
     
     for buf in uniformBuffers { residencySet.addAllocation(buf) }
     

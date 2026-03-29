@@ -8,6 +8,17 @@
 import Metal
 import simd
 
+private func hsv2rgb(h: Float, s: Float, v: Float) -> SIMD3<Float> {
+  let hh = h - floor(h)
+  let p = SIMD3<Float>(
+    abs(hh * 6.0 - 3.0) - 1.0,
+    2.0 - abs(hh * 6.0 - 2.0),
+    2.0 - abs(hh * 6.0 - 4.0)
+  )
+  let clamped = simd_clamp(p, SIMD3<Float>(repeating: 0.0), SIMD3<Float>(repeating: 1.0))
+  return v * simd_mix(SIMD3<Float>(repeating: 1.0), clamped, SIMD3<Float>(repeating: s))
+}
+
 extension NavierStokesRenderer {
   func injectAudioSplats(encoder: any MTL4ComputeCommandEncoder,
                          bass: Float,
@@ -90,9 +101,33 @@ extension NavierStokesRenderer {
     forceSplats.append(SplatParams(position: pos1, value: force1, radius: bassRadius))
     forceSplats.append(SplatParams(position: pos2, value: force2, radius: bassRadius))
 
-    let bassColor = SIMD3<Float>(bass * 1.5, bass * 0.3, bass * 0.8) * onsetBoost
+    let bassHue = fmod(time * 0.05, 1.0)
+    let bassColor = hsv2rgb(h: bassHue, s: 0.85, v: bass * 1.5) * onsetBoost
     dyeSplats.append(SplatParams(position: pos1, value: bassColor, radius: bassRadius * 1.2))
     dyeSplats.append(SplatParams(position: pos2, value: bassColor * 0.8, radius: bassRadius * 1.2))
+    
+    if bassOnset > 0.15 {
+      let burstCount = 7
+      let burstCenter = SIMD2<Float>(
+        center + sin(time * 1.7) * gs * 0.1,
+        center + cos(time * 2.3) * gs * 0.1
+      )
+      let burstForceScale = bassOnset * 500.0
+      let burstRadius = gs * 0.05
+      
+      for i in 0..<burstCount {
+        let angle = Float(i) * (.pi * 2.0 / Float(burstCount)) + time * 0.5
+        let dir = SIMD2<Float>(cos(angle), sin(angle))
+        let splatPos = burstCenter + dir * gs * 0.06
+        
+        let force = SIMD3<Float>(dir.x, dir.y, 0) * burstForceScale
+        forceSplats.append(SplatParams(position: splatPos, value: force, radius: burstRadius))
+        
+        let burstHue = fmod(time * 0.05 + Float(i) / Float(burstCount), 1.0)
+        let burstColor = hsv2rgb(h: burstHue, s: 0.95, v: bass * 2.0)
+        dyeSplats.append(SplatParams(position: splatPos, value: burstColor, radius: burstRadius * 1.4))
+      }
+    }
   }
 
   private func collectMidSplats(mid: Float,
@@ -117,10 +152,8 @@ extension NavierStokesRenderer {
 
       forceSplats.append(SplatParams(position: pos, value: force, radius: midRadius))
 
-      let hueShift = Float(i) * 0.33
-      let midColor = SIMD3<Float>(mid * 0.2 * (1.0 + hueShift),
-                                  mid * 1.2,
-                                  mid * (0.5 + hueShift)) * midBoost
+      let midHue = fmod(time * 0.07 + Float(i) * 0.33, 1.0)
+      let midColor = hsv2rgb(h: midHue, s: 0.75, v: mid * 1.2) * midBoost
       dyeSplats.append(SplatParams(position: pos, value: midColor, radius: midRadius * 1.3))
     }
   }
@@ -144,7 +177,8 @@ extension NavierStokesRenderer {
 
       forceSplats.append(SplatParams(position: pos, value: force, radius: highRadius))
 
-      let highColor = SIMD3<Float>(high * 0.5, high * 0.7, high * 2.0)
+      let highHue = fmod(time * 0.09 + Float(i) * 0.25, 1.0)
+      let highColor = hsv2rgb(h: highHue, s: 0.9, v: high * 2.0)
       dyeSplats.append(SplatParams(position: pos, value: highColor, radius: highRadius * 1.5))
     }
   }
@@ -192,17 +226,9 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder)
   }
   
-  func computeVorticity(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(vorticityPipeline)
+  func applyVorticityConfinement(encoder: any MTL4ComputeCommandEncoder, bass: Float) {
+    encoder.setComputePipelineState(vorticityConfinePipeline)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
-    argumentTable.setTexture(vorticityTexture.gpuResourceID, index: 1)
-    dispatchGrid(encoder: encoder)
-  }
-  
-  func applyVorticityForce(encoder: any MTL4ComputeCommandEncoder, bass: Float) {
-    encoder.setComputePipelineState(vorticityForcePipeline)
-    argumentTable.setTexture(vorticityTexture.gpuResourceID, index: 0)
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
     let dynamicVorticity = vorticityStrength * (1.0 + bass * 1.0)
     argumentTable.setAddress(writeUniform(dynamicVorticity), index: 0)
     dispatchGrid(encoder: encoder)
@@ -279,10 +305,34 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder)
   }
   
+  func bloomThreshold(encoder: any MTL4ComputeCommandEncoder) {
+    encoder.setComputePipelineState(bloomThresholdPipeline)
+    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
+    argumentTable.setTexture(bloomA.gpuResourceID, index: 1)
+    let threshold: Float = 0.8
+    argumentTable.setAddress(writeUniform(threshold), index: 0)
+    dispatchGrid(encoder: encoder)
+  }
+  
+  func blurBloomH(encoder: any MTL4ComputeCommandEncoder) {
+    encoder.setComputePipelineState(blurHPipeline)
+    argumentTable.setTexture(bloomA.gpuResourceID, index: 0)
+    argumentTable.setTexture(bloomB.gpuResourceID, index: 1)
+    dispatchGrid(encoder: encoder)
+  }
+  
+  func blurBloomV(encoder: any MTL4ComputeCommandEncoder) {
+    encoder.setComputePipelineState(blurVPipeline)
+    argumentTable.setTexture(bloomB.gpuResourceID, index: 0)
+    argumentTable.setTexture(bloomA.gpuResourceID, index: 1)
+    dispatchGrid(encoder: encoder)
+  }
+  
   func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture, bass: Float) {
     encoder.setComputePipelineState(renderPipeline)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(output.gpuResourceID, index: 1)
+    argumentTable.setTexture(bloomA.gpuResourceID, index: 2)
     argumentTable.setAddress(writeUniform(bass), index: 0)
     dispatchGrid(encoder: encoder, width: output.width, height: output.height)
   }
@@ -291,12 +341,8 @@ extension NavierStokesRenderer {
     let w = width ?? gridSize
     let h = height ?? gridSize
     let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
-    let threadGroups = MTLSize(
-      width: (w + 15) / 16,
-      height: (h + 15) / 16,
-      depth: 1
-    )
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: threadGroups,
-                                 threadsPerThreadgroup: threadGroupSize)
+    let gridDimensions = MTLSize(width: w, height: h, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid: gridDimensions,
+                            threadsPerThreadgroup: threadGroupSize)
   }
 }
