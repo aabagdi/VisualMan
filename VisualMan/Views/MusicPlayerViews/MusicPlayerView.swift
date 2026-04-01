@@ -10,7 +10,7 @@ import MediaPlayer
 
 struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
-  @State private var currentVisualizer = Visualizers.bars
+  @State private var currentVisualizer = VMVisualizer.bars
   @State private var isTapped: Bool = false
   
   @Environment(AudioEngineManager.self) private var audioManager
@@ -32,23 +32,6 @@ struct MusicPlayerView: View {
     playlistManager.currentAudioSource
   }
   
-  private enum Visualizers: String, CaseIterable {
-    case bars = "Bars"
-    case threeD = "3D Bars"
-    case album = "Album Art Waves"
-    case julia = "Julia Set"
-    case fireworks = "Fireworks"
-    case interference = "Interference Pattern"
-    case voronoi = "Voronoi Diagram"
-    case aurora = "Aurora Borealis"
-    case oscilloscope = "Oscilloscope"
-    case sphereMesh = "Sphere"
-    case plasma = "Plasma"
-    case metaball = "Lava Lamp"
-    case fluidSim = "Fluid"
-    case navierStokes = "Navier-Stokes"
-  }
-  
   init(_ audioSources: [any AudioSource], startingIndex: Int) {
     _audioSources = audioSources
     _startingIndex = startingIndex
@@ -64,7 +47,7 @@ struct MusicPlayerView: View {
     @Bindable var audioManager = audioManager
     
     ZStack {
-      currentShader(currentVisualizer: currentVisualizer,
+      VisualizerContainerView(currentVisualizer: currentVisualizer,
                     visualizerBars: audioManager.visualizerBars,
                     audioLevels: audioManager.audioLevels,
                     albumArt: currentAudioSource?.albumArt)
@@ -181,7 +164,7 @@ struct MusicPlayerView: View {
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Menu {
-          ForEach(Visualizers.allCases, id: \.self) { type in
+          ForEach(VMVisualizer.allCases, id: \.self) { type in
             Button {
               currentVisualizer = type
             } label: {
@@ -196,44 +179,6 @@ struct MusicPlayerView: View {
           Text(currentVisualizer.rawValue)
         }
       }
-    }
-  }
-  
-  @ViewBuilder
-  private func currentShader(currentVisualizer: Visualizers,
-                             visualizerBars: [32 of Float],
-                             audioLevels: [1024 of Float],
-                             albumArt: UIImage?) -> some View {
-    switch currentVisualizer {
-    case .bars:
-      BarsVisualizerView(visualizerBars: visualizerBars)
-    case .threeD:
-      ThreeDBarsVisualizerView(visualizerBars: visualizerBars)
-    case .album:
-      AlbumArtWaveVisualizerView(audioLevels: audioLevels, albumArt: albumArt)
-    case .julia:
-      JuliaVisualizerView(audioLevels: audioLevels)
-    case .fireworks:
-      FireworksVisualizerView(audioLevels: audioLevels)
-    case .interference:
-      InterferenceVisualizerView(audioLevels: audioLevels)
-    case .voronoi:
-      VoronoiVisualizerView(audioLevels: audioLevels)
-    case .aurora:
-      AuroraBorealisVisualizerView(audioLevels: audioLevels)
-    case .oscilloscope:
-      OscilloscopeVisualizerView(audioLevels: audioLevels)
-    case .sphereMesh:
-      SphereMeshVisualizerView(audioLevels: audioLevels)
-
-    case .plasma:
-      PlasmaVisualizerView(audioLevels: audioLevels)
-    case .metaball:
-      MetaballVisualizerView(audioLevels: audioLevels)
-    case .fluidSim:
-      FluidSimVisualizerView(audioLevels: audioLevels)
-    case .navierStokes:
-      NavierStokesVisualizerView(audioLevels: audioLevels)
     }
   }
 }

@@ -18,75 +18,75 @@ struct ThreeDBarsVisualizerView: View {
   
   var body: some View {
     RealityView { content in
-      let camera = PerspectiveCamera()
-      camera.camera.fieldOfViewInDegrees = 60
-      cameraEntity = camera
-      content.add(camera)
-      
-      updateCameraPosition()
-      
-      let root = Entity()
-      root.position = [0.0, 0.0, 0.0]
-      
-      for index in visualizerBars.indices {
-        let barContainer = Entity()
-        barContainer.name = "bar_\(index)"
+        let camera = PerspectiveCamera()
+        camera.camera.fieldOfViewInDegrees = 60
+        cameraEntity = camera
+        content.add(camera)
         
-        let barMesh = MeshResource.generateBox(size: [0.2, 1.0, 0.2])
-        var material = PhysicallyBasedMaterial()
-        material.baseColor = PhysicallyBasedMaterial.BaseColor(tint: barColor(index: index,
-                                                                              totalBars: visualizerBars.count))
-        let barEntity = ModelEntity(mesh: barMesh, materials: [material])
+        updateCameraPosition()
         
-        barEntity.position.y = 0.5
+        let root = Entity()
+        root.position = [0.0, 0.0, 0.0]
         
-        barContainer.addChild(barEntity)
-        
-        let totalWidth: Float = 8.0
-        let spacing = totalWidth / Float(visualizerBars.count - 1)
-        let xPosition = -totalWidth / 2 + Float(index) * spacing
-        barContainer.position = [xPosition, 0, 0]
-        
-        root.addChild(barContainer)
-      }
-      content.add(root)
-    } update: { content in
-      guard let root = content.entities.first(where: { !($0 is PerspectiveCamera) }) else { return }
-      
-      for (index, smoothedValue) in model.smoothedValues.enumerated() {
-        guard let barContainer = root.findEntity(named: "bar_\(index)") else { continue }
-        barContainer.scale = [1.0, smoothedValue, 1.0]
-      }
-    }
-    .background {
-      Color.black
-    }
-    .gesture(
-      DragGesture()
-        .onChanged { value in
-          let sensitivity: Float = 0.0003
-          rotationAngle += Float(value.translation.width) * sensitivity
-          verticalAngle -= Float(value.translation.height) * sensitivity
-          verticalAngle = max(-1.2, min(1.2, verticalAngle))
-          updateCameraPosition()
+        for index in visualizerBars.indices {
+          let barContainer = Entity()
+          barContainer.name = "bar_\(index)"
+          
+          let barMesh = MeshResource.generateBox(size: [0.2, 1.0, 0.2])
+          var material = PhysicallyBasedMaterial()
+          material.baseColor = PhysicallyBasedMaterial.BaseColor(tint: barColor(index: index,
+                                                                                totalBars: visualizerBars.count))
+          let barEntity = ModelEntity(mesh: barMesh, materials: [material])
+          
+          barEntity.position.y = 0.5
+          
+          barContainer.addChild(barEntity)
+          
+          let totalWidth: Float = 8.0
+          let spacing = totalWidth / Float(visualizerBars.count - 1)
+          let xPosition = -totalWidth / 2 + Float(index) * spacing
+          barContainer.position = [xPosition, 0, 0]
+          
+          root.addChild(barContainer)
         }
-    )
-    .gesture(
-      MagnificationGesture()
-        .onChanged { value in
-          let zoomSensitivity: Float = 0.5
-          let targetDistance = cameraDistance / Float(value)
-          cameraDistance += (targetDistance - cameraDistance) * zoomSensitivity
-          cameraDistance = max(10.0, min(30.0, cameraDistance))
-          updateCameraPosition()
+        content.add(root)
+      } update: { content in
+        guard let root = content.entities.first(where: { !($0 is PerspectiveCamera) }) else { return }
+        
+        for (index, smoothedValue) in model.smoothedValues.enumerated() {
+          guard let barContainer = root.findEntity(named: "bar_\(index)") else { continue }
+          barContainer.scale = [1.0, smoothedValue, 1.0]
         }
-    )
-    .onAppear {
-      model.startSmoothing()
-    }
-    .onDisappear {
-      model.stopSmoothing()
-    }
+      }
+      .background {
+        Color.black
+      }
+      .gesture(
+        DragGesture()
+          .onChanged { value in
+            let sensitivity: Float = 0.0003
+            rotationAngle += Float(value.translation.width) * sensitivity
+            verticalAngle -= Float(value.translation.height) * sensitivity
+            verticalAngle = max(-1.2, min(1.2, verticalAngle))
+            updateCameraPosition()
+          }
+      )
+      .gesture(
+        MagnificationGesture()
+          .onChanged { value in
+            let zoomSensitivity: Float = 0.5
+            let targetDistance = cameraDistance / Float(value)
+            cameraDistance += (targetDistance - cameraDistance) * zoomSensitivity
+            cameraDistance = max(10.0, min(30.0, cameraDistance))
+            updateCameraPosition()
+          }
+      )
+      .onAppear {
+        model.startSmoothing()
+      }
+      .onDisappear {
+        model.stopSmoothing()
+      }
     .onChange(of: visualizerBars) { _, newValues in
       model.targetValues = newValues
     }
