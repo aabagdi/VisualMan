@@ -5,8 +5,6 @@
 //  Created by Aadit Bagdi on 3/31/26.
 //
 
-import Foundation
-
 enum VMVisualizer: String, CaseIterable {
   case bars = "Bars"
   case threeD = "3D Bars"
@@ -20,6 +18,7 @@ enum VMVisualizer: String, CaseIterable {
   case sphereMesh = "Sphere"
   case plasma = "Plasma"
   case metaball = "Lava Lamp"
-  case fluidSim = "Fluid"
+  case fluidSim = "Ink"
   case navierStokes = "Navier-Stokes"
+  case liquidLight = "'60s Liquid Light"
 }

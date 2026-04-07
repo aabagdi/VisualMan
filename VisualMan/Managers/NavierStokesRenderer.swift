@@ -6,8 +6,7 @@
 //
 
 import Metal
-import MetalKit
-import simd
+import QuartzCore
 
 struct SplatParams {
   var position: SIMD2<Float>
@@ -65,10 +64,10 @@ final class NavierStokesRenderer {
   let vorticityStrength: Float = 3.0
   
   private static let maxFramesInFlight: UInt64 = 3
-  private var commandAllocators: [any MTL4CommandAllocator] = []
+  private var commandAllocators = [any MTL4CommandAllocator]()
   private var commandBuffer: any MTL4CommandBuffer
   var argumentTable: any MTL4ArgumentTable
-  private var uniformBuffers: [MTLBuffer] = []
+  private var uniformBuffers = [MTLBuffer]()
   private var uniformOffset: Int = 0
   private static let uniformBufferSize: Int = 16384
   private let sharedEvent: MTLSharedEvent
@@ -338,8 +337,8 @@ private extension NavierStokesRenderer {
   
   static func createAllocatorsAndBuffers(device: MTLDevice)
     -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
-    var allocators: [any MTL4CommandAllocator] = []
-    var buffers: [MTLBuffer] = []
+    var allocators = [any MTL4CommandAllocator]()
+    var buffers = [MTLBuffer]()
     for _ in 0..<maxFramesInFlight {
       guard let allocator = device.makeCommandAllocator(),
             let buffer = device.makeBuffer(length: uniformBufferSize, options: .storageModeShared) else {

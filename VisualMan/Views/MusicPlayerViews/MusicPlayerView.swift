@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import MediaPlayer
 
 struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()

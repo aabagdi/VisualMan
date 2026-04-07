@@ -1,16 +1,16 @@
 //
-//  NavierStokesMetalView.swift
+//  LiquidLightMetalView.swift
 //  VisualMan
 //
-//  Created by Aadit Bagdi on 3/15/26.
+//  Created by Aadit Bagdi on 4/7/26.
 //
 
 import SwiftUI
 import MetalKit
 import QuartzCore
 
-struct NavierStokesMetalView: UIViewRepresentable {
-  let renderer: NavierStokesRenderer
+struct LiquidLightMetalView: UIViewRepresentable {
+  let renderer: LiquidLightRenderer
   let audioLevels: [1024 of Float]
 
   func makeUIView(context: Context) -> MTKView {
@@ -24,8 +24,9 @@ struct NavierStokesMetalView: UIViewRepresentable {
     mtkView.enableSetNeedsDisplay = false
     mtkView.clearColor = MTLClearColor(red: 0,
                                         green: 0,
-                                        blue: 0.02,
+                                        blue: 0,
                                         alpha: 1)
+    mtkView.backgroundColor = .black
 
     if let metalLayer = mtkView.layer as? CAMetalLayer {
       renderer.commandQueue.addResidencySet(metalLayer.residencySet)
@@ -44,13 +45,13 @@ struct NavierStokesMetalView: UIViewRepresentable {
 
   @MainActor
   class Coordinator: NSObject, MTKViewDelegate {
-    let renderer: NavierStokesRenderer
+    let renderer: LiquidLightRenderer
     var audioLevels: [1024 of Float] = .init(repeating: 0.0)
     private var smoothedBass: Float = 0
     private var smoothedMid: Float = 0
     private var smoothedHigh: Float = 0
 
-    init(renderer: NavierStokesRenderer) {
+    init(renderer: LiquidLightRenderer) {
       self.renderer = renderer
     }
 

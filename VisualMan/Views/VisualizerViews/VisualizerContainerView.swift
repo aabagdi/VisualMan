@@ -43,6 +43,8 @@ struct VisualizerContainerView: View {
       FluidSimVisualizerView(audioLevels: audioLevels)
     case .navierStokes:
       NavierStokesVisualizerView(audioLevels: audioLevels)
+    case .liquidLight:
+      LiquidLightVisualizerView(audioLevels: audioLevels)
     }
   }
 }

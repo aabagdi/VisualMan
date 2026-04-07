@@ -5,7 +5,6 @@
 //  Created by Aadit Bagdi on 3/14/26.
 //
 
-import Foundation
 import Accelerate
 
 actor DSPProcessor {
@@ -17,7 +16,7 @@ actor DSPProcessor {
   private nonisolated(unsafe) var dftSetup: OpaquePointer?
   private var audioLevels = [1024 of Float](repeating: 0.0)
   private var visualizerBars = [32 of Float](repeating: 0.0)
-  private var gainHistory: [Float] = []
+  private var gainHistory = [Float]()
   private var currentGain: Float = 1.0
   private var hannWindow = [2048 of Float](repeating: 0.0)
   private var aWeightTable = [1024 of Float](repeating: 0.0)

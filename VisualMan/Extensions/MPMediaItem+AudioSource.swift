@@ -5,7 +5,6 @@
 //  Created by Aadit Bagdi on 7/19/25.
 //
 
-import Foundation
 import MediaPlayer
 
 private let thumbnailCache: NSCache<NSNumber, UIImage> = {
