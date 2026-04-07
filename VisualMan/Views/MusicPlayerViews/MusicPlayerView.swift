@@ -9,8 +9,9 @@ import SwiftUI
 
 struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
-  @State private var currentVisualizer = VMVisualizer.bars
   @State private var isTapped: Bool = false
+  
+  @SceneStorage("currentVisualizer") private var currentVisualizer = VMVisualizer.bars
   
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(AudioPlaylistManager.self) private var playlistManager
