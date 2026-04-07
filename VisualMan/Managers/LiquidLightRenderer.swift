@@ -21,6 +21,7 @@ struct BlurParams {
   var maxBlurRadius: Float
   var texWidth: Float
   var texHeight: Float
+  var bass: Float
 }
 
 @MainActor
@@ -143,7 +144,8 @@ final class LiquidLightRenderer {
     allocator.reset()
     uniformOffset = 0
 
-    time += dt
+    let audioEnergy = (bass + mid + high) / 3.0
+    time += dt * (0.05 + audioEnergy * 0.95)
 
     let outputTex = drawable.texture
     ensureIntermediateTexture(width: outputTex.width, height: outputTex.height)
@@ -156,7 +158,7 @@ final class LiquidLightRenderer {
     renderLiquidLight(encoder: encoder, output: intermediateTex,
                       bass: bass, mid: mid, high: high)
 
-    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex)
+    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, bass: bass)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -185,18 +187,20 @@ final class LiquidLightRenderer {
 
   private func renderBlur(encoder: any MTL4ComputeCommandEncoder,
                           input: MTLTexture,
-                          output: MTLTexture) {
+                          output: MTLTexture,
+                          bass: Float) {
     encoder.setComputePipelineState(blurPipeline)
 
     argumentTable.setTexture(input.gpuResourceID, index: 0)
     argumentTable.setTexture(output.gpuResourceID, index: 1)
 
     let blurParams = BlurParams(
-      innerRadius: 0.35,
-      outerRadius: 0.75,
-      maxBlurRadius: 20.0,
+      innerRadius: 0.45,
+      outerRadius: 1.15,
+      maxBlurRadius: 8.0,
       texWidth: Float(input.width),
-      texHeight: Float(input.height)
+      texHeight: Float(input.height),
+      bass: bass
     )
     argumentTable.setAddress(writeUniform(blurParams), index: 0)
 

@@ -56,7 +56,7 @@ extension LiquidLightRenderer {
 
   static func createArgumentTable(device: MTLDevice) -> (any MTL4ArgumentTable)? {
     let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 2  // Pass 1 uses 1 texture, Pass 2 uses 2
+    desc.maxTextureBindCount = 2
     desc.maxBufferBindCount = 1
     return try? device.makeArgumentTable(descriptor: desc)
   }
