@@ -84,7 +84,7 @@ inline int os2_gradIndex(int ix, int iy) {
 }
 
 inline float os2_contrib(int ix, int iy, float dx, float dy) {
-  float a = 0.5 - dx * dx - dy * dy;
+  float a = 2.0 / 3.0 - dx * dx - dy * dy;
   if (a <= 0.0) return 0.0;
   float a2 = a * a;
   float2 g = OS2_GRAD[os2_gradIndex(ix, iy)];
@@ -113,21 +113,28 @@ inline float snoise(float2 pos) {
 
   value += os2_contrib(xsb, ysb, dx0, dy0);
 
-  float dx2 = dx0 - 1.0 + 2.0 * UNSKEW;
-  float dy2 = dy0 - 1.0 + 2.0 * UNSKEW;
-  value += os2_contrib(xsb + 1, ysb + 1, dx2, dy2);
+  value += os2_contrib(xsb + 1, ysb,
+                       dx0 - 1.0 + UNSKEW, dy0 + UNSKEW);
 
-  if (xsi > ysi) {
-    float dx1 = dx0 - 1.0 + UNSKEW;
-    float dy1 = dy0 + UNSKEW;
-    value += os2_contrib(xsb + 1, ysb, dx1, dy1);
+  value += os2_contrib(xsb, ysb + 1,
+                       dx0 + UNSKEW, dy0 - 1.0 + UNSKEW);
+
+  value += os2_contrib(xsb + 1, ysb + 1,
+                       dx0 - 1.0 + 2.0 * UNSKEW, dy0 - 1.0 + 2.0 * UNSKEW);
+
+  if (xsi + ysi > 1.0) {
+    value += os2_contrib(xsb + 2, ysb + 1,
+                         dx0 - 2.0 + 3.0 * UNSKEW, dy0 - 1.0 + 3.0 * UNSKEW);
+    value += os2_contrib(xsb + 1, ysb + 2,
+                         dx0 - 1.0 + 3.0 * UNSKEW, dy0 - 2.0 + 3.0 * UNSKEW);
   } else {
-    float dx1 = dx0 + UNSKEW;
-    float dy1 = dy0 - 1.0 + UNSKEW;
-    value += os2_contrib(xsb, ysb + 1, dx1, dy1);
+    value += os2_contrib(xsb - 1, ysb,
+                         dx0 + 1.0 - UNSKEW, dy0 - UNSKEW);
+    value += os2_contrib(xsb, ysb - 1,
+                         dx0 - UNSKEW, dy0 + 1.0 - UNSKEW);
   }
 
-  return 99.83685446303647 * value;
+  return 18.24196194486065 * value;
 }
 
 inline float2 liquidWarp(float2 p, float time, float intensity) {

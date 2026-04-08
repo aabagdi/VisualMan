@@ -12,18 +12,26 @@ final class AudioTapProcessor: Sendable {
   private let isProcessingBuffer = Atomic<Bool>(false)
   private let resultContinuation = Mutex<AsyncStream<DSPProcessor.DSPResult>.Continuation?>(nil)
   private let forwardingTask = Mutex<Task<Void, Never>?>(nil)
+  private let latestSamples = Mutex<([Float], Float)?>(nil)
   
   nonisolated func processSamples(_ samples: UnsafeBufferPointer<Float>, sampleRate: Float) {
+    let copied = Array(samples)
+    latestSamples.withLock { $0 = (copied, sampleRate) }
+    
     guard isProcessingBuffer.compareExchange(expected: false,
                                              desired: true,
                                              ordering: .acquiringAndReleasing).exchanged else { return }
     let dsp = dspProcessor
-    let copied = Array(samples)
     
     Task {
-      let result = await dsp.processSamples(copied, sampleRate: sampleRate)
+      defer { isProcessingBuffer.store(false, ordering: .releasing) }
+      
+      guard let (samples, rate) = latestSamples.withLock({
+        let v = $0; $0 = nil; return v
+      }) else { return }
+      
+      let result = await dsp.processSamples(samples, sampleRate: rate)
       resultContinuation.withLock { _ = $0?.yield(result) }
-      isProcessingBuffer.store(false, ordering: .releasing)
     }
   }
   

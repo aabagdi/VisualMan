@@ -34,6 +34,7 @@ final class LiquidLightRenderer {
 
   var time: Float = 0
   let dt: Float = 1.0 / 60.0
+  private var smoothedSpeed: Float = 0.05
 
   static let maxFramesInFlight: UInt64 = 3
   private var commandAllocators = [any MTL4CommandAllocator]()
@@ -131,21 +132,26 @@ final class LiquidLightRenderer {
               mid: Float,
               high: Float,
               drawable: CAMetalDrawable) {
-    frameNumber += 1
-    let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
+    let audioEnergy = (bass + mid + high) / 3.0
+    let targetSpeed = 0.05 + audioEnergy * 0.95
+    let alpha: Float = targetSpeed > smoothedSpeed ? 0.025 : 0.06
+    smoothedSpeed += (targetSpeed - smoothedSpeed) * alpha
+    time += dt * smoothedSpeed
 
-    let waitValue = frameNumber > Self.maxFramesInFlight
-      ? frameNumber - Self.maxFramesInFlight
-      : 0
-    sharedEvent.wait(untilSignaledValue: waitValue, timeoutMS: 1000)
+    let nextFrame = frameNumber + 1
+    let frameIndex = Int(nextFrame % Self.maxFramesInFlight)
+
+    if nextFrame > Self.maxFramesInFlight {
+      let waitValue = nextFrame - Self.maxFramesInFlight
+      guard sharedEvent.signaledValue >= waitValue else { return }
+    }
+
+    frameNumber = nextFrame
 
     let allocator = commandAllocators[frameIndex]
     currentUniformBuffer = uniformBuffers[frameIndex]
     allocator.reset()
     uniformOffset = 0
-
-    let audioEnergy = (bass + mid + high) / 3.0
-    time += dt * (0.05 + audioEnergy * 0.95)
 
     let outputTex = drawable.texture
     ensureIntermediateTexture(width: outputTex.width, height: outputTex.height)
@@ -155,10 +161,15 @@ final class LiquidLightRenderer {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
-    renderLiquidLight(encoder: encoder, output: intermediateTex,
-                      bass: bass, mid: mid, high: high)
+    let rampFactor = min(smoothedSpeed / max(targetSpeed, 0.05), 1.0)
+    let rBass = bass * rampFactor
+    let rMid  = mid  * rampFactor
+    let rHigh = high * rampFactor
 
-    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, bass: bass)
+    renderLiquidLight(encoder: encoder, output: intermediateTex,
+                      bass: rBass, mid: rMid, high: rHigh)
+
+    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, bass: rBass)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()

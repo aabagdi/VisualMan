@@ -30,8 +30,8 @@ actor DSPProcessor {
   private var logMagnitudes = [1024 of Float](repeating: 0.0)
 
   private let numberOfBars = 32
-  private let attackTime: Float = 0.1
-  private let releaseTime: Float = 0.6
+  private let attackTime: Float = 0.15
+  private let releaseTime: Float = 0.5
   private let gainHistorySize = 30
 
   init() {
@@ -176,6 +176,11 @@ actor DSPProcessor {
     var bars = bars
     bars.withUnsafeElementPointer { b in
       vDSP_maxv(b, 1, &maxBar, 32)
+    }
+    
+    if maxBar < 0.01 {
+      currentGain = currentGain * 0.95 + 1.0 * 0.05
+      return
     }
     
     gainHistory.append(maxBar)

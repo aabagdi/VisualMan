@@ -25,19 +25,22 @@ final class AudioEngineManager {
   @ObservationIgnored @Dependency(\.uuid) var uuid
   
   @ObservationIgnored private var engine: AVAudioEngine?
-  @ObservationIgnored private var player: AVAudioPlayerNode?
-  @ObservationIgnored private var audioFile: AVAudioFile?
-  @ObservationIgnored private var displayLinkStream: DisplayLinkStream?
-  @ObservationIgnored private var displayLinkTask: Task<Void, Never>?
   @ObservationIgnored private var securityScopedURL: URL?
-  @ObservationIgnored private var lastSeekFrame: AVAudioFramePosition = 0
-  @ObservationIgnored private var isSeeking: Bool = false
-  @ObservationIgnored private var hasHandledCompletion = false
-  @ObservationIgnored private var currentPlaybackID: UUID
-  @ObservationIgnored private var nowPlayingTask: Task<Void, Never>?
   @ObservationIgnored private var playbackContinuation: AsyncStream<Void>.Continuation?
+  @ObservationIgnored private var pauseDecayTask: Task<Void, Never>?
+  @ObservationIgnored private var pauseDecayStream: DisplayLinkStream?
   
-  private let audioTapProcessor = AudioTapProcessor()
+  @ObservationIgnored var player: AVAudioPlayerNode?
+  @ObservationIgnored var audioFile: AVAudioFile?
+  @ObservationIgnored var displayLinkStream: DisplayLinkStream?
+  @ObservationIgnored var displayLinkTask: Task<Void, Never>?
+  @ObservationIgnored var lastSeekFrame: AVAudioFramePosition = 0
+  @ObservationIgnored var isSeeking: Bool = false
+  @ObservationIgnored var hasHandledCompletion = false
+  @ObservationIgnored var currentPlaybackID: UUID
+  @ObservationIgnored var nowPlayingTask: Task<Void, Never>?
+  
+  let audioTapProcessor = AudioTapProcessor()
   
   let playbackCompleted: AsyncStream<Void>
   
@@ -179,10 +182,55 @@ final class AudioEngineManager {
       tapProcessor.processSamples(samples, sampleRate: sampleRate)
     }
     
+    startVisualizerForwarding()
+  }
+  
+  func startVisualizerForwarding() {
     audioTapProcessor.startForwarding { [weak self] result in
       self?.audioLevels = result.audioLevels
       self?.visualizerBars = result.visualizerBars
     }
+  }
+  
+  func startPauseDecay() {
+    stopPauseDecay()
+    let stream = DisplayLinkStream()
+    pauseDecayStream = stream
+    pauseDecayTask = Task { [weak self] in
+      for await _ in stream.frames {
+        guard !Task.isCancelled else { break }
+        guard let self else { break }
+        
+        let decayFactor: Float = 0.88
+        let threshold: Float = 0.001
+        var allZero = true
+        
+        for i in self.visualizerBars.indices {
+          self.visualizerBars[i] *= decayFactor
+          if self.visualizerBars[i] < threshold {
+            self.visualizerBars[i] = 0
+          } else {
+            allZero = false
+          }
+        }
+        
+        for i in self.audioLevels.indices {
+          self.audioLevels[i] *= decayFactor
+          if self.audioLevels[i] < threshold {
+            self.audioLevels[i] = 0
+          }
+        }
+        
+        if allZero { break }
+      }
+    }
+  }
+  
+  func stopPauseDecay() {
+    pauseDecayTask?.cancel()
+    pauseDecayTask = nil
+    pauseDecayStream?.stop()
+    pauseDecayStream = nil
   }
   
   private func stopSecurityScopedAccess() {
@@ -192,7 +240,7 @@ final class AudioEngineManager {
     }
   }
   
-  private func handlePlaybackCompleted() {
+  func handlePlaybackCompleted() {
     guard !hasHandledCompletion else { return }
     hasHandledCompletion = true
     
@@ -206,17 +254,22 @@ final class AudioEngineManager {
     player?.pause()
     isPlaying = false
     stopDisplayLink()
+    audioTapProcessor.stopForwarding()
+    startPauseDecay()
   }
   
   func resume() {
+    stopPauseDecay()
     player?.play()
     isPlaying = true
     startDisplayLink()
+    startVisualizerForwarding()
   }
 
   func stopForTransition() {
     currentPlaybackID = uuid()
     player?.stop()
+    stopPauseDecay()
     audioTapProcessor.stopForwarding()
     engine?.mainMixerNode.removeTap(onBus: 0)
     isPlaying = false
@@ -234,153 +287,5 @@ final class AudioEngineManager {
     stopForTransition()
     engine?.stop()
     stopNowPlayingTimer()
-  }
-  
-  private func observeAudioSessionInterruptions() {
-    NotificationCenter.default.addObserver(
-      forName: AVAudioSession.interruptionNotification,
-      object: AVAudioSession.sharedInstance(),
-      queue: .main
-    ) { [weak self] notification in
-      guard let userInfo = notification.userInfo,
-            let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-            let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
-      let options: AVAudioSession.InterruptionOptions? = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt)
-        .map { AVAudioSession.InterruptionOptions(rawValue: $0) }
-      Task { @MainActor in
-        self?.handleInterruption(type: type, options: options)
-      }
-    }
-  }
-  
-  private func handleInterruption(type: AVAudioSession.InterruptionType, options: AVAudioSession.InterruptionOptions?) {
-    switch type {
-    case .began:
-      if isPlaying {
-        player?.pause()
-        isPlaying = false
-        stopDisplayLink()
-      }
-    case .ended:
-      if let options, options.contains(.shouldResume) {
-        try? AVAudioSession.sharedInstance().setActive(true)
-        player?.play()
-        isPlaying = true
-        startDisplayLink()
-      }
-    @unknown default:
-      break
-    }
-  }
-  
-  func seek(to time: TimeInterval) {
-    guard let player,
-          let audioFile else { return }
-    
-    isSeeking = true
-    
-    currentPlaybackID = uuid()
-    hasHandledCompletion = false
-    
-    let sampleRate = audioFile.fileFormat.sampleRate
-    let newFrame = AVAudioFramePosition(time * sampleRate)
-    
-    let clampedFrame = max(0, min(newFrame, audioFile.length))
-    
-    lastSeekFrame = clampedFrame
-    
-    player.stop()
-    
-    if clampedFrame < audioFile.length {
-      let playbackID = currentPlaybackID
-      player.scheduleSegment(
-        audioFile,
-        startingFrame: clampedFrame,
-        frameCount: AVAudioFrameCount(audioFile.length - clampedFrame),
-        at: nil
-      ) { [weak self] in
-        Task { @MainActor in
-          guard let self,
-                self.currentPlaybackID == playbackID else { return }
-          self.handlePlaybackCompleted()
-        }
-      }
-      
-      if isPlaying {
-        player.play()
-      }
-      
-      currentTime = time
-    } else {
-      currentTime = duration
-      isSeeking = false
-      handlePlaybackCompleted()
-      return
-    }
-    
-    isSeeking = false
-  }
-  
-}
-
-extension AudioEngineManager {
-  func startNowPlayingTimer(updateHandler: @escaping @MainActor () -> Void) {
-    stopNowPlayingTimer()
-    nowPlayingTask = Task { [weak self] in
-      while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(1))
-        guard !Task.isCancelled, self != nil else { break }
-        updateHandler()
-      }
-    }
-  }
-  
-  func stopNowPlayingTimer() {
-    nowPlayingTask?.cancel()
-    nowPlayingTask = nil
-  }
-  
-  func startDisplayLink() {
-    stopDisplayLink()
-    let stream = DisplayLinkStream()
-    displayLinkStream = stream
-    displayLinkTask = Task { [weak self] in
-      for await _ in stream.frames {
-        guard !Task.isCancelled else { break }
-        self?.updateTime()
-      }
-    }
-  }
-  
-  func stopDisplayLink() {
-    displayLinkTask?.cancel()
-    displayLinkTask = nil
-    displayLinkStream?.stop()
-    displayLinkStream = nil
-  }
-  
-  private func updateTime() {
-    guard let player,
-          let audioFile,
-          player.isPlaying else { return }
-    
-    if let nodeTime = player.lastRenderTime,
-       let playerTime = player.playerTime(forNodeTime: nodeTime) {
-      let sampleTime = playerTime.sampleTime
-      
-      guard sampleTime >= 0 else { return }
-      
-      let playerSeconds = Double(sampleTime) / playerTime.sampleRate
-      let seekSeconds = Double(lastSeekFrame) / audioFile.fileFormat.sampleRate
-      let newTime = seekSeconds + playerSeconds
-      
-      if newTime >= 0 && newTime <= duration {
-        currentTime = newTime
-      }
-      
-      if currentTime >= duration - 0.05 && !isSeeking && !hasHandledCompletion {
-        handlePlaybackCompleted()
-      }
-    }
   }
 }
