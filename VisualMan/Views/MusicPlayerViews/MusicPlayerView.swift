@@ -11,7 +11,7 @@ struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
   @State private var isTapped: Bool = false
   
-  @SceneStorage("currentVisualizer") private var currentVisualizer = VMVisualizer.bars
+  @Environment(VisualizerSelection.self) private var visualizerSelection
   
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(AudioPlaylistManager.self) private var playlistManager
@@ -47,7 +47,7 @@ struct MusicPlayerView: View {
     @Bindable var audioManager = audioManager
     
     ZStack {
-      VisualizerContainerView(currentVisualizer: currentVisualizer,
+      VisualizerContainerView(currentVisualizer: visualizerSelection.current,
                     visualizerBars: audioManager.visualizerBars,
                     audioLevels: audioManager.audioLevels,
                     albumArt: currentAudioSource?.albumArt)
@@ -166,9 +166,9 @@ struct MusicPlayerView: View {
         Menu {
           ForEach(VMVisualizer.allCases, id: \.self) { type in
             Button {
-              currentVisualizer = type
+              visualizerSelection.current = type
             } label: {
-              if type == currentVisualizer {
+              if type == visualizerSelection.current {
                 Label(type.rawValue, systemImage: "checkmark")
               } else {
                 Text(type.rawValue)
@@ -176,7 +176,7 @@ struct MusicPlayerView: View {
             }
           }
         } label: {
-          Text(currentVisualizer.rawValue)
+          Text(visualizerSelection.current.rawValue)
         }
       }
     }

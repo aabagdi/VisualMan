@@ -5,6 +5,13 @@
 //  Created by Aadit Bagdi on 3/31/26.
 //
 
+import Observation
+
+@Observable @MainActor
+final class VisualizerSelection {
+  var current: VMVisualizer = .bars
+}
+
 enum VMVisualizer: String, CaseIterable {
   case bars = "Bars"
   case threeD = "3D Bars"

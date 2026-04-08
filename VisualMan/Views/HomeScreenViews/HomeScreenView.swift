@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HomeScreenView: View {
   @State private var selectedTab: VMTab = .musicLibrary
+  @State private var visualizerSelection = VisualizerSelection()
   
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(MusicLibraryAccessManager.self) private var library
@@ -49,5 +50,6 @@ struct HomeScreenView: View {
       }
     }
     .tabBarMinimizeBehavior(.onScrollDown)
+    .environment(visualizerSelection)
   }
 }
