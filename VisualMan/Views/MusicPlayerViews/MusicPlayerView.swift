@@ -142,7 +142,7 @@ struct MusicPlayerView: View {
     }
     .toolbar(.hidden, for: .tabBar)
     .onAppear {
-      viewModel.start(playlistManager: playlistManager, audioSources: _audioSources, startingIndex: _startingIndex)
+      viewModel.start(audioSources: _audioSources, startingIndex: _startingIndex)
     }
     .onDisappear {
       viewModel.cleanup()

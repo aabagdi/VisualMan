@@ -63,7 +63,7 @@ extension AudioEngineManager {
         currentTime = newTime
       }
       
-      if currentTime >= duration - 0.05 && !isSeeking && !hasHandledCompletion {
+      if currentTime >= duration - 0.05 && playbackState == .playing {
         handlePlaybackCompleted()
       }
     }
@@ -91,9 +91,9 @@ extension AudioEngineManager {
   private func handleInterruption(type: AVAudioSession.InterruptionType, options: AVAudioSession.InterruptionOptions?) {
     switch type {
     case .began:
-      if isPlaying {
+      if playbackState == .playing {
         player?.pause()
-        isPlaying = false
+        playbackState = .paused
         stopDisplayLink()
         audioTapProcessor.stopForwarding()
         startPauseDecay()
@@ -103,7 +103,7 @@ extension AudioEngineManager {
         stopPauseDecay()
         try? AVAudioSession.sharedInstance().setActive(true)
         player?.play()
-        isPlaying = true
+        playbackState = .playing
         startDisplayLink()
         startVisualizerForwarding()
       }
@@ -116,10 +116,10 @@ extension AudioEngineManager {
     guard let player,
           let audioFile else { return }
     
-    isSeeking = true
+    let wasPlaying = playbackState == .playing
+    playbackState = .seeking
     
     currentPlaybackID = uuid()
-    hasHandledCompletion = false
     
     let sampleRate = audioFile.fileFormat.sampleRate
     let newFrame = AVAudioFramePosition(time * sampleRate)
@@ -145,18 +145,18 @@ extension AudioEngineManager {
         }
       }
       
-      if isPlaying {
+      if wasPlaying {
         player.play()
+        playbackState = .playing
+      } else {
+        playbackState = .paused
       }
       
       currentTime = time
     } else {
       currentTime = duration
-      isSeeking = false
       handlePlaybackCompleted()
       return
     }
-    
-    isSeeking = false
   }
 }

@@ -14,19 +14,18 @@ extension MusicPlayerView {
   final class MusicPlayerViewModel {
     @ObservationIgnored @Dependency(AudioEngineManager.self) private var audioManager
     @ObservationIgnored @Dependency(LockScreenControlManager.self) private var lockScreen
+    @ObservationIgnored @Dependency(AudioPlaylistManager.self) private var playlistManager
     @ObservationIgnored @Dependency(\.continuousClock) var clock
     
     @ObservationIgnored private var playbackListeningTask: Task<Void, Never>?
     @ObservationIgnored private var songTransitionTask: Task<Void, Never>?
     @ObservationIgnored private var playTask: Task<Void, Never>?
-    @ObservationIgnored private weak var playlistManager: AudioPlaylistManager?
     @ObservationIgnored private var lastArtworkSourceURL: URL?
         
     var failedPlaying: Bool = false
     var playingError: VMError?
     
-    func start(playlistManager: AudioPlaylistManager, audioSources: [any AudioSource], startingIndex: Int) {
-      self.playlistManager = playlistManager
+    func start(audioSources: [any AudioSource], startingIndex: Int) {
       playlistManager.setPlaylist(audioSources, startingIndex: startingIndex)
       setupLockScreenControls()
       
@@ -74,7 +73,6 @@ extension MusicPlayerView {
     }
     
     func skipBackwards() {
-      guard let playlistManager else { return }
       if audioManager.currentTime >= 3 {
         audioManager.seek(to: 0)
       } else if playlistManager.hasPrevious {
@@ -87,14 +85,14 @@ extension MusicPlayerView {
     }
     
     func skipForwards() {
-      guard let playlistManager, playlistManager.hasNext else { return }
+      guard playlistManager.hasNext else { return }
       audioManager.stopForTransition()
       playlistManager.moveToNext()
       playCurrentSong()
     }
     
     private func playCurrentSong() {
-      guard let source = playlistManager?.currentAudioSource else { return }
+      guard let source = playlistManager.currentAudioSource else { return }
       
       playTask?.cancel()
       playTask = Task {
@@ -113,8 +111,6 @@ extension MusicPlayerView {
     }
     
     private func onSongCompleted() {
-      guard let playlistManager else { return }
-      
       if playlistManager.hasNext {
         audioManager.stopForTransition()
         songTransitionTask?.cancel()
@@ -148,7 +144,7 @@ extension MusicPlayerView {
     }
     
     private func updateNowPlayingInfo() {
-      guard let source = playlistManager?.currentAudioSource else { return }
+      guard let source = playlistManager.currentAudioSource else { return }
       
       let sourceURL = source.getPlaybackURL()
       if sourceURL != lastArtworkSourceURL {

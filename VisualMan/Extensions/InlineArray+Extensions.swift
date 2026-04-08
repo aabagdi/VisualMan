@@ -20,36 +20,39 @@ extension InlineArray: @retroactive Equatable where Element: Equatable {
 }
 
 extension InlineArray<1024, Float> {
+  private enum FrequencyBands {
+    static let bassRange = 1..<10
+    static let midRange = 10..<50
+    static let highRange = 50..<150
+  }
+  
   var bassLevel: Float {
-    let bassRange = 1..<10
     var bassResult: Float = 0.0
-    for i in bassRange { bassResult += self[i] }
-    return bassResult / Float(bassRange.count)
+    for i in FrequencyBands.bassRange { bassResult += self[i] }
+    return bassResult / Float(FrequencyBands.bassRange.count)
   }
   
   var midLevel: Float {
-    let midRange = 10..<50
     var midResult: Float = 0.0
     var midMax: Float = 0.0
-    for i in midRange {
+    for i in FrequencyBands.midRange {
       let currentLevel = self[i]
       midMax = max(midMax, currentLevel)
       midResult += currentLevel
     }
-    let midAvg = midResult / Float(midRange.count)
+    let midAvg = midResult / Float(FrequencyBands.midRange.count)
     return midAvg * 0.5 + midMax * 0.5
   }
   
   var highLevel: Float {
-    let highRange = 50..<150
     var highResult: Float = 0.0
     var highMax: Float = 0.0
-    for i in highRange {
+    for i in FrequencyBands.highRange {
       let currentLevel = self[i]
       highMax = max(highMax, currentLevel)
       highResult += currentLevel
     }
-    let highAvg = highResult / Float(highRange.count)
+    let highAvg = highResult / Float(FrequencyBands.highRange.count)
     return highMax * 0.7 + highAvg * 0.3
   }
 }

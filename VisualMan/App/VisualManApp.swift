@@ -10,11 +10,11 @@ import Dependencies
 
 @main
 struct VisualManApp: App {
-  @State private var musicLibraryManager = MusicLibraryAccessManager()
-  @State private var playlistManager = AudioPlaylistManager()
   @State private var showLowPowerAlert = false
   
   @Dependency(AudioEngineManager.self) private var audioEngineManager
+  @Dependency(AudioPlaylistManager.self) private var playlistManager
+  @Dependency(MusicLibraryAccessManager.self) private var musicLibraryManager
   
   var body: some Scene {
     WindowGroup {

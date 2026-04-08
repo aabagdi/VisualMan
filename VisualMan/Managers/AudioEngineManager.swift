@@ -12,15 +12,25 @@ import Dependencies
 @Observable
 @MainActor
 final class AudioEngineManager {
+  enum PlaybackState {
+    case idle
+    case playing
+    case paused
+    case seeking
+    case completed
+  }
+  
   var audioLevels = [1024 of Float](repeating: 0.0)
   var visualizerBars = [32 of Float](repeating: 0.0)
-  var isPlaying = false
+  var playbackState: PlaybackState = .idle
   var currentTime: TimeInterval = 0
   var duration: TimeInterval = 0
   var isInitialized = false
   var failedToInitialize = false
   var initializationError: VMError?
   var currentAudioSourceURL: URL?
+  
+  var isPlaying: Bool { playbackState == .playing }
   
   @ObservationIgnored @Dependency(\.uuid) var uuid
   
@@ -35,8 +45,6 @@ final class AudioEngineManager {
   @ObservationIgnored var displayLinkStream: DisplayLinkStream?
   @ObservationIgnored var displayLinkTask: Task<Void, Never>?
   @ObservationIgnored var lastSeekFrame: AVAudioFramePosition = 0
-  @ObservationIgnored var isSeeking: Bool = false
-  @ObservationIgnored var hasHandledCompletion = false
   @ObservationIgnored var currentPlaybackID: UUID
   @ObservationIgnored var nowPlayingTask: Task<Void, Never>?
   
@@ -64,6 +72,9 @@ final class AudioEngineManager {
   }
   
   deinit {
+    displayLinkTask?.cancel()
+    pauseDecayTask?.cancel()
+    nowPlayingTask?.cancel()
     playbackContinuation?.finish()
   }
   
@@ -93,7 +104,7 @@ final class AudioEngineManager {
   }
   
   func play(_ source: AudioSource) async throws {
-    if currentAudioSourceURL == source.getPlaybackURL() && isPlaying { return }
+    if currentAudioSourceURL == source.getPlaybackURL() && playbackState == .playing { return }
     
     player?.stop()
     
@@ -129,8 +140,6 @@ final class AudioEngineManager {
       throw VMError.nilEngineOrPlayer
     }
     
-    hasHandledCompletion = false
-    
     let playbackID = uuid()
     currentPlaybackID = playbackID
     
@@ -157,10 +166,10 @@ final class AudioEngineManager {
         }
       }
       
-      isPlaying = true
+      playbackState = .playing
       startDisplayLink()
     } catch {
-      isPlaying = false
+      playbackState = .idle
       stopDisplayLink()
       throw VMError.failedToPlay
     }
@@ -241,10 +250,9 @@ final class AudioEngineManager {
   }
   
   func handlePlaybackCompleted() {
-    guard !hasHandledCompletion else { return }
-    hasHandledCompletion = true
+    guard playbackState != .completed else { return }
+    playbackState = .completed
     
-    isPlaying = false
     currentTime = duration
     stopDisplayLink()
     playbackContinuation?.yield()
@@ -252,7 +260,7 @@ final class AudioEngineManager {
   
   func pause() {
     player?.pause()
-    isPlaying = false
+    playbackState = .paused
     stopDisplayLink()
     audioTapProcessor.stopForwarding()
     startPauseDecay()
@@ -261,25 +269,25 @@ final class AudioEngineManager {
   func resume() {
     stopPauseDecay()
     player?.play()
-    isPlaying = true
+    playbackState = .playing
     startDisplayLink()
     startVisualizerForwarding()
   }
 
   func stopForTransition() {
+    let wasSeeking = playbackState == .seeking
     currentPlaybackID = uuid()
     player?.stop()
     stopPauseDecay()
     audioTapProcessor.stopForwarding()
     engine?.mainMixerNode.removeTap(onBus: 0)
-    isPlaying = false
+    playbackState = .idle
     currentTime = 0
     stopDisplayLink()
     stopSecurityScopedAccess()
-    if !isSeeking {
+    if !wasSeeking {
       lastSeekFrame = 0
     }
-    hasHandledCompletion = false
     currentAudioSourceURL = nil
   }
   

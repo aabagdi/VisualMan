@@ -12,6 +12,32 @@ actor DSPProcessor {
     let audioLevels: [1024 of Float]
     let visualizerBars: [32 of Float]
   }
+  
+  private enum Constants {
+    static let fftSize = 2048
+    static let spectrumSize = 1024
+    static let barCount = 32
+    static let minFrequency: Float = 60.0
+    static let maxFrequency: Float = 13000.0
+    static let boostCeilingFrequency: Float = 500.0
+    static let presenceLowFrequency: Float = 2000.0
+    static let presenceHighFrequency: Float = 8000.0
+    static let attackTime: Float = 0.15
+    static let releaseTime: Float = 0.5
+    static let gainHistorySize = 30
+    static let minGain: Float = 0.3
+    static let maxGain: Float = 2.0
+    static let targetPeak: Float = 0.75
+    static let dbOffset: Float = 60.0
+    static let dbRange: Float = 80.0
+    static let interpolation: Float = 0.2
+    static let avgWeight: Float = 0.7
+    static let maxWeight: Float = 0.3
+    static let tanhScale: Float = 1.5
+    static let lowFrequencyBoostFactor: Float = 0.5
+    static let presenceBoostFactor: Float = 0.4
+    static let gainSmoothingFactor: Float = 0.95
+  }
 
   private nonisolated(unsafe) var dftSetup: OpaquePointer?
   private var audioLevels = [1024 of Float](repeating: 0.0)
@@ -28,11 +54,6 @@ actor DSPProcessor {
   private var magnitudes = [1024 of Float](repeating: 0.0)
   private var weightedMagnitudes = [1024 of Float](repeating: 0.0)
   private var logMagnitudes = [1024 of Float](repeating: 0.0)
-
-  private let numberOfBars = 32
-  private let attackTime: Float = 0.15
-  private let releaseTime: Float = 0.5
-  private let gainHistorySize = 30
 
   init() {
     dftSetup = vDSP_DFT_zop_CreateSetup(nil, 2048, vDSP_DFT_Direction.FORWARD)
@@ -70,7 +91,7 @@ actor DSPProcessor {
     
     audioLevels.withUnsafeElementPointer { al in
       logMagnitudes.withUnsafeElementPointer { lm in
-        var interpolation: Float = 0.2
+        var interpolation: Float = Constants.interpolation
         vDSP_vintb(al, 1, lm, 1, &interpolation, al, 1, 1024)
       }
     }
@@ -144,9 +165,9 @@ actor DSPProcessor {
         var ref: Float = 1.0
         vDSP_vdbcon(wm, 1, &ref, lm, 1, 1024, 1)
         
-        var offset: Float = 60.0
+        var offset: Float = Constants.dbOffset
         vDSP_vsadd(lm, 1, &offset, lm, 1, 1024)
-        var range: Float = 80.0
+        var range: Float = Constants.dbRange
         vDSP_vsdiv(lm, 1, &range, lm, 1, 1024)
         
         var low: Float = 0.0
@@ -157,14 +178,14 @@ actor DSPProcessor {
   }
   
   private func smoothVisualizerBars(_ newBars: [32 of Float]) {
-    for i in 0..<numberOfBars {
+    for i in 0..<Constants.barCount {
       let currentLevel = visualizerBars[i]
       let targetLevel = newBars[i] * currentGain
       
       if targetLevel > currentLevel {
-        visualizerBars[i] = currentLevel + (targetLevel - currentLevel) * (1.0 - attackTime)
+        visualizerBars[i] = currentLevel + (targetLevel - currentLevel) * (1.0 - Constants.attackTime)
       } else {
-        visualizerBars[i] = currentLevel + (targetLevel - currentLevel) * (1.0 - releaseTime)
+        visualizerBars[i] = currentLevel + (targetLevel - currentLevel) * (1.0 - Constants.releaseTime)
       }
       
       visualizerBars[i] = min(1.0, visualizerBars[i])
@@ -179,31 +200,30 @@ actor DSPProcessor {
     }
     
     if maxBar < 0.01 {
-      currentGain = currentGain * 0.95 + 1.0 * 0.05
+      currentGain = currentGain * Constants.gainSmoothingFactor + 1.0 * (1.0 - Constants.gainSmoothingFactor)
       return
     }
     
     gainHistory.append(maxBar)
-    if gainHistory.count > gainHistorySize {
+    if gainHistory.count > Constants.gainHistorySize {
       gainHistory.removeFirst()
     }
     
     let averagePeak = gainHistory.reduce(0, +) / Float(gainHistory.count)
     
-    let targetPeak: Float = 0.75
     var desiredGain: Float = 1.0
     
     if averagePeak > 0.01 {
-      desiredGain = targetPeak / averagePeak
+      desiredGain = Constants.targetPeak / averagePeak
     }
     
-    desiredGain = max(0.3, min(2.0, desiredGain))
+    desiredGain = max(Constants.minGain, min(Constants.maxGain, desiredGain))
     
-    currentGain = currentGain * 0.95 + desiredGain * 0.05
+    currentGain = currentGain * Constants.gainSmoothingFactor + desiredGain * (1.0 - Constants.gainSmoothingFactor)
   }
   
   private func rebuildAWeightTable(sampleRate: Float) {
-    let binFrequencyWidth = sampleRate / Float(2048)
+    let binFrequencyWidth = sampleRate / Float(Constants.fftSize)
     
     let c1: Float = 12194.217 * 12194.217
     let c2: Float = 20.598997 * 20.598997
@@ -240,18 +260,15 @@ actor DSPProcessor {
     var bars = [32 of Float](repeating: 0.0)
     var fftData = fftData
     
-    let minFreq: Float = 60.0
-    let maxFreq: Float = 13000.0
-    
-    let logMinFreq = log10(minFreq)
-    let logMaxFreq = log10(maxFreq)
-    let binWidth = sampleRate / Float(2048)
-    let logBoostCeiling = log10(500.0 as Float)
+    let logMinFreq = log10(Constants.minFrequency)
+    let logMaxFreq = log10(Constants.maxFrequency)
+    let binWidth = sampleRate / Float(Constants.fftSize)
+    let logBoostCeiling = log10(Constants.boostCeilingFrequency)
     
     fftData.withUnsafeElementPointer { fft in
-      for i in 0..<numberOfBars {
-        let logFreqLow = logMinFreq + (logMaxFreq - logMinFreq) * Float(i) / Float(numberOfBars)
-        let logFreqHigh = logMinFreq + (logMaxFreq - logMinFreq) * Float(i + 1) / Float(numberOfBars)
+      for i in 0..<Constants.barCount {
+        let logFreqLow = logMinFreq + (logMaxFreq - logMinFreq) * Float(i) / Float(Constants.barCount)
+        let logFreqHigh = logMinFreq + (logMaxFreq - logMinFreq) * Float(i + 1) / Float(Constants.barCount)
         
         let freqLow = pow(10, logFreqLow)
         let freqHigh = pow(10, logFreqHigh)
@@ -278,14 +295,14 @@ actor DSPProcessor {
           vDSP_meanv(fft + startBin, 1, &avgMag, count)
         }
         
-        let rawMag = avgMag * 0.7 + maxMag * 0.3
+        let rawMag = avgMag * Constants.avgWeight + maxMag * Constants.maxWeight
         let logCenter = (logFreqLow + logFreqHigh) / 2.0
         bars[i] = applyFrequencyBoosts(rawMag,
                                        logCenter: logCenter,
                                        logMinFreq: logMinFreq,
                                        logBoostCeiling: logBoostCeiling)
         
-        bars[i] = tanh(bars[i] * 1.5)
+        bars[i] = tanh(bars[i] * Constants.tanhScale)
         
         bars[i] = max(0, min(1, bars[i]))
       }
@@ -304,17 +321,18 @@ extension DSPProcessor {
     var result = magnitude
     
     if logCenter < logBoostCeiling {
-      let boost = 1.0 + 0.5 * (logBoostCeiling - logCenter) / (logBoostCeiling - logMinFreq)
+      let ratio = (logBoostCeiling - logCenter) / (logBoostCeiling - logMinFreq)
+      let boost = 1.0 + Constants.lowFrequencyBoostFactor * ratio
       result *= boost
     }
     
-    let logPresenceLow = log10(2000.0 as Float)
-    let logPresenceHigh = log10(8000.0 as Float)
+    let logPresenceLow = log10(Constants.presenceLowFrequency)
+    let logPresenceHigh = log10(Constants.presenceHighFrequency)
     if logCenter >= logPresenceLow && logCenter <= logPresenceHigh {
       let mid = (logPresenceLow + logPresenceHigh) / 2.0
       let halfWidth = (logPresenceHigh - logPresenceLow) / 2.0
       let distance = abs(logCenter - mid) / halfWidth
-      let boost = 1.0 + 0.4 * (1.0 - distance * distance)
+      let boost = 1.0 + Constants.presenceBoostFactor * (1.0 - distance * distance)
       result *= boost
     }
     

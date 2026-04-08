@@ -14,3 +14,11 @@ extension AudioEngineManager: DependencyKey {
 extension LockScreenControlManager: DependencyKey {
   @MainActor static var liveValue: LockScreenControlManager { LockScreenControlManager() }
 }
+
+extension AudioPlaylistManager: DependencyKey {
+  @MainActor static var liveValue: AudioPlaylistManager { AudioPlaylistManager() }
+}
+
+extension MusicLibraryAccessManager: DependencyKey {
+  @MainActor static var liveValue: MusicLibraryAccessManager { MusicLibraryAccessManager() }
+}
