@@ -132,7 +132,8 @@ struct OscilloscopeVisualizerView: View {
         
         let newLevels = downsampledLevels()
         for i in 0..<smoothedLevels.count {
-          smoothedLevels[i] = smoothedLevels[i] * Constants.levelSmoothing + newLevels[i] * (1.0 - Constants.levelSmoothing)
+          let smooth = Constants.levelSmoothing
+          smoothedLevels[i] = smoothedLevels[i] * smooth + newLevels[i] * (1.0 - smooth)
         }
       }
       .ignoresSafeArea()

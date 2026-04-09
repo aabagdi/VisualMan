@@ -1,5 +1,5 @@
 //
-//  CircleVisualizerView.swift
+//  JuliaVisualizerView.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 7/26/25.
