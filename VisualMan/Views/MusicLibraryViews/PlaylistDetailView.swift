@@ -14,7 +14,7 @@ struct PlaylistDetailView: View {
   @Environment(AudioEngineManager.self) private var audioManager
   
   var body: some View {
-    List(Array(playlist.items.enumerated()), id: \.1.persistentID) { index, song in
+    List(playlist.items.enumerated(), id: \.1.persistentID) { index, song in
       let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
       NavigationLink(destination: MusicPlayerView(playlist.items, startingIndex: index)) {
         HStack(spacing: 10) {

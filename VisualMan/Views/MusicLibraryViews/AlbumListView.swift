@@ -10,6 +10,7 @@ import MediaPlayer
 
 struct AlbumListView: View {
   @State private var searchText: String = ""
+  @State private var filteredAlbums: [MPMediaItemCollection]?
   
   @Environment(MusicLibraryAccessManager.self) private var library
   
@@ -17,15 +18,8 @@ struct AlbumListView: View {
   
   private let placeholder = UIImage(resource: .artPlaceholder)
   
-  private var searchResults: [MPMediaItemCollection] {
-    if searchText.isEmpty {
-      return albums
-    } else {
-      return albums.filter {
-        $0.representativeItem?.albumTitle?.localizedStandardContains(searchText) ?? false
-        || $0.representativeItem?.artist?.localizedStandardContains(searchText) ?? false
-      }
-    }
+  private var displayedAlbums: [MPMediaItemCollection] {
+    filteredAlbums ?? albums
   }
   
   var body: some View {
@@ -130,7 +124,7 @@ struct AlbumListView: View {
             
             Section {
               if !albums.isEmpty {
-                ForEach(searchResults, id: \.persistentID) { album in
+                ForEach(displayedAlbums, id: \.persistentID) { album in
                   NavigationLink(destination: AlbumDetailView(album: album)) {
                     HStack {
                       Image(uiImage: album.representativeItem?.thumbnailImage ?? placeholder)
@@ -175,6 +169,16 @@ struct AlbumListView: View {
       }
       .listStyle(.insetGrouped)
       .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+      .task(id: searchText) {
+        if searchText.isEmpty {
+          filteredAlbums = nil
+          return
+        }
+        try? await Task.sleep(for: .milliseconds(300))
+        filteredAlbums = albums.filtered(by: searchText) {
+          [$0.representativeItem?.albumTitle, $0.representativeItem?.artist]
+        }
+      }
       .navigationTitle("Library")
     case .denied, .notDetermined:
       ContentUnavailableView {

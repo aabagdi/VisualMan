@@ -26,7 +26,7 @@ struct BlurParams {
 }
 
 @MainActor
-final class LiquidLightRenderer {
+final class LiquidLightRenderer: MetalVisualizerRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
 

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import MetalKit
 
 struct NavierStokesVisualizerView: View {
   @State private var renderer: NavierStokesRenderer?
@@ -15,8 +16,10 @@ struct NavierStokesVisualizerView: View {
   var body: some View {
     Group {
       if let renderer {
-        NavierStokesMetalView(renderer: renderer,
-                              audioLevels: audioLevels)
+        AudioMetalView(renderer: renderer,
+                       audioLevels: audioLevels,
+                       config: MetalViewConfig(
+                           clearColor: MTLClearColor(red: 0, green: 0, blue: 0.02, alpha: 1)))
       } else {
         Color.black
       }

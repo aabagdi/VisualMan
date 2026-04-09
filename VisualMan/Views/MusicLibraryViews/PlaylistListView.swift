@@ -10,28 +10,33 @@ import MediaPlayer
 
 struct PlaylistListView: View {
   @State private var searchText: String = ""
+  @State private var filteredPlaylists: [MPMediaItemCollection]?
   
   let playlists: [MPMediaItemCollection]
   
-  private var searchResults: [MPMediaItemCollection] {
-    if searchText.isEmpty {
-      return playlists
-    } else {
-      return playlists.filter {
-        (($0.value(forProperty: MPMediaPlaylistPropertyName) as? String) ?? "").localizedStandardContains(searchText)
-      }
-    }
+  private var displayedPlaylists: [MPMediaItemCollection] {
+    filteredPlaylists ?? playlists
   }
   
   var body: some View {
     Section {
       if !playlists.isEmpty {
-        List(searchResults, id: \.representativeItem?.persistentID) { playlist in
+        List(displayedPlaylists, id: \.representativeItem?.persistentID) { playlist in
           NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
             Text(playlist.value(forProperty: MPMediaPlaylistPropertyName) as? String ?? "Unknown")
           }
         }
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+        .task(id: searchText) {
+          if searchText.isEmpty {
+            filteredPlaylists = nil
+            return
+          }
+          try? await Task.sleep(for: .milliseconds(300))
+          filteredPlaylists = playlists.filtered(by: searchText) {
+            [$0.value(forProperty: MPMediaPlaylistPropertyName) as? String]
+          }
+        }
       } else {
         Text("No playlists found!")
           .font(.caption)

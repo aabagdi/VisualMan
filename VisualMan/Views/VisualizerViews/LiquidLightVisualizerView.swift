@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import MetalKit
 
 struct LiquidLightVisualizerView: View {
   @State private var renderer: LiquidLightRenderer?
@@ -15,8 +16,11 @@ struct LiquidLightVisualizerView: View {
   var body: some View {
     Group {
       if let renderer {
-        LiquidLightMetalView(renderer: renderer,
-                             audioLevels: audioLevels)
+        AudioMetalView(renderer: renderer,
+                       audioLevels: audioLevels,
+                       config: MetalViewConfig(
+                           clearColor: MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1),
+                           backgroundColor: .black))
       } else {
         Color.black
       }

@@ -10,28 +10,22 @@ import MediaPlayer
 
 struct SongsListView: View {
   @State private var searchText: String = ""
+  @State private var filteredSongs: [MPMediaItem]?
   
   @Environment(AudioEngineManager.self) private var audioManager
   
   let songs: [MPMediaItem]
   
-  private var searchResults: [MPMediaItem] {
-    if searchText.isEmpty {
-      return songs
-    } else {
-      return songs.filter {
-        $0.title?.localizedStandardContains(searchText) ?? false
-        || $0.artist?.localizedStandardContains(searchText) ?? false
-      }
-    }
+  private var displayedSongs: [MPMediaItem] {
+    filteredSongs ?? songs
   }
   
   var body: some View {
     Section {
       if !songs.isEmpty {
-        List(searchResults.enumerated(), id: \.element.persistentID) { index, song in
+        List(displayedSongs.enumerated(), id: \.element.persistentID) { index, song in
           let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
-          NavigationLink(destination: MusicPlayerView(searchResults, startingIndex: index)) {
+          NavigationLink(destination: MusicPlayerView(displayedSongs, startingIndex: index)) {
             HStack(spacing: 10) {
               if isCurrentSong {
                 NowPlayingIndicatorView(isAnimating: audioManager.isPlaying)
@@ -49,6 +43,16 @@ struct SongsListView: View {
           .toolbarVisibility(.hidden, for: .tabBar)
         }
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+        .task(id: searchText) {
+          if searchText.isEmpty {
+            filteredSongs = nil
+            return
+          }
+          try? await Task.sleep(for: .milliseconds(300))
+          filteredSongs = songs.filtered(by: searchText) {
+            [$0.title, $0.artist]
+          }
+        }
       } else {
         Text("No songs found!")
           .font(.caption)

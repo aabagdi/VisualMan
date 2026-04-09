@@ -24,7 +24,7 @@ struct SplatParams {
 }
 
 @MainActor
-final class NavierStokesRenderer {
+final class NavierStokesRenderer: MetalVisualizerRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
   
