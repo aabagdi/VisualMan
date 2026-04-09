@@ -61,13 +61,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var prevMid: Float = 0
   private let velocityDissipation: Float = 0.985
   private let dyeDissipation: Float = 0.98
-  // More Jacobi iterations — the pressure solve is now doing Helmholtz
-  // decomposition of the covector field, so convergence matters more
   let jacobiIterations: Int = 8
-  // Restored close to original — diffusion still needed for stability
   let viscosity: Float = 0.0002
   let diffuseIterations: Int = 4
-  // Covector advection preserves vorticity naturally — only a light touch
   let vorticityStrength: Float = 0.5
   
   private static let maxFramesInFlight: UInt64 = 3
@@ -254,7 +250,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     
     render(encoder: encoder, output: output, bass: bass)
   }
-  
 }
 
 private extension NavierStokesRenderer {
