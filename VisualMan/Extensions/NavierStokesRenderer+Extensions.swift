@@ -6,6 +6,7 @@
 //
 
 import Metal
+import os
 import simd
 
 private func hsv2rgb(h: Float, s: Float, v: Float) -> SIMD3<Float> {
@@ -207,6 +208,21 @@ extension NavierStokesRenderer {
     dyeSplats.append(SplatParams(position: SIMD2<Float>(center, center),
                                  value: color * (0.3 + audioEnergy * 0.7),
                                  radius: 90.0 * s))
+  }
+  
+  func advectCovector(encoder: any MTL4ComputeCommandEncoder,
+                      velocityIn: MTLTexture,
+                      covectorOut: MTLTexture,
+                      dissipation: Float) {
+    encoder.setComputePipelineState(covectorAdvectPipeline)
+    argumentTable.setTexture(velocityIn.gpuResourceID, index: 0)
+    argumentTable.setTexture(covectorOut.gpuResourceID, index: 1)
+    
+    let dtVal = dt * 40.0
+    argumentTable.setAddress(writeUniform(dtVal), index: 0)
+    argumentTable.setAddress(writeUniform(dissipation), index: 1)
+    
+    dispatchGrid(encoder: encoder)
   }
   
   func advect(encoder: any MTL4ComputeCommandEncoder,

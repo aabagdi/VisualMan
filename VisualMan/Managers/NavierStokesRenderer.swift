@@ -28,12 +28,13 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
   
-  private static let logger = Logger(subsystem: "com.VisualMan", category: "NavierStokesRenderer")
+  static let logger = Logger(subsystem: "com.VisualMan", category: "NavierStokesRenderer")
   static let gridSize: Int = 1024
   var gridSize: Int { Self.gridSize }
   
   var diffusePipeline: MTLComputePipelineState
   var advectPipeline: MTLComputePipelineState
+  var covectorAdvectPipeline: MTLComputePipelineState
   var vorticityConfinePipeline: MTLComputePipelineState
   var divergencePipeline: MTLComputePipelineState
   var jacobiPipeline: MTLComputePipelineState
@@ -58,12 +59,16 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var dt: Float = 1.0 / 60.0
   var prevBass: Float = 0
   var prevMid: Float = 0
-  private let velocityDissipation: Float = 0.99
+  private let velocityDissipation: Float = 0.985
   private let dyeDissipation: Float = 0.98
-  let jacobiIterations: Int = 6
+  // More Jacobi iterations — the pressure solve is now doing Helmholtz
+  // decomposition of the covector field, so convergence matters more
+  let jacobiIterations: Int = 8
+  // Restored close to original — diffusion still needed for stability
   let viscosity: Float = 0.0002
   let diffuseIterations: Int = 4
-  let vorticityStrength: Float = 3.0
+  // Covector advection preserves vorticity naturally — only a light touch
+  let vorticityStrength: Float = 0.5
   
   private static let maxFramesInFlight: UInt64 = 3
   private var commandAllocators = [any MTL4CommandAllocator]()
@@ -99,11 +104,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     
     guard let textures = Self.createTextures(device: device) else { return nil }
     
-    let setDesc = MTLResidencySetDescriptor()
-    setDesc.initialCapacity = 16
-    guard let residencySet = try? device.makeResidencySet(descriptor: setDesc) else {
-      return nil
-    }
+    let rsDesc = MTLResidencySetDescriptor()
+    rsDesc.initialCapacity = 16
+    guard let residencySet = try? device.makeResidencySet(descriptor: rsDesc) else { return nil }
     
     self.device = device
     self.commandQueue = commandQueue
@@ -116,6 +119,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.splatBatchPipeline = pipelines.splatBatch
     self.diffusePipeline = pipelines.diffuse
     self.advectPipeline = pipelines.advect
+    self.covectorAdvectPipeline = pipelines.covectorAdvect
     self.vorticityConfinePipeline = pipelines.vorticityConfine
     self.divergencePipeline = pipelines.divergence
     self.jacobiPipeline = pipelines.jacobi
@@ -205,7 +209,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     commandQueue.signalDrawable(drawable)
     drawable.present()
   }
-  
+
   private func runSimulationPass(encoder: any MTL4ComputeCommandEncoder,
                                  bass: Float, mid: Float, high: Float,
                                  output: MTLTexture) {
@@ -218,8 +222,10 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     applyVorticityConfinement(encoder: encoder, bass: bass)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
-    advect(encoder: encoder, velocityIn: velocityA, fieldIn: velocityA,
-           fieldOut: velocityB, dissipation: velocityDissipation)
+    advectCovector(encoder: encoder,
+                   velocityIn: velocityA,
+                   covectorOut: velocityB,
+                   dissipation: velocityDissipation)
     swap(&velocityA, &velocityB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     
@@ -252,107 +258,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 }
 
 private extension NavierStokesRenderer {
-  struct Pipelines {
-    let splatBatch: MTLComputePipelineState
-    let diffuse: MTLComputePipelineState
-    let advect: MTLComputePipelineState
-    let vorticityConfine: MTLComputePipelineState
-    let divergence: MTLComputePipelineState
-    let jacobi: MTLComputePipelineState
-    let gradientSubtract: MTLComputePipelineState
-    let blurH: MTLComputePipelineState
-    let blurV: MTLComputePipelineState
-    let bloomThreshold: MTLComputePipelineState
-    let render: MTLComputePipelineState
-  }
-  
-  static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
-    guard let library = device.makeDefaultLibrary() else {
-      logger.error("Failed to create default Metal library")
-      return nil
-    }
-    
-    func makePipeline(_ name: String) -> MTLComputePipelineState? {
-      let functionDesc = MTL4LibraryFunctionDescriptor()
-      functionDesc.name = name
-      functionDesc.library = library
-      let pipelineDesc = MTL4ComputePipelineDescriptor()
-      pipelineDesc.computeFunctionDescriptor = functionDesc
-      do {
-        return try compiler.makeComputePipelineState(descriptor: pipelineDesc)
-      } catch {
-        logger.error("Failed to create pipeline '\(name)': \(error.localizedDescription)")
-        return nil
-      }
-    }
-    
-    guard let splatBatch = makePipeline("fluidSplatBatch"),
-          let diffuse = makePipeline("fluidDiffuse"),
-          let advect = makePipeline("fluidAdvect"),
-          let vorticityConfine = makePipeline("fluidVorticityConfine"),
-          let divergence = makePipeline("fluidDivergence"),
-          let jacobi = makePipeline("fluidJacobi"),
-          let gradientSubtract = makePipeline("fluidGradientSubtract"),
-          let blurH = makePipeline("fluidBlurH"),
-          let blurV = makePipeline("fluidBlurV"),
-          let bloomThreshold = makePipeline("fluidBloomThreshold"),
-          let render = makePipeline("fluidRender") else {
-      return nil
-    }
-    
-    return Pipelines(splatBatch: splatBatch, diffuse: diffuse, advect: advect,
-                     vorticityConfine: vorticityConfine,
-                     divergence: divergence, jacobi: jacobi,
-                     gradientSubtract: gradientSubtract, blurH: blurH,
-                     blurV: blurV, bloomThreshold: bloomThreshold,
-                     render: render)
-  }
-  
-  struct Textures {
-    let velocityA: MTLTexture
-    let velocityB: MTLTexture
-    let pressure: MTLTexture
-    let pressureTemp: MTLTexture
-    let divergence: MTLTexture
-    let dyeA: MTLTexture
-    let dyeB: MTLTexture
-    let bloomA: MTLTexture
-    let bloomB: MTLTexture
-  }
-  
-  static func createTextures(device: MTLDevice) -> Textures? {
-    func makeTexture(format: MTLPixelFormat, label: String,
-                     usage: MTLTextureUsage = [.shaderRead, .shaderWrite]) -> MTLTexture? {
-      let desc = MTLTextureDescriptor.texture2DDescriptor(
-        pixelFormat: format, width: gridSize, height: gridSize, mipmapped: false
-      )
-      desc.usage = usage
-      desc.storageMode = .private
-      guard let texture = device.makeTexture(descriptor: desc) else {
-        logger.error("Failed to create texture '\(label)'")
-        return nil
-      }
-      return texture
-    }
-    
-    guard let velocityA = makeTexture(format: .rg16Float, label: "velocityA"),
-          let velocityB = makeTexture(format: .rg16Float, label: "velocityB"),
-          let pressure = makeTexture(format: .r16Float, label: "pressure"),
-          let pressureTemp = makeTexture(format: .r16Float, label: "pressureTemp"),
-          let divergence = makeTexture(format: .r16Float, label: "divergence"),
-          let dyeA = makeTexture(format: .rgba16Float, label: "dyeA"),
-          let dyeB = makeTexture(format: .rgba16Float, label: "dyeB"),
-          let bloomA = makeTexture(format: .rgba16Float, label: "bloomA"),
-          let bloomB = makeTexture(format: .rgba16Float, label: "bloomB") else {
-      return nil
-    }
-    
-    return Textures(velocityA: velocityA, velocityB: velocityB,
-                    pressure: pressure, pressureTemp: pressureTemp,
-                    divergence: divergence, dyeA: dyeA, dyeB: dyeB,
-                    bloomA: bloomA, bloomB: bloomB)
-  }
-  
   static func createAllocatorsAndBuffers(device: MTLDevice)
     -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
     var allocators = [any MTL4CommandAllocator]()

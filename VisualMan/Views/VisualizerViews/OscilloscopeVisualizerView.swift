@@ -17,7 +17,7 @@ struct OscilloscopeVisualizerView: View {
   }
   
   @State private var audio = SmoothedAudio()
-  @State private var smoothedLevels = [128 of Float](repeating: 0.0)
+  @State private var smoothedLevels: [128 of Float] = .init(repeating: 0.0)
   
   let audioLevels: [1024 of Float]
   

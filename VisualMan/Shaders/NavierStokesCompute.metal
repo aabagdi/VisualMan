@@ -40,7 +40,7 @@ kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture
     float falloff = exp(-dist2 / r2);
     current.xyz += splats[i].value * falloff;
   }
-  current.xyz = min(current.xyz, float3(3.0));
+  current.xyz = min(current.xyz, float3(1.5));
   field.write(current, gid);
 }
 
@@ -96,6 +96,73 @@ kernel void fluidAdvect(texture2d<float, access::read> velocityIn [[texture(0)]]
   result *= dissipation;
   
   fieldOut.write(result, gid);
+}
+
+kernel void fluidAdvectCovector(texture2d<float, access::read> velocityIn [[texture(0)]],
+                                texture2d<float, access::write> covectorOut [[texture(1)]],
+                                constant float &dt [[buffer(0)]],
+                                constant float &dissipation [[buffer(1)]],
+                                uint2 gid [[thread_position_in_grid]]) {
+  int w = int(velocityIn.get_width());
+  int h = int(velocityIn.get_height());
+  
+  float2 pos = float2(gid) + 0.5;
+  float2 vel = velocityIn.read(gid).xy;
+  
+  if (any(isnan(vel)) || any(isinf(vel))) vel = float2(0);
+  float speed = length(vel);
+  if (speed > 500.0) vel *= 500.0 / speed;
+  
+  uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
+  uint2 right = uint2(min(int(gid.x) + 1, w - 1), gid.y);
+  uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
+  uint2 up    = uint2(gid.x, min(int(gid.y) + 1, h - 1));
+  
+  float2 vL = velocityIn.read(left).xy;
+  float2 vR = velocityIn.read(right).xy;
+  float2 vD = velocityIn.read(down).xy;
+  float2 vU = velocityIn.read(up).xy;
+  
+  float dvx_dx = 0.5 * (vR.x - vL.x);
+  float dvx_dy = 0.5 * (vU.x - vD.x);
+  float dvy_dx = 0.5 * (vR.y - vL.y);
+  float dvy_dy = 0.5 * (vU.y - vD.y);
+
+  constexpr float maxJ = 0.45;
+  float g00 = clamp(dt * dvx_dx, -maxJ, maxJ);
+  float g01 = clamp(dt * dvx_dy, -maxJ, maxJ);
+  float g10 = clamp(dt * dvy_dx, -maxJ, maxJ);
+  float g11 = clamp(dt * dvy_dy, -maxJ, maxJ);
+  
+  float2 backPos = pos - dt * vel;
+  float2 sp = backPos - 0.5;
+  int2 base = int2(floor(sp));
+  float2 f = sp - float2(base);
+  
+  int2 c00 = clamp(base,             int2(0), int2(w - 1, h - 1));
+  int2 c10 = clamp(base + int2(1,0), int2(0), int2(w - 1, h - 1));
+  int2 c01 = clamp(base + int2(0,1), int2(0), int2(w - 1, h - 1));
+  int2 c11 = clamp(base + int2(1,1), int2(0), int2(w - 1, h - 1));
+  
+  float2 v00 = velocityIn.read(uint2(c00)).xy;
+  float2 v10 = velocityIn.read(uint2(c10)).xy;
+  float2 v01 = velocityIn.read(uint2(c01)).xy;
+  float2 v11 = velocityIn.read(uint2(c11)).xy;
+  
+  float2 vBack = mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
+  
+  float2 covector;
+  covector.x = (1.0 - g00) * vBack.x + (-g10) * vBack.y;
+  covector.y = (-g01) * vBack.x + (1.0 - g11) * vBack.y;
+  
+  covector *= dissipation;
+  
+  // Stability clamp
+  float covSpeed = length(covector);
+  if (covSpeed > 500.0) covector *= 500.0 / covSpeed;
+  if (any(isnan(covector)) || any(isinf(covector))) covector = float2(0);
+  
+  covectorOut.write(float4(covector, 0, 0), gid);
 }
 
 kernel void fluidDivergence(texture2d<float, access::read> velocity [[texture(0)]],
@@ -329,21 +396,21 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   
   uint2 bloomCoord = uint2(float2(gid) * float2(bloom.get_width(), bloom.get_height()) / float2(w, h));
   bloomCoord = min(bloomCoord, uint2(bloom.get_width() - 1, bloom.get_height() - 1));
-  c += bloom.read(bloomCoord).rgb * 0.6;
+  c += bloom.read(bloomCoord).rgb * 0.3;
   
-  float luminance = dot(c, float3(0.299, 0.587, 0.114));
-  c = mix(float3(luminance), c, 1.5 + bass * 0.5);
+  c *= 1.0 + bass * 0.4;
   
-  c *= 1.8 * (1.0 + bass * 1.2);
-  
-  {
-    float3 x = c;
-    float a = 2.51;
-    float b = 0.03;
-    float d = 0.59;
-    float e = 0.14;
-    c = clamp((x * (a * x + b)) / (x * (2.43 * x + d) + e), 0.0, 1.0);
+  c = c / (1.0 + c);
+
+  constexpr float maxBrightness = 0.88;
+  float peak = max(c.r, max(c.g, c.b));
+  if (peak > maxBrightness) {
+    c *= maxBrightness / peak;
   }
+  
+  float lum = dot(c, float3(0.299, 0.587, 0.114));
+  c = mix(float3(lum), c, 1.7);
+  c = clamp(c, 0.0, maxBrightness);
   
   output.write(float4(c, 1.0), gid);
 }

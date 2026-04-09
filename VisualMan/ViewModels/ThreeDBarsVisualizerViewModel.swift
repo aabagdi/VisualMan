@@ -11,8 +11,8 @@ extension ThreeDBarsVisualizerView {
   @Observable
   @MainActor
   final class ThreeDBarsVisualizerViewModel {
-    var smoothedValues = [32 of Float](repeating: 0.0)
-    var targetValues = [32 of Float](repeating: 0.0)
+    var smoothedValues: [32 of Float] = .init(repeating: 0.0)
+    var targetValues: [32 of Float] = .init(repeating: 0.0)
     
     private var displayLinkStream: DisplayLinkStream?
     private var smoothingTask: Task<Void, Never>?

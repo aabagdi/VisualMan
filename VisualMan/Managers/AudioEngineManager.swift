@@ -25,8 +25,8 @@ final class AudioEngineManager {
     static let pauseDecayThreshold: Float = 0.001
   }
   
-  var audioLevels = [1024 of Float](repeating: 0.0)
-  var visualizerBars = [32 of Float](repeating: 0.0)
+  var audioLevels: [1024 of Float] = .init(repeating: 0.0)
+  var visualizerBars: [32 of Float] = .init(repeating: 0.0)
   var playbackState: PlaybackState = .idle
   var currentTime: TimeInterval = 0
   var duration: TimeInterval = 0

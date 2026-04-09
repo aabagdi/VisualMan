@@ -40,20 +40,20 @@ actor DSPProcessor {
   }
 
   private nonisolated(unsafe) var dftSetup: OpaquePointer?
-  private var audioLevels = [1024 of Float](repeating: 0.0)
-  private var visualizerBars = [32 of Float](repeating: 0.0)
+  private var audioLevels: [1024 of Float] = .init(repeating: 0.0)
+  private var visualizerBars: [32 of Float] = .init(repeating: 0.0)
   private var gainHistory = [Float]()
   private var currentGain: Float = 1.0
-  private var hannWindow = [2048 of Float](repeating: 0.0)
-  private var aWeightTable = [1024 of Float](repeating: 0.0)
+  private var hannWindow: [2048 of Float] = .init(repeating: 0.0)
+  private var aWeightTable: [1024 of Float] = .init(repeating: 0.0)
   private var cachedSampleRate: Float = 0.0
-  private var realIn = [2048 of Float](repeating: 0.0)
-  private var imagIn = [2048 of Float](repeating: 0.0)
-  private var realOut = [2048 of Float](repeating: 0.0)
-  private var imagOut = [2048 of Float](repeating: 0.0)
-  private var magnitudes = [1024 of Float](repeating: 0.0)
-  private var weightedMagnitudes = [1024 of Float](repeating: 0.0)
-  private var logMagnitudes = [1024 of Float](repeating: 0.0)
+  private var realIn: [2048 of Float] = .init(repeating: 0.0)
+  private var imagIn: [2048 of Float] = .init(repeating: 0.0)
+  private var realOut: [2048 of Float] = .init(repeating: 0.0)
+  private var imagOut: [2048 of Float] = .init(repeating: 0.0)
+  private var magnitudes: [1024 of Float] = .init(repeating: 0.0)
+  private var weightedMagnitudes: [1024 of Float] = .init(repeating: 0.0)
+  private var logMagnitudes: [1024 of Float] = .init(repeating: 0.0)
 
   init() {
     dftSetup = vDSP_DFT_zop_CreateSetup(nil, 2048, vDSP_DFT_Direction.FORWARD)
