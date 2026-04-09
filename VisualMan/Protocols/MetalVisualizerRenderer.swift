@@ -13,5 +13,6 @@ protocol MetalVisualizerRenderer: AnyObject {
   var device: MTLDevice { get }
   var commandQueue: any MTL4CommandQueue { get }
   var dt: Float { get set }
+  
   func update(bass: Float, mid: Float, high: Float, drawable: CAMetalDrawable)
 }
