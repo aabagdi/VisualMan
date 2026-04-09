@@ -62,6 +62,9 @@ kernel void fluidDiffuse(texture2d<float, access::read> fieldIn [[texture(0)]],
                fieldIn.read(down) + fieldIn.read(up);
   
   float4 result = (center + alpha * sum) * rBeta;
+  if (any(isnan(result)) || any(isinf(result))) {
+    result = float4(0);
+  }
   fieldOut.write(result, gid);
 }
 

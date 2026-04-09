@@ -6,6 +6,7 @@
 //
 
 import Metal
+import os
 import QuartzCore
 
 struct LiquidLightParams {
@@ -46,6 +47,7 @@ final class LiquidLightRenderer {
   private let sharedEvent: MTLSharedEvent
   private var frameNumber: UInt64 = 0
   var residencySet: MTLResidencySet
+  private static let logger = Logger(subsystem: "com.VisualMan", category: "LiquidLightRenderer")
 
   var currentUniformBuffer: MTLBuffer
 
@@ -96,8 +98,10 @@ final class LiquidLightRenderer {
   func writeUniform<T>(_ value: T) -> MTLGPUAddress {
     let aligned = (uniformOffset + 15) & ~15
     let end = aligned + MemoryLayout<T>.size
-    precondition(end <= Self.uniformBufferSize,
-                 "Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+    guard end <= Self.uniformBufferSize else {
+      Self.logger.error("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+      return currentUniformBuffer.gpuAddress
+    }
     (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
     let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
     uniformOffset = end

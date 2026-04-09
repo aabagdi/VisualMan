@@ -8,6 +8,17 @@
 import SwiftUI
 
 struct OscilloscopeVisualizerView: View {
+  private enum Constants {
+    static let bassSmoothing: Float = 0.5
+    static let midSmoothing: Float = 0.6
+    static let highSmoothing: Float = 0.4
+    static let levelSmoothing: Float = 0.6
+    static let gridOpacity: Double = 0.06
+    static let gridSpacing: CGFloat = 30
+    static let centerLineOpacity: Double = 0.3
+    static let maxAmplitudeFraction: CGFloat = 0.35
+  }
+  
   @State private var time: Float = 0
   @State private var smoothedBass: Float = 0
   @State private var smoothedMid: Float = 0
@@ -32,7 +43,7 @@ struct OscilloscopeVisualizerView: View {
   
   private func buildWaveformPath(size: CGSize) -> Path {
     let cy = size.height / 2
-    let maxAmplitude = size.height * 0.35
+    let maxAmplitude = size.height * Constants.maxAmplitudeFraction
     let pointCount = smoothedLevels.count
     
     var path = Path()
@@ -68,8 +79,8 @@ struct OscilloscopeVisualizerView: View {
   var body: some View {
     TimelineView(.animation) { timeline in
       Canvas { context, size in
-        let gridOpacity = 0.06
-        let gridSpacing: CGFloat = 30
+        let gridOpacity = Constants.gridOpacity
+        let gridSpacing = Constants.gridSpacing
         for x in stride(from: CGFloat(0), through: size.width, by: gridSpacing) {
           var line = Path()
           line.move(to: CGPoint(x: x, y: 0))
@@ -86,7 +97,7 @@ struct OscilloscopeVisualizerView: View {
         var centerLine = Path()
         centerLine.move(to: CGPoint(x: 0, y: size.height / 2))
         centerLine.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-        context.stroke(centerLine, with: .color(.green.opacity(0.3)), lineWidth: 1.0)
+        context.stroke(centerLine, with: .color(.green.opacity(Constants.centerLineOpacity)), lineWidth: 1.0)
         
         let waveform = buildWaveformPath(size: size)
         
@@ -114,14 +125,14 @@ struct OscilloscopeVisualizerView: View {
       }
       .background(Color(red: 0.02, green: 0.03, blue: 0.02))
       .onChange(of: timeline.date) {
-        smoothedBass = smoothedBass * 0.5 + audioLevels.bassLevel * 0.5
-        smoothedMid = smoothedMid * 0.6 + audioLevels.midLevel * 0.4
-        smoothedHigh = smoothedHigh * 0.4 + audioLevels.highLevel * 0.6
+        smoothedBass = smoothedBass * Constants.bassSmoothing + audioLevels.bassLevel * (1.0 - Constants.bassSmoothing)
+        smoothedMid = smoothedMid * Constants.midSmoothing + audioLevels.midLevel * (1.0 - Constants.midSmoothing)
+        smoothedHigh = smoothedHigh * Constants.highSmoothing + audioLevels.highLevel * (1.0 - Constants.highSmoothing)
         time += 0.016 * (1.0 + smoothedBass * 0.5)
         
         let newLevels = downsampledLevels()
         for i in 0..<smoothedLevels.count {
-          smoothedLevels[i] = smoothedLevels[i] * 0.6 + newLevels[i] * 0.4
+          smoothedLevels[i] = smoothedLevels[i] * Constants.levelSmoothing + newLevels[i] * (1.0 - Constants.levelSmoothing)
         }
       }
       .ignoresSafeArea()

@@ -6,6 +6,7 @@
 //
 
 import Metal
+import os
 import QuartzCore
 
 struct SplatParams {
@@ -27,6 +28,7 @@ final class NavierStokesRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
   
+  private static let logger = Logger(subsystem: "com.VisualMan", category: "NavierStokesRenderer")
   static let gridSize: Int = 1024
   var gridSize: Int { Self.gridSize }
   
@@ -139,8 +141,10 @@ final class NavierStokesRenderer {
   func writeUniform<T>(_ value: T) -> MTLGPUAddress {
     let aligned = (uniformOffset + 15) & ~15
     let end = aligned + MemoryLayout<T>.size
-    precondition(end <= Self.uniformBufferSize,
-                 "Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+    guard end <= Self.uniformBufferSize else {
+      Self.logger.error("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+      return currentUniformBuffer.gpuAddress
+    }
     (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
     let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
     uniformOffset = end
@@ -151,8 +155,10 @@ final class NavierStokesRenderer {
     let aligned = (uniformOffset + 15) & ~15
     let size = MemoryLayout<T>.stride * values.count
     let end = aligned + size
-    precondition(end <= Self.uniformBufferSize,
-                 "Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+    guard end <= Self.uniformBufferSize else {
+      Self.logger.error("Uniform array buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+      return currentUniformBuffer.gpuAddress
+    }
     let ptr = currentUniformBuffer.contents() + aligned
     values.withUnsafeBufferPointer { buf in
       if let baseAddress = buf.baseAddress {
@@ -261,7 +267,10 @@ private extension NavierStokesRenderer {
   }
   
   static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
-    guard let library = device.makeDefaultLibrary() else { return nil }
+    guard let library = device.makeDefaultLibrary() else {
+      logger.error("Failed to create default Metal library")
+      return nil
+    }
     
     func makePipeline(_ name: String) -> MTLComputePipelineState? {
       let functionDesc = MTL4LibraryFunctionDescriptor()
@@ -269,7 +278,12 @@ private extension NavierStokesRenderer {
       functionDesc.library = library
       let pipelineDesc = MTL4ComputePipelineDescriptor()
       pipelineDesc.computeFunctionDescriptor = functionDesc
-      return try? compiler.makeComputePipelineState(descriptor: pipelineDesc)
+      do {
+        return try compiler.makeComputePipelineState(descriptor: pipelineDesc)
+      } catch {
+        logger.error("Failed to create pipeline '\(name)': \(error.localizedDescription)")
+        return nil
+      }
     }
     
     guard let splatBatch = makePipeline("fluidSplatBatch"),
@@ -307,25 +321,29 @@ private extension NavierStokesRenderer {
   }
   
   static func createTextures(device: MTLDevice) -> Textures? {
-    func makeTexture(format: MTLPixelFormat,
+    func makeTexture(format: MTLPixelFormat, label: String,
                      usage: MTLTextureUsage = [.shaderRead, .shaderWrite]) -> MTLTexture? {
       let desc = MTLTextureDescriptor.texture2DDescriptor(
         pixelFormat: format, width: gridSize, height: gridSize, mipmapped: false
       )
       desc.usage = usage
       desc.storageMode = .private
-      return device.makeTexture(descriptor: desc)
+      guard let texture = device.makeTexture(descriptor: desc) else {
+        logger.error("Failed to create texture '\(label)'")
+        return nil
+      }
+      return texture
     }
     
-    guard let velocityA = makeTexture(format: .rg16Float),
-          let velocityB = makeTexture(format: .rg16Float),
-          let pressure = makeTexture(format: .r16Float),
-          let pressureTemp = makeTexture(format: .r16Float),
-          let divergence = makeTexture(format: .r16Float),
-          let dyeA = makeTexture(format: .rgba16Float),
-          let dyeB = makeTexture(format: .rgba16Float),
-          let bloomA = makeTexture(format: .rgba16Float),
-          let bloomB = makeTexture(format: .rgba16Float) else {
+    guard let velocityA = makeTexture(format: .rg16Float, label: "velocityA"),
+          let velocityB = makeTexture(format: .rg16Float, label: "velocityB"),
+          let pressure = makeTexture(format: .r16Float, label: "pressure"),
+          let pressureTemp = makeTexture(format: .r16Float, label: "pressureTemp"),
+          let divergence = makeTexture(format: .r16Float, label: "divergence"),
+          let dyeA = makeTexture(format: .rgba16Float, label: "dyeA"),
+          let dyeB = makeTexture(format: .rgba16Float, label: "dyeB"),
+          let bloomA = makeTexture(format: .rgba16Float, label: "bloomA"),
+          let bloomB = makeTexture(format: .rgba16Float, label: "bloomB") else {
       return nil
     }
     
@@ -354,7 +372,12 @@ private extension NavierStokesRenderer {
     let desc = MTL4ArgumentTableDescriptor()
     desc.maxTextureBindCount = 3
     desc.maxBufferBindCount = 3
-    return try? device.makeArgumentTable(descriptor: desc)
+    do {
+      return try device.makeArgumentTable(descriptor: desc)
+    } catch {
+      logger.error("Failed to create argument table: \(error.localizedDescription)")
+      return nil
+    }
   }
   
   func configureResidencySet() {

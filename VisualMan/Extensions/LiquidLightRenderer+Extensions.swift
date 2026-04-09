@@ -6,6 +6,9 @@
 //
 
 import Metal
+import os
+
+private let liquidLightLogger = Logger(subsystem: "com.VisualMan", category: "LiquidLightRenderer")
 
 extension LiquidLightRenderer {
   struct Pipelines {
@@ -14,25 +17,27 @@ extension LiquidLightRenderer {
   }
 
   static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
-    guard let library = device.makeDefaultLibrary() else { return nil }
-
-    // Render pipeline
-    let renderFuncDesc = MTL4LibraryFunctionDescriptor()
-    renderFuncDesc.name = "liquidLightRender"
-    renderFuncDesc.library = library
-    let renderPipeDesc = MTL4ComputePipelineDescriptor()
-    renderPipeDesc.computeFunctionDescriptor = renderFuncDesc
-    guard let renderPipeline = try? compiler.makeComputePipelineState(descriptor: renderPipeDesc) else {
+    guard let library = device.makeDefaultLibrary() else {
+      liquidLightLogger.error("Failed to create default Metal library")
       return nil
     }
 
-    // Blur pipeline
-    let blurFuncDesc = MTL4LibraryFunctionDescriptor()
-    blurFuncDesc.name = "liquidGlassBlur"
-    blurFuncDesc.library = library
-    let blurPipeDesc = MTL4ComputePipelineDescriptor()
-    blurPipeDesc.computeFunctionDescriptor = blurFuncDesc
-    guard let blurPipeline = try? compiler.makeComputePipelineState(descriptor: blurPipeDesc) else {
+    func makePipeline(_ name: String) -> MTLComputePipelineState? {
+      let functionDesc = MTL4LibraryFunctionDescriptor()
+      functionDesc.name = name
+      functionDesc.library = library
+      let pipelineDesc = MTL4ComputePipelineDescriptor()
+      pipelineDesc.computeFunctionDescriptor = functionDesc
+      do {
+        return try compiler.makeComputePipelineState(descriptor: pipelineDesc)
+      } catch {
+        liquidLightLogger.error("Failed to create pipeline '\(name)': \(error.localizedDescription)")
+        return nil
+      }
+    }
+
+    guard let renderPipeline = makePipeline("liquidLightRender"),
+          let blurPipeline = makePipeline("liquidGlassBlur") else {
       return nil
     }
 

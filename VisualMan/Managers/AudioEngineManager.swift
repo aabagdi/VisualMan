@@ -20,6 +20,11 @@ final class AudioEngineManager {
     case completed
   }
   
+  private enum Constants {
+    static let pauseDecayFactor: Float = 0.88
+    static let pauseDecayThreshold: Float = 0.001
+  }
+  
   var audioLevels = [1024 of Float](repeating: 0.0)
   var visualizerBars = [32 of Float](repeating: 0.0)
   var playbackState: PlaybackState = .idle
@@ -210,8 +215,8 @@ final class AudioEngineManager {
         guard !Task.isCancelled else { break }
         guard let self else { break }
         
-        let decayFactor: Float = 0.88
-        let threshold: Float = 0.001
+        let decayFactor = Constants.pauseDecayFactor
+        let threshold = Constants.pauseDecayThreshold
         var allZero = true
         
         for i in self.visualizerBars.indices {

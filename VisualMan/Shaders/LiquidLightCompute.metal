@@ -339,6 +339,10 @@ kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)
     totalWeight += weight;
   }
 
+  if (totalWeight < 1e-4) {
+    output.write(input.read(gid), gid);
+    return;
+  }
   float4 blurred = accum / totalWeight;
   float4 sharp = input.read(gid);
   float4 result = mix(sharp, blurred, blurStrength);
