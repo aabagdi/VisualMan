@@ -8,10 +8,7 @@
 import SwiftUI
 
 struct AlbumArtWaveVisualizerView: View {
-  @State private var time: Float = 0
-  @State private var smoothedBass: Float = 0
-  @State private var smoothedMid: Float = 0
-  @State private var smoothedHigh: Float = 0
+  @State private var audio = SmoothedAudio()
   
   let audioLevels: [1024 of Float]
   let albumArt: UIImage?
@@ -25,21 +22,19 @@ struct AlbumArtWaveVisualizerView: View {
           .scaledToFill()
           .scaleEffect(1.2)
           .frame(width: g.size.width, height: g.size.height)
-          .albumArtWaveShader(time: time,
-                              smoothedBass: smoothedBass,
-                              smoothedMid: smoothedMid,
-                              smoothedHigh: smoothedHigh)
-          .onChange(of: timeline.date) {
+          .albumArtWaveShader(time: audio.time,
+                              smoothedBass: audio.bass,
+                              smoothedMid: audio.mid,
+                              smoothedHigh: audio.high)
+          .onChange(of: timeline.date) { oldValue, newValue in
+            let dt = min(Float(newValue.timeIntervalSince(oldValue)), 1.0 / 30.0)
             withAnimation(.smooth) {
-              smoothedBass = smoothedBass * 0.5 + audioLevels.bassLevel * 0.5
-              smoothedMid = smoothedMid * 0.6 + audioLevels.midLevel * 0.4
-              smoothedHigh = smoothedHigh * 0.4 + audioLevels.highLevel * 0.6
-              time += 0.016 * (1.0 + smoothedBass * 0.5)
+              audio.update(from: audioLevels, dt: dt)
             }
           }
           .ignoresSafeArea()
       }
     }
-    // .debugOverlay(smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
+    // .debugOverlay(smoothedBass: audio.bass, smoothedMid: audio.mid, smoothedHigh: audio.high)
   }
 }

@@ -34,7 +34,7 @@ final class LiquidLightRenderer {
   var blurPipeline: MTLComputePipelineState
 
   var time: Float = 0
-  let dt: Float = 1.0 / 60.0
+  var dt: Float = 1.0 / 60.0
   private var smoothedSpeed: Float = 0.05
 
   static let maxFramesInFlight: UInt64 = 3

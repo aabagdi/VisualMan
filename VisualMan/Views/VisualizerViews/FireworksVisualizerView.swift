@@ -8,10 +8,7 @@
 import SwiftUI
 
 struct FireworksVisualizerView: View {
-  @State private var time: Float = 0
-  @State private var smoothedBass: Float = 0
-  @State private var smoothedMid: Float = 0
-  @State private var smoothedHigh: Float = 0
+  @State private var audio = SmoothedAudio()
   
   let audioLevels: [1024 of Float]
   
@@ -23,21 +20,19 @@ struct FireworksVisualizerView: View {
   var body: some View {
     TimelineView(.animation) { timeline in
       Rectangle()
-        .fireworksShader(time: time,
-                         smoothedBass: smoothedBass,
-                         smoothedMid: smoothedMid,
-                         smoothedHigh: smoothedHigh,
+        .fireworksShader(time: audio.time,
+                         smoothedBass: audio.bass,
+                         smoothedMid: audio.mid,
+                         smoothedHigh: audio.high,
                          peakLevel: peakLevel)
-        .onChange(of: timeline.date) {
+        .onChange(of: timeline.date) { oldValue, newValue in
+          let dt = min(Float(newValue.timeIntervalSince(oldValue)), 1.0 / 30.0)
           withAnimation(.smooth) {
-            smoothedBass = smoothedBass * 0.5 + audioLevels.bassLevel * 0.5
-            smoothedMid = smoothedMid * 0.6 + audioLevels.midLevel * 0.4
-            smoothedHigh = smoothedHigh * 0.4 + audioLevels.highLevel * 0.6
-            time += 0.016 * (1.0 + smoothedBass * 0.5)
+            audio.update(from: audioLevels, dt: dt)
           }
         }
         .ignoresSafeArea()
     }
-    // .debugOverlay(smoothedBass: smoothedBass, smoothedMid: smoothedMid, smoothedHigh: smoothedHigh)
+    // .debugOverlay(smoothedBass: audio.bass, smoothedMid: audio.mid, smoothedHigh: audio.high)
   }
 }

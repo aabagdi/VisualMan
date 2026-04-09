@@ -17,7 +17,7 @@ struct LiquidLightMetalView: UIViewRepresentable {
     let mtkView = MTKView()
     mtkView.device = renderer.device
     mtkView.delegate = context.coordinator
-    mtkView.preferredFramesPerSecond = 60
+    mtkView.preferredFramesPerSecond = 120
     mtkView.colorPixelFormat = .bgra8Unorm
     mtkView.framebufferOnly = false
     mtkView.isPaused = false
@@ -50,6 +50,7 @@ struct LiquidLightMetalView: UIViewRepresentable {
     private var smoothedBass: Float = 0
     private var smoothedMid: Float = 0
     private var smoothedHigh: Float = 0
+    private var lastFrameTime: CFTimeInterval = 0
 
     init(renderer: LiquidLightRenderer) {
       self.renderer = renderer
@@ -60,9 +61,16 @@ struct LiquidLightMetalView: UIViewRepresentable {
     func draw(in view: MTKView) {
       guard let drawable = view.currentDrawable else { return }
 
-      let bass = computeBass()
-      let mid = computeMid()
-      let high = computeHigh()
+      let now = CACurrentMediaTime()
+      if lastFrameTime > 0 {
+        let delta = Float(now - lastFrameTime)
+        renderer.dt = min(delta, 1.0 / 30.0)
+      }
+      lastFrameTime = now
+
+      let bass = audioLevels.bassLevel
+      let mid = audioLevels.midLevel
+      let high = audioLevels.highLevel
 
       let bSmooth: Float = bass > smoothedBass ? 0.2 : 0.85
       smoothedBass = smoothedBass * bSmooth + bass * (1.0 - bSmooth)
@@ -79,35 +87,5 @@ struct LiquidLightMetalView: UIViewRepresentable {
                       drawable: drawable)
     }
 
-    private func computeBass() -> Float {
-      let bassRange = 1..<10
-      var result: Float = 0.0
-      for i in bassRange { result += audioLevels[i] }
-      return result / Float(bassRange.count)
-    }
-
-    private func computeMid() -> Float {
-      let midRange = 10..<50
-      var result: Float = 0.0
-      var peak: Float = 0.0
-      for i in midRange {
-        let level = audioLevels[i]
-        peak = max(peak, level)
-        result += level
-      }
-      return result / Float(midRange.count) * 0.5 + peak * 0.5
-    }
-
-    private func computeHigh() -> Float {
-      let highRange = 50..<150
-      var result: Float = 0.0
-      var peak: Float = 0.0
-      for i in highRange {
-        let level = audioLevels[i]
-        peak = max(peak, level)
-        result += level
-      }
-      return peak * 0.7 + result / Float(highRange.count) * 0.3
-    }
   }
 }

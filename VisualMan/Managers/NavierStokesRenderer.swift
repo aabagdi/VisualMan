@@ -55,7 +55,7 @@ final class NavierStokesRenderer {
   var bloomB: MTLTexture
   
   var time: Float = 0
-  let dt: Float = 1.0 / 60.0
+  var dt: Float = 1.0 / 60.0
   var prevBass: Float = 0
   var prevMid: Float = 0
   private let velocityDissipation: Float = 0.99

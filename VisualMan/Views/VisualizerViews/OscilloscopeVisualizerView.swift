@@ -9,9 +9,6 @@ import SwiftUI
 
 struct OscilloscopeVisualizerView: View {
   private enum Constants {
-    static let bassSmoothing: Float = 0.5
-    static let midSmoothing: Float = 0.6
-    static let highSmoothing: Float = 0.4
     static let levelSmoothing: Float = 0.6
     static let gridOpacity: Double = 0.06
     static let gridSpacing: CGFloat = 30
@@ -19,10 +16,7 @@ struct OscilloscopeVisualizerView: View {
     static let maxAmplitudeFraction: CGFloat = 0.35
   }
   
-  @State private var time: Float = 0
-  @State private var smoothedBass: Float = 0
-  @State private var smoothedMid: Float = 0
-  @State private var smoothedHigh: Float = 0
+  @State private var audio = SmoothedAudio()
   @State private var smoothedLevels = [128 of Float](repeating: 0.0)
   
   let audioLevels: [1024 of Float]
@@ -54,7 +48,7 @@ struct OscilloscopeVisualizerView: View {
     for i in 0..<pointCount {
       let x = CGFloat(i) * stepX
       let level = CGFloat(smoothedLevels[i])
-      let sign: CGFloat = sin(CGFloat(i) * 0.3 + CGFloat(time) * 2.0) >= 0 ? 1.0 : -1.0
+      let sign: CGFloat = sin(CGFloat(i) * 0.3 + CGFloat(audio.time) * 2.0) >= 0 ? 1.0 : -1.0
       let y = cy + level * maxAmplitude * sign
       
       if i == 0 {
@@ -62,7 +56,7 @@ struct OscilloscopeVisualizerView: View {
       } else {
         let prevX = CGFloat(i - 1) * stepX
         let prevLevel = CGFloat(smoothedLevels[i - 1])
-        let prevSign: CGFloat = sin(CGFloat(i - 1) * 0.3 + CGFloat(time) * 2.0) >= 0 ? 1.0 : -1.0
+        let prevSign: CGFloat = sin(CGFloat(i - 1) * 0.3 + CGFloat(audio.time) * 2.0) >= 0 ? 1.0 : -1.0
         let prevY = cy + prevLevel * maxAmplitude * prevSign
         let midX = (prevX + x) / 2
         let midY = (prevY + y) / 2
@@ -109,7 +103,7 @@ struct OscilloscopeVisualizerView: View {
           (1.5, 0.9)
         ]
         
-        let audioEnergy = Double(smoothedBass + smoothedMid + smoothedHigh) / 3.0
+        let audioEnergy = Double(audio.bass + audio.mid + audio.high) / 3.0
         let brightness = 0.7 + audioEnergy * 0.3
         
         for layer in glowLayers {
@@ -124,11 +118,9 @@ struct OscilloscopeVisualizerView: View {
         }
       }
       .background(Color(red: 0.02, green: 0.03, blue: 0.02))
-      .onChange(of: timeline.date) {
-        smoothedBass = smoothedBass * Constants.bassSmoothing + audioLevels.bassLevel * (1.0 - Constants.bassSmoothing)
-        smoothedMid = smoothedMid * Constants.midSmoothing + audioLevels.midLevel * (1.0 - Constants.midSmoothing)
-        smoothedHigh = smoothedHigh * Constants.highSmoothing + audioLevels.highLevel * (1.0 - Constants.highSmoothing)
-        time += 0.016 * (1.0 + smoothedBass * 0.5)
+      .onChange(of: timeline.date) { oldValue, newValue in
+        let dt = min(Float(newValue.timeIntervalSince(oldValue)), 1.0 / 30.0)
+        audio.update(from: audioLevels, dt: dt)
         
         let newLevels = downsampledLevels()
         for i in 0..<smoothedLevels.count {

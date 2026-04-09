@@ -39,8 +39,8 @@ struct VisualizerContainerView: View {
       PlasmaVisualizerView(audioLevels: audioLevels)
     case .metaball:
       MetaballVisualizerView(audioLevels: audioLevels)
-    case .fluidSim:
-      FluidSimVisualizerView(audioLevels: audioLevels)
+    case .ink:
+      InkVisualizerView(audioLevels: audioLevels)
     case .navierStokes:
       NavierStokesVisualizerView(audioLevels: audioLevels)
     case .liquidLight:
