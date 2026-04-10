@@ -113,22 +113,30 @@ kernel void fluidAdvectCovector(texture2d<float, access::read> velocityIn [[text
   float speed = length(vel);
   if (speed > 500.0) vel *= 500.0 / speed;
   
-  uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
-  uint2 right = uint2(min(int(gid.x) + 1, w - 1), gid.y);
-  uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
-  uint2 up    = uint2(gid.x, min(int(gid.y) + 1, h - 1));
+  uint2 left2  = uint2(max(int(gid.x) - 2, 0), gid.y);
+  uint2 right2 = uint2(min(int(gid.x) + 2, w - 1), gid.y);
+  uint2 down2  = uint2(gid.x, max(int(gid.y) - 2, 0));
+  uint2 up2    = uint2(gid.x, min(int(gid.y) + 2, h - 1));
+  uint2 left1  = uint2(max(int(gid.x) - 1, 0), gid.y);
+  uint2 right1 = uint2(min(int(gid.x) + 1, w - 1), gid.y);
+  uint2 down1  = uint2(gid.x, max(int(gid.y) - 1, 0));
+  uint2 up1    = uint2(gid.x, min(int(gid.y) + 1, h - 1));
   
-  float2 vL = velocityIn.read(left).xy;
-  float2 vR = velocityIn.read(right).xy;
-  float2 vD = velocityIn.read(down).xy;
-  float2 vU = velocityIn.read(up).xy;
+  float2 vL2 = velocityIn.read(left2).xy;
+  float2 vR2 = velocityIn.read(right2).xy;
+  float2 vD2 = velocityIn.read(down2).xy;
+  float2 vU2 = velocityIn.read(up2).xy;
+  float2 vL1 = velocityIn.read(left1).xy;
+  float2 vR1 = velocityIn.read(right1).xy;
+  float2 vD1 = velocityIn.read(down1).xy;
+  float2 vU1 = velocityIn.read(up1).xy;
   
-  float dvx_dx = 0.5 * (vR.x - vL.x);
-  float dvx_dy = 0.5 * (vU.x - vD.x);
-  float dvy_dx = 0.5 * (vR.y - vL.y);
-  float dvy_dy = 0.5 * (vU.y - vD.y);
+  float dvx_dx = (-vR2.x + 8.0 * vR1.x - 8.0 * vL1.x + vL2.x) / 12.0;
+  float dvx_dy = (-vU2.x + 8.0 * vU1.x - 8.0 * vD1.x + vD2.x) / 12.0;
+  float dvy_dx = (-vR2.y + 8.0 * vR1.y - 8.0 * vL1.y + vL2.y) / 12.0;
+  float dvy_dy = (-vU2.y + 8.0 * vU1.y - 8.0 * vD1.y + vD2.y) / 12.0;
 
-  constexpr float maxJ = 0.45;
+  constexpr float maxJ = 0.30;
   float g00 = clamp(dt * dvx_dx, -maxJ, maxJ);
   float g01 = clamp(dt * dvx_dy, -maxJ, maxJ);
   float g10 = clamp(dt * dvy_dx, -maxJ, maxJ);
@@ -157,7 +165,6 @@ kernel void fluidAdvectCovector(texture2d<float, access::read> velocityIn [[text
   
   covector *= dissipation;
   
-  // Stability clamp
   float covSpeed = length(covector);
   if (covSpeed > 500.0) covector *= 500.0 / covSpeed;
   if (any(isnan(covector)) || any(isinf(covector))) covector = float2(0);
@@ -401,13 +408,13 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   c *= 1.0 + bass * 0.4;
   
   c = c / (1.0 + c);
-
+  
   constexpr float maxBrightness = 0.88;
   float peak = max(c.r, max(c.g, c.b));
   if (peak > maxBrightness) {
     c *= maxBrightness / peak;
   }
-  
+
   float lum = dot(c, float3(0.299, 0.587, 0.114));
   c = mix(float3(lum), c, 1.7);
   c = clamp(c, 0.0, maxBrightness);
