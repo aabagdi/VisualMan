@@ -61,7 +61,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var prevMid: Float = 0
   private let velocityDissipation: Float = 0.985
   private let dyeDissipation: Float = 0.98
-  let jacobiIterations: Int = 8
+  let jacobiIterations: Int = 32
   let viscosity: Float = 0.0002
   let diffuseIterations: Int = 4
   let vorticityStrength: Float = 0.5
