@@ -9,6 +9,7 @@ import SwiftUI
 import MetalKit
 
 struct NavierStokesVisualizerView: View {
+  @Environment(VisualizerRendererCache.self) private var cache
   @State private var renderer: NavierStokesRenderer?
 
   let audioLevels: [1024 of Float]
@@ -26,10 +27,7 @@ struct NavierStokesVisualizerView: View {
     }
     .ignoresSafeArea()
     .onAppear {
-      renderer = NavierStokesRenderer()
-    }
-    .onDisappear {
-      renderer = nil
+      renderer = cache.renderer(NavierStokesRenderer.self) { NavierStokesRenderer() }
     }
   }
 }

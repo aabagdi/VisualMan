@@ -6,16 +6,18 @@
 //
 
 import SwiftUI
+import UIKit
 import Dependencies
 
 @main
 struct VisualManApp: App {
   @State private var showLowPowerAlert = false
-  
+  @State private var rendererCache = VisualizerRendererCache()
+
   @Dependency(AudioEngineManager.self) private var audioEngineManager
   @Dependency(AudioPlaylistManager.self) private var playlistManager
   @Dependency(MusicLibraryAccessManager.self) private var musicLibraryManager
-  
+
   var body: some Scene {
     WindowGroup {
       HomeScreenView()
@@ -30,6 +32,9 @@ struct VisualManApp: App {
             showLowPowerAlert = true
           }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+          rendererCache.purge()
+        }
         .alert("Low Power Mode Enabled", isPresented: $showLowPowerAlert) {
           Button("OK") { }
         } message: {
@@ -38,6 +43,7 @@ struct VisualManApp: App {
         .environment(musicLibraryManager)
         .environment(playlistManager)
         .environment(audioEngineManager)
+        .environment(rendererCache)
     }
   }
 }

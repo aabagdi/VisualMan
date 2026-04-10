@@ -9,6 +9,7 @@ import SwiftUI
 import MetalKit
 
 struct LiquidLightVisualizerView: View {
+  @Environment(VisualizerRendererCache.self) private var cache
   @State private var renderer: LiquidLightRenderer?
 
   let audioLevels: [1024 of Float]
@@ -27,10 +28,7 @@ struct LiquidLightVisualizerView: View {
     }
     .ignoresSafeArea()
     .onAppear {
-      renderer = LiquidLightRenderer()
-    }
-    .onDisappear {
-      renderer = nil
+      renderer = cache.renderer(LiquidLightRenderer.self) { LiquidLightRenderer() }
     }
   }
 }
