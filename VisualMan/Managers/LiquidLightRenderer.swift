@@ -46,7 +46,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   static let uniformBufferSize: Int = 4096
   private let sharedEvent: MTLSharedEvent
   private var frameNumber: UInt64 = 0
-  var residencySet: MTLResidencySet
+  let residencySet: MTLResidencySet
   private static let logger = Logger(subsystem: "com.VisualMan", category: "LiquidLightRenderer")
 
   var currentUniformBuffer: MTLBuffer
@@ -113,6 +113,14 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
       return
     }
 
+    if frameNumber > 0 {
+      sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
+    }
+
+    if let old = intermediateTexture {
+      residencySet.removeAllocation(old)
+    }
+
     let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .bgra8Unorm,
       width: width,
@@ -122,7 +130,13 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
 
-    guard let tex = device.makeTexture(descriptor: desc) else { return }
+    guard let tex = device.makeTexture(descriptor: desc) else {
+      intermediateTexture = nil
+      lastDrawableWidth = 0
+      lastDrawableHeight = 0
+      residencySet.commit()
+      return
+    }
 
     residencySet.addAllocation(tex)
     residencySet.commit()
