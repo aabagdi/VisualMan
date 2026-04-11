@@ -103,7 +103,7 @@ extension NavierStokesRenderer {
     forceSplats.append(SplatParams(position: pos2, value: force2, radius: bassRadius))
 
     let bassHue = fmod(time * 0.05, 1.0)
-    let bassColor = hsv2rgb(h: bassHue, s: 0.85, v: bass * 1.5) * onsetBoost
+    let bassColor = hsv2rgb(h: bassHue, s: 0.85, v: bass * 0.75) * onsetBoost
     dyeSplats.append(SplatParams(position: pos1, value: bassColor, radius: bassRadius * 1.2))
     dyeSplats.append(SplatParams(position: pos2, value: bassColor * 0.8, radius: bassRadius * 1.2))
     
@@ -125,7 +125,7 @@ extension NavierStokesRenderer {
         forceSplats.append(SplatParams(position: splatPos, value: force, radius: burstRadius))
         
         let burstHue = fmod(time * 0.05 + Float(i) / Float(burstCount), 1.0)
-        let burstColor = hsv2rgb(h: burstHue, s: 0.95, v: bass * 2.0)
+        let burstColor = hsv2rgb(h: burstHue, s: 0.95, v: bass)
         dyeSplats.append(SplatParams(position: splatPos, value: burstColor, radius: burstRadius * 1.4))
       }
     }
@@ -154,7 +154,7 @@ extension NavierStokesRenderer {
       forceSplats.append(SplatParams(position: pos, value: force, radius: midRadius))
 
       let midHue = fmod(time * 0.07 + Float(i) * 0.33, 1.0)
-      let midColor = hsv2rgb(h: midHue, s: 0.75, v: mid * 1.2) * midBoost
+      let midColor = hsv2rgb(h: midHue, s: 0.75, v: mid * 0.6) * midBoost
       dyeSplats.append(SplatParams(position: pos, value: midColor, radius: midRadius * 1.3))
     }
   }
@@ -179,7 +179,7 @@ extension NavierStokesRenderer {
       forceSplats.append(SplatParams(position: pos, value: force, radius: highRadius))
 
       let highHue = fmod(time * 0.09 + Float(i) * 0.25, 1.0)
-      let highColor = hsv2rgb(h: highHue, s: 0.9, v: high * 2.0)
+      let highColor = hsv2rgb(h: highHue, s: 0.9, v: high)
       dyeSplats.append(SplatParams(position: pos, value: highColor, radius: highRadius * 1.5))
     }
   }
