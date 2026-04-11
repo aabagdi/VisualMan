@@ -23,6 +23,17 @@ struct SplatParams {
   }
 }
 
+struct FrameUniforms {
+  var bass: Float
+  var mid: Float
+  var high: Float
+  var time: Float
+  var dt: Float
+  var taaBlend: Float
+  var historyValid: UInt32
+  var _pad: UInt32 = 0
+}
+
 @MainActor
 final class NavierStokesRenderer: MetalVisualizerRenderer {
   let device: MTLDevice
@@ -32,24 +43,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   static let gridSize: Int = 1024
   var gridSize: Int { Self.gridSize }
   
-  var advectPipeline: MTLComputePipelineState
-  var divergencePipeline: MTLComputePipelineState
-  var jacobiRedBlackPipeline: MTLComputePipelineState
-  var gradientSubtractPipeline: MTLComputePipelineState
-  var splatBatchPipeline: MTLComputePipelineState
-  var blurHPipeline: MTLComputePipelineState
-  var blurVPipeline: MTLComputePipelineState
-  var bloomThresholdBlurHPipeline: MTLComputePipelineState
-  var renderPipeline: MTLComputePipelineState
-  var psiInitPipeline: MTLComputePipelineState
-  var psiAdvectPipeline: MTLComputePipelineState
-  var covectorPullbackPipeline: MTLComputePipelineState
-  var copyRGPipeline: MTLComputePipelineState
-  var clearRGPipeline: MTLComputePipelineState
-  var clearRGBAPipeline: MTLComputePipelineState
-  var curlPipeline: MTLComputePipelineState
-  var vorticityConfinementPipeline: MTLComputePipelineState
-  var macCormackCorrectPipeline: MTLComputePipelineState
+  let pipelines: Pipelines
   
   var velocityA: MTLTexture
   var velocityB: MTLTexture
@@ -78,27 +72,29 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   private let rampUpFrames: UInt64 = 180
   var renderFrameCount: UInt64 = 0
   
-  private static let maxFramesInFlight: UInt64 = 3
-  private var commandAllocators = [any MTL4CommandAllocator]()
-  private var commandBuffer: any MTL4CommandBuffer
+  static let maxFramesInFlight: UInt64 = 3
+  var commandAllocators = [any MTL4CommandAllocator]()
+  var commandBuffer: any MTL4CommandBuffer
   var argumentTable: any MTL4ArgumentTable
-  private var uniformBuffers = [MTLBuffer]()
-  private var uniformOffset: Int = 0
-  private static let uniformBufferSize: Int = 16384
-  private let sharedEvent: MTLSharedEvent
+  var uniformBuffers = [MTLBuffer]()
+  var uniformOffset: Int = 0
+  static let uniformBufferSize: Int = 16384
+  let sharedEvent: MTLSharedEvent
   var frameNumber: UInt64 = 0
-  private let residencySet: MTLResidencySet
+  let residencySet: MTLResidencySet
   let reinitInterval: Int = 6
 
   var taaHistoryA: MTLTexture?
   var taaHistoryB: MTLTexture?
   var taaHistoryValid: Bool = false
-  private var taaHistoryWidth: Int = 0
-  private var taaHistoryHeight: Int = 0
+  var taaHistoryWidth: Int = 0
+  var taaHistoryHeight: Int = 0
   let taaBlendFactor: Float = 0.85
+
+  var frameUniformsAddress: MTLGPUAddress = 0
   var framesSinceReinit: Int = 6
   
-  private var currentUniformBuffer: MTLBuffer
+  var currentUniformBuffer: MTLBuffer
   
   static func create() async -> NavierStokesRenderer? {
     let prepared = await Task.detached(priority: .userInitiated) {
@@ -141,26 +137,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.uniformBuffers = allocatorsAndBuffers.buffers
     self.currentUniformBuffer = firstUniformBuffer
     self.argumentTable = argumentTable
-    
-    self.splatBatchPipeline = pipelines.splatBatch
-    self.advectPipeline = pipelines.advect
-    self.psiInitPipeline = pipelines.psiInit
-    self.psiAdvectPipeline = pipelines.psiAdvect
-    self.covectorPullbackPipeline = pipelines.covectorPullback
-    self.copyRGPipeline = pipelines.copyRG
-    self.divergencePipeline = pipelines.divergence
-    self.jacobiRedBlackPipeline = pipelines.jacobiRedBlack
-    self.gradientSubtractPipeline = pipelines.gradientSubtract
-    self.blurHPipeline = pipelines.blurH
-    self.blurVPipeline = pipelines.blurV
-    self.bloomThresholdBlurHPipeline = pipelines.bloomThresholdBlurH
-    self.renderPipeline = pipelines.render
-    self.clearRGPipeline = pipelines.clearRG
-    self.clearRGBAPipeline = pipelines.clearRGBA
-    self.curlPipeline = pipelines.curl
-    self.vorticityConfinementPipeline = pipelines.vorticityConfinement
-    self.macCormackCorrectPipeline = pipelines.macCormackCorrect
-    
+    self.pipelines = pipelines
     self.velocityA = textures.velocityA
     self.velocityB = textures.velocityB
     self.pressure = textures.pressure
@@ -177,7 +154,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.psiA = textures.psiA
     self.psiB = textures.psiB
     self.u0 = textures.u0
-    
     self.residencySet = residencySet
 
     configureResidencySet()
@@ -219,6 +195,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
               mid: Float,
               high: Float,
               drawable: CAMetalDrawable) {
+    let drawableTexture = drawable.texture
+
     let nextFrame = frameNumber + 1
     let frameIndex = Int(nextFrame % Self.maxFramesInFlight)
 
@@ -228,7 +206,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     }
 
     frameNumber = nextFrame
-    
+
     let allocator = commandAllocators[frameIndex]
     currentUniformBuffer = uniformBuffers[frameIndex]
     allocator.reset()
@@ -241,10 +219,10 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
-    ensureTAAHistory(width: drawable.texture.width, height: drawable.texture.height)
+    ensureTAAHistory(width: drawableTexture.width, height: drawableTexture.height)
 
     runSimulationPass(encoder: encoder, bass: bass, mid: mid, high: high,
-                      output: drawable.texture)
+                      output: drawableTexture)
 
     if taaHistoryA != nil && taaHistoryB != nil {
       taaHistoryValid = true
@@ -260,14 +238,26 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     drawable.present()
   }
 
-  private var currentJacobiIterations: Int {
+}
+
+private extension NavierStokesRenderer {
+  var currentJacobiIterations: Int {
     let t = min(Float(renderFrameCount) / Float(rampUpFrames), 1.0)
     return max(Int(Float(maxJacobiIterations) * t), 4)
   }
-  
-  private func runSimulationPass(encoder: any MTL4ComputeCommandEncoder,
-                                 bass: Float, mid: Float, high: Float,
-                                 output: MTLTexture) {
+
+  func runSimulationPass(encoder: any MTL4ComputeCommandEncoder,
+                         bass: Float, mid: Float, high: Float,
+                         output: MTLTexture) {
+    let validFlag: UInt32 = taaHistoryValid ? 1 : 0
+    let frameUniforms = FrameUniforms(
+      bass: bass, mid: mid, high: high,
+      time: time, dt: dt,
+      taaBlend: taaBlendFactor,
+      historyValid: validFlag
+    )
+    frameUniformsAddress = writeUniform(frameUniforms)
+
     advectPsi(encoder: encoder)
     swap(&psiA, &psiB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
@@ -296,6 +286,12 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     advectDyeMacCormack(encoder: encoder, dissipation: dynamicDyeDissipation)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
+    runBloomPasses(encoder: encoder)
+
+    render(encoder: encoder, output: output, bass: bass, mid: mid)
+  }
+
+  func runBloomPasses(encoder: any MTL4ComputeCommandEncoder) {
     bloomThresholdBlurH(encoder: encoder, dst: bloomB, size: Self.bloomSize)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     blurBloomV(encoder: encoder, src: bloomB, dst: bloomA, size: Self.bloomSize)
@@ -310,139 +306,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     blurBloomV(encoder: encoder, src: bloomLoB, dst: bloomLoA, size: Self.bloomSizeLo)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    render(encoder: encoder, output: output, bass: bass, mid: mid)
-  }
-}
-
-private extension NavierStokesRenderer {
-  static func createAllocatorsAndBuffers(device: MTLDevice)
-    -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
-    var allocators = [any MTL4CommandAllocator]()
-    var buffers = [MTLBuffer]()
-    for _ in 0..<maxFramesInFlight {
-      guard let allocator = device.makeCommandAllocator(),
-            let buffer = device.makeBuffer(length: uniformBufferSize, options: .storageModeShared) else {
-        return nil
-      }
-      allocators.append(allocator)
-      buffers.append(buffer)
-    }
-    return (allocators, buffers)
-  }
-  
-  static func createArgumentTable(device: MTLDevice) -> (any MTL4ArgumentTable)? {
-    let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 7
-    desc.maxBufferBindCount = 5
-    do {
-      return try device.makeArgumentTable(descriptor: desc)
-    } catch {
-      logger.error("Failed to create argument table: \(error.localizedDescription)")
-      return nil
-    }
-  }
-  
-  func warmUpGPU() {
-    let allocator = commandAllocators[0]
-    currentUniformBuffer = uniformBuffers[0]
-    allocator.reset()
-    uniformOffset = 0
-
-    commandBuffer.beginCommandBuffer(allocator: allocator)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
-    encoder.setArgumentTable(argumentTable)
-
-    encoder.setComputePipelineState(clearRGPipeline)
-    for tex in [velocityA, velocityB, u0] {
-      argumentTable.setTexture(tex.gpuResourceID, index: 0)
-      dispatchGrid(encoder: encoder)
-    }
-
-    for tex in [pressure, divergenceTexture] {
-      argumentTable.setTexture(tex.gpuResourceID, index: 0)
-      dispatchGrid(encoder: encoder)
-    }
-
-    encoder.setComputePipelineState(clearRGBAPipeline)
-    for tex in [dyeA, dyeB, dyeC, bloomA, bloomB, bloomMidA, bloomMidB, bloomLoA, bloomLoB] {
-      argumentTable.setTexture(tex.gpuResourceID, index: 0)
-      dispatchGrid(encoder: encoder)
-    }
-
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    encoder.setComputePipelineState(psiInitPipeline)
-    argumentTable.setTexture(psiA.gpuResourceID, index: 0)
-    dispatchGrid(encoder: encoder)
-
-    encoder.endEncoding()
-    commandBuffer.endCommandBuffer()
-    commandQueue.commit([commandBuffer])
-    commandQueue.signalEvent(sharedEvent, value: 1)
-    frameNumber = 1
   }
 
-  func ensureTAAHistory(width: Int, height: Int) {
-    if width == taaHistoryWidth && height == taaHistoryHeight && taaHistoryA != nil { return }
-
-    if let a = taaHistoryA {
-      if frameNumber > 0 {
-        sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
-      }
-      residencySet.removeAllocation(a)
-    }
-    if let b = taaHistoryB { residencySet.removeAllocation(b) }
-
-    let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
-    desc.usage = [.shaderRead, .shaderWrite]
-    desc.storageMode = .private
-
-    guard let a = device.makeTexture(descriptor: desc),
-          let b = device.makeTexture(descriptor: desc) else {
-      taaHistoryA = nil
-      taaHistoryB = nil
-      taaHistoryValid = false
-      taaHistoryWidth = 0
-      taaHistoryHeight = 0
-      residencySet.commit()
-      return
-    }
-
-    residencySet.addAllocation(a)
-    residencySet.addAllocation(b)
-    residencySet.commit()
-
-    taaHistoryA = a
-    taaHistoryB = b
-    taaHistoryValid = false
-    taaHistoryWidth = width
-    taaHistoryHeight = height
-  }
-
-  func configureResidencySet() {
-    residencySet.addAllocation(velocityA)
-    residencySet.addAllocation(velocityB)
-    residencySet.addAllocation(pressure)
-    residencySet.addAllocation(divergenceTexture)
-    residencySet.addAllocation(dyeA)
-    residencySet.addAllocation(dyeB)
-    residencySet.addAllocation(dyeC)
-    residencySet.addAllocation(bloomA)
-    residencySet.addAllocation(bloomB)
-    residencySet.addAllocation(bloomMidA)
-    residencySet.addAllocation(bloomMidB)
-    residencySet.addAllocation(bloomLoA)
-    residencySet.addAllocation(bloomLoB)
-    residencySet.addAllocation(psiA)
-    residencySet.addAllocation(psiB)
-    residencySet.addAllocation(u0)
-    
-    for buf in uniformBuffers { residencySet.addAllocation(buf) }
-    
-    residencySet.commit()
-    
-    commandQueue.addResidencySet(residencySet)
-  }
 }

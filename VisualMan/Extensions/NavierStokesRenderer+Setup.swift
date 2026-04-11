@@ -101,6 +101,33 @@ extension NavierStokesRenderer {
     let u0: MTLTexture
   }
   
+  static func createAllocatorsAndBuffers(device: MTLDevice)
+    -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
+    var allocators = [any MTL4CommandAllocator]()
+    var buffers = [MTLBuffer]()
+    for _ in 0..<maxFramesInFlight {
+      guard let allocator = device.makeCommandAllocator(),
+            let buffer = device.makeBuffer(length: uniformBufferSize, options: .storageModeShared) else {
+        return nil
+      }
+      allocators.append(allocator)
+      buffers.append(buffer)
+    }
+    return (allocators, buffers)
+  }
+
+  static func createArgumentTable(device: MTLDevice) -> (any MTL4ArgumentTable)? {
+    let desc = MTL4ArgumentTableDescriptor()
+    desc.maxTextureBindCount = 7
+    desc.maxBufferBindCount = 3
+    do {
+      return try device.makeArgumentTable(descriptor: desc)
+    } catch {
+      logger.error("Failed to create argument table: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
   static func createResidencySet(device: MTLDevice) -> MTLResidencySet? {
     let desc = MTLResidencySetDescriptor()
     desc.initialCapacity = 16
@@ -160,5 +187,108 @@ extension NavierStokesRenderer {
                     bloomMidA: bloomMidA, bloomMidB: bloomMidB,
                     bloomLoA: bloomLoA, bloomLoB: bloomLoB,
                     psiA: psiA, psiB: psiB, u0: u0)
+  }
+
+  func warmUpGPU() {
+    let allocator = commandAllocators[0]
+    currentUniformBuffer = uniformBuffers[0]
+    allocator.reset()
+    uniformOffset = 0
+
+    commandBuffer.beginCommandBuffer(allocator: allocator)
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+    encoder.setArgumentTable(argumentTable)
+
+    encoder.setComputePipelineState(pipelines.clearRG)
+    for tex in [velocityA, velocityB, u0] {
+      argumentTable.setTexture(tex.gpuResourceID, index: 0)
+      dispatchGrid(encoder: encoder)
+    }
+
+    for tex in [pressure, divergenceTexture] {
+      argumentTable.setTexture(tex.gpuResourceID, index: 0)
+      dispatchGrid(encoder: encoder)
+    }
+
+    encoder.setComputePipelineState(pipelines.clearRGBA)
+    for tex in [dyeA, dyeB, dyeC, bloomA, bloomB, bloomMidA, bloomMidB, bloomLoA, bloomLoB] {
+      argumentTable.setTexture(tex.gpuResourceID, index: 0)
+      dispatchGrid(encoder: encoder)
+    }
+
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    encoder.setComputePipelineState(pipelines.psiInit)
+    argumentTable.setTexture(psiA.gpuResourceID, index: 0)
+    dispatchGrid(encoder: encoder)
+
+    encoder.endEncoding()
+    commandBuffer.endCommandBuffer()
+    commandQueue.commit([commandBuffer])
+    commandQueue.signalEvent(sharedEvent, value: 1)
+    frameNumber = 1
+  }
+
+  func ensureTAAHistory(width: Int, height: Int) {
+    if width == taaHistoryWidth && height == taaHistoryHeight && taaHistoryA != nil { return }
+
+    if let a = taaHistoryA {
+      if frameNumber > 0 {
+        sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
+      }
+      residencySet.removeAllocation(a)
+    }
+    if let b = taaHistoryB { residencySet.removeAllocation(b) }
+
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+
+    guard let a = device.makeTexture(descriptor: desc),
+          let b = device.makeTexture(descriptor: desc) else {
+      taaHistoryA = nil
+      taaHistoryB = nil
+      taaHistoryValid = false
+      taaHistoryWidth = 0
+      taaHistoryHeight = 0
+      residencySet.commit()
+      return
+    }
+
+    residencySet.addAllocation(a)
+    residencySet.addAllocation(b)
+    residencySet.commit()
+
+    taaHistoryA = a
+    taaHistoryB = b
+    taaHistoryValid = false
+    taaHistoryWidth = width
+    taaHistoryHeight = height
+  }
+
+  func configureResidencySet() {
+    residencySet.addAllocation(velocityA)
+    residencySet.addAllocation(velocityB)
+    residencySet.addAllocation(pressure)
+    residencySet.addAllocation(divergenceTexture)
+    residencySet.addAllocation(dyeA)
+    residencySet.addAllocation(dyeB)
+    residencySet.addAllocation(dyeC)
+    residencySet.addAllocation(bloomA)
+    residencySet.addAllocation(bloomB)
+    residencySet.addAllocation(bloomMidA)
+    residencySet.addAllocation(bloomMidB)
+    residencySet.addAllocation(bloomLoA)
+    residencySet.addAllocation(bloomLoB)
+    residencySet.addAllocation(psiA)
+    residencySet.addAllocation(psiB)
+    residencySet.addAllocation(u0)
+
+    for buf in uniformBuffers { residencySet.addAllocation(buf) }
+
+    residencySet.commit()
+
+    commandQueue.addResidencySet(residencySet)
   }
 }

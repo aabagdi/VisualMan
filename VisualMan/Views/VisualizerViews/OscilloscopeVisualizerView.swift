@@ -104,7 +104,7 @@ struct OscilloscopeVisualizerView: View {
         ]
         
         let audioEnergy = Double(audio.bass + audio.mid + audio.high) / 3.0
-        let brightness = 0.7 + audioEnergy * 0.3
+        let brightness = min(0.7 + audioEnergy * 0.3, 1.0)
         
         for layer in glowLayers {
           context.stroke(
