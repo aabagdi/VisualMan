@@ -22,6 +22,7 @@ struct BlurParams {
   float texWidth;
   float texHeight;
   float bass;
+  float mid;
 };
 
 inline float2 hash22(float2 p) {
@@ -348,7 +349,8 @@ kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)
   float4 result = mix(sharp, blurred, blurStrength);
 
   float luma = dot(result.rgb, float3(0.2126, 0.7152, 0.0722));
-  result.rgb = mix(result.rgb, float3(luma), blurStrength * 0.2);
+  float desatAmount = blurStrength * max(0.2 - params.mid * 0.15, 0.05);
+  result.rgb = mix(result.rgb, float3(luma), desatAmount);
 
   result.rgb += float3(0.02, 0.02, 0.03) * blurStrength;
 

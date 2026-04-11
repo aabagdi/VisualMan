@@ -23,6 +23,7 @@ struct BlurParams {
   var texWidth: Float
   var texHeight: Float
   var bass: Float
+  var mid: Float
 }
 
 @MainActor
@@ -198,7 +199,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     renderLiquidLight(encoder: encoder, output: intermediateTex,
                       bass: rBass, mid: rMid, high: rHigh)
 
-    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, bass: rBass)
+    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, bass: rBass, mid: rMid)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -228,19 +229,21 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   private func renderBlur(encoder: any MTL4ComputeCommandEncoder,
                           input: MTLTexture,
                           output: MTLTexture,
-                          bass: Float) {
+                          bass: Float,
+                          mid: Float) {
     encoder.setComputePipelineState(blurPipeline)
 
     argumentTable.setTexture(input.gpuResourceID, index: 0)
     argumentTable.setTexture(output.gpuResourceID, index: 1)
 
     let blurParams = BlurParams(
-      innerRadius: 0.45,
+      innerRadius: 0.45 + mid * 0.05,
       outerRadius: 1.15,
-      maxBlurRadius: 8.0,
+      maxBlurRadius: 8.0 + mid * 2.0,
       texWidth: Float(input.width),
       texHeight: Float(input.height),
-      bass: bass
+      bass: bass,
+      mid: mid
     )
     argumentTable.setAddress(writeUniform(blurParams), index: 0)
 

@@ -10,8 +10,8 @@ import SwiftUI
 @MainActor
 @Observable
 final class VisualizerRendererCache {
-  private var renderers: [ObjectIdentifier: any MetalVisualizerRenderer] = [:]
-  private var inFlightTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+  private var renderers = [ObjectIdentifier: any MetalVisualizerRenderer]()
+  private var inFlightTasks = [ObjectIdentifier: Task<Void, Never>]()
 
   func renderer<R: MetalVisualizerRenderer>(_ type: R.Type) -> R? {
     renderers[ObjectIdentifier(type)] as? R
