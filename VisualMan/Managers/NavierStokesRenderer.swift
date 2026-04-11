@@ -47,6 +47,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var copyRGPipeline: MTLComputePipelineState
   var clearRGPipeline: MTLComputePipelineState
   var clearRGBAPipeline: MTLComputePipelineState
+  var curlPipeline: MTLComputePipelineState
+  var vorticityConfinementPipeline: MTLComputePipelineState
+  var macCormackCorrectPipeline: MTLComputePipelineState
   
   var velocityA: MTLTexture
   var velocityB: MTLTexture
@@ -54,8 +57,13 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var divergenceTexture: MTLTexture
   var dyeA: MTLTexture
   var dyeB: MTLTexture
+  var dyeC: MTLTexture
   var bloomA: MTLTexture
   var bloomB: MTLTexture
+  var bloomMidA: MTLTexture
+  var bloomMidB: MTLTexture
+  var bloomLoA: MTLTexture
+  var bloomLoB: MTLTexture
   var psiA: MTLTexture
   var psiB: MTLTexture
   var u0: MTLTexture
@@ -142,6 +150,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.renderPipeline = pipelines.render
     self.clearRGPipeline = pipelines.clearRG
     self.clearRGBAPipeline = pipelines.clearRGBA
+    self.curlPipeline = pipelines.curl
+    self.vorticityConfinementPipeline = pipelines.vorticityConfinement
+    self.macCormackCorrectPipeline = pipelines.macCormackCorrect
     
     self.velocityA = textures.velocityA
     self.velocityB = textures.velocityB
@@ -149,8 +160,13 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.divergenceTexture = textures.divergence
     self.dyeA = textures.dyeA
     self.dyeB = textures.dyeB
+    self.dyeC = textures.dyeC
     self.bloomA = textures.bloomA
     self.bloomB = textures.bloomB
+    self.bloomMidA = textures.bloomMidA
+    self.bloomMidB = textures.bloomMidB
+    self.bloomLoA = textures.bloomLoA
+    self.bloomLoB = textures.bloomLoB
     self.psiA = textures.psiA
     self.psiB = textures.psiB
     self.u0 = textures.u0
@@ -250,6 +266,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     injectAudioSplats(encoder: encoder, bass: bass, mid: mid, high: high)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
+    applyVorticityConfinement(encoder: encoder, bass: bass, mid: mid)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
     project(encoder: encoder, jacobiIterations: currentJacobiIterations)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
@@ -261,14 +280,22 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     }
 
     let dynamicDyeDissipation: Float = 0.98 + bass * 0.01 + mid * 0.008
-    advect(encoder: encoder, velocityIn: velocityA, fieldIn: dyeA,
-           fieldOut: dyeB, dissipation: dynamicDyeDissipation)
-    swap(&dyeA, &dyeB)
+    advectDyeMacCormack(encoder: encoder, dissipation: dynamicDyeDissipation)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    bloomThresholdBlurH(encoder: encoder)
+    bloomThresholdBlurH(encoder: encoder, dst: bloomB, size: Self.bloomSize)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    blurBloomV(encoder: encoder)
+    blurBloomV(encoder: encoder, src: bloomB, dst: bloomA, size: Self.bloomSize)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    bloomThresholdBlurH(encoder: encoder, dst: bloomMidB, size: Self.bloomSizeMid)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    blurBloomV(encoder: encoder, src: bloomMidB, dst: bloomMidA, size: Self.bloomSizeMid)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    bloomThresholdBlurH(encoder: encoder, dst: bloomLoB, size: Self.bloomSizeLo)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    blurBloomV(encoder: encoder, src: bloomLoB, dst: bloomLoA, size: Self.bloomSizeLo)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     render(encoder: encoder, output: output, bass: bass, mid: mid)
@@ -293,7 +320,7 @@ private extension NavierStokesRenderer {
   
   static func createArgumentTable(device: MTLDevice) -> (any MTL4ArgumentTable)? {
     let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 3
+    desc.maxTextureBindCount = 5
     desc.maxBufferBindCount = 3
     do {
       return try device.makeArgumentTable(descriptor: desc)
@@ -325,7 +352,7 @@ private extension NavierStokesRenderer {
     }
 
     encoder.setComputePipelineState(clearRGBAPipeline)
-    for tex in [dyeA, dyeB, bloomA, bloomB] {
+    for tex in [dyeA, dyeB, dyeC, bloomA, bloomB, bloomMidA, bloomMidB, bloomLoA, bloomLoB] {
       argumentTable.setTexture(tex.gpuResourceID, index: 0)
       dispatchGrid(encoder: encoder)
     }
@@ -350,8 +377,13 @@ private extension NavierStokesRenderer {
     residencySet.addAllocation(divergenceTexture)
     residencySet.addAllocation(dyeA)
     residencySet.addAllocation(dyeB)
+    residencySet.addAllocation(dyeC)
     residencySet.addAllocation(bloomA)
     residencySet.addAllocation(bloomB)
+    residencySet.addAllocation(bloomMidA)
+    residencySet.addAllocation(bloomMidB)
+    residencySet.addAllocation(bloomLoA)
+    residencySet.addAllocation(bloomLoB)
     residencySet.addAllocation(psiA)
     residencySet.addAllocation(psiB)
     residencySet.addAllocation(u0)

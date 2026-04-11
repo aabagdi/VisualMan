@@ -244,6 +244,57 @@ extension NavierStokesRenderer {
     
     dispatchGrid(encoder: encoder)
   }
+
+  func applyVorticityConfinement(encoder: any MTL4ComputeCommandEncoder,
+                                 bass: Float,
+                                 mid: Float) {
+    encoder.setComputePipelineState(curlPipeline)
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
+    argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
+    dispatchGrid(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    encoder.setComputePipelineState(vorticityConfinementPipeline)
+    argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 0)
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
+    let dtVal: Float = dt * 40.0
+    let epsilon: Float = 0.30 + bass * 0.45 + mid * 0.15
+    argumentTable.setAddress(writeUniform(dtVal), index: 0)
+    argumentTable.setAddress(writeUniform(epsilon), index: 1)
+    dispatchGrid(encoder: encoder)
+  }
+
+  func advectDyeMacCormack(encoder: any MTL4ComputeCommandEncoder,
+                           dissipation: Float) {
+    let dtVal: Float = dt * 40.0
+
+    advect(encoder: encoder, velocityIn: velocityA, fieldIn: dyeA,
+           fieldOut: dyeB, dissipation: 1.0)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    encoder.setComputePipelineState(advectPipeline)
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
+    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
+    argumentTable.setTexture(dyeC.gpuResourceID, index: 2)
+    let negDt: Float = -dtVal
+    let one: Float = 1.0
+    argumentTable.setAddress(writeUniform(negDt), index: 0)
+    argumentTable.setAddress(writeUniform(one), index: 1)
+    dispatchGrid(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    encoder.setComputePipelineState(macCormackCorrectPipeline)
+    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
+    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
+    argumentTable.setTexture(dyeC.gpuResourceID, index: 2)
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 3)
+    argumentTable.setTexture(dyeC.gpuResourceID, index: 4)
+    argumentTable.setAddress(writeUniform(dtVal), index: 0)
+    argumentTable.setAddress(writeUniform(dissipation), index: 1)
+    dispatchGrid(encoder: encoder)
+
+    swap(&dyeA, &dyeC)
+  }
   
   func advectPsi(encoder: any MTL4ComputeCommandEncoder) {
     encoder.setComputePipelineState(psiAdvectPipeline)
@@ -299,10 +350,6 @@ extension NavierStokesRenderer {
     gradientSubtract(encoder: encoder)
   }
 
-  func jacobiIteration(encoder: any MTL4ComputeCommandEncoder) {
-    // Retained for API compatibility; unused after red-black refactor.
-  }
-
   func computeDivergence(encoder: any MTL4ComputeCommandEncoder) {
     encoder.setComputePipelineState(divergencePipeline)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
@@ -335,31 +382,25 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder)
   }
   
-  func bloomThresholdBlurH(encoder: any MTL4ComputeCommandEncoder) {
+  func bloomThresholdBlurH(encoder: any MTL4ComputeCommandEncoder,
+                           dst: MTLTexture,
+                           size: Int) {
     encoder.setComputePipelineState(bloomThresholdBlurHPipeline)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
-    argumentTable.setTexture(bloomB.gpuResourceID, index: 1)
+    argumentTable.setTexture(dst.gpuResourceID, index: 1)
     let threshold: Float = 0.8
     argumentTable.setAddress(writeUniform(threshold), index: 0)
-    let bs = Self.bloomSize
-    dispatchGrid(encoder: encoder, width: bs, height: bs)
+    dispatchGrid(encoder: encoder, width: size, height: size)
   }
 
-  func blurBloomH(encoder: any MTL4ComputeCommandEncoder) {
-    // Retained for API compatibility; replaced by fused bloomThresholdBlurH.
-    encoder.setComputePipelineState(blurHPipeline)
-    argumentTable.setTexture(bloomA.gpuResourceID, index: 0)
-    argumentTable.setTexture(bloomB.gpuResourceID, index: 1)
-    let bs = Self.bloomSize
-    dispatchGrid(encoder: encoder, width: bs, height: bs)
-  }
-
-  func blurBloomV(encoder: any MTL4ComputeCommandEncoder) {
+  func blurBloomV(encoder: any MTL4ComputeCommandEncoder,
+                  src: MTLTexture,
+                  dst: MTLTexture,
+                  size: Int) {
     encoder.setComputePipelineState(blurVPipeline)
-    argumentTable.setTexture(bloomB.gpuResourceID, index: 0)
-    argumentTable.setTexture(bloomA.gpuResourceID, index: 1)
-    let bs = Self.bloomSize
-    dispatchGrid(encoder: encoder, width: bs, height: bs)
+    argumentTable.setTexture(src.gpuResourceID, index: 0)
+    argumentTable.setTexture(dst.gpuResourceID, index: 1)
+    dispatchGrid(encoder: encoder, width: size, height: size)
   }
   
   func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture, bass: Float, mid: Float) {
@@ -367,8 +408,11 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(output.gpuResourceID, index: 1)
     argumentTable.setTexture(bloomA.gpuResourceID, index: 2)
+    argumentTable.setTexture(bloomMidA.gpuResourceID, index: 3)
+    argumentTable.setTexture(bloomLoA.gpuResourceID, index: 4)
     argumentTable.setAddress(writeUniform(bass), index: 0)
     argumentTable.setAddress(writeUniform(mid), index: 1)
+    argumentTable.setAddress(writeUniform(time), index: 2)
     dispatchGrid(encoder: encoder, width: output.width, height: output.height)
   }
   

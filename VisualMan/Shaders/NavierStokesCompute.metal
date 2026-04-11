@@ -283,46 +283,65 @@ kernel void fluidBloomThresholdBlurH(texture2d<float, access::sample> dye [[text
   bloomOut.write(sum, gid);
 }
 
+inline float2 curlNoiseOffset(float2 uv, float t) {
+  float a = sin(uv.x * 13.0 + t * 0.7)  + cos(uv.y *  9.0 - t * 0.55);
+  float b = cos(uv.x *  7.0 - t * 0.6)  + sin(uv.y * 11.0 + t * 0.45);
+  return float2(a, b);
+}
+
+inline float srgbEncode(float c) {
+  c = max(c, 0.0);
+  return c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
 kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::write> output [[texture(1)]],
-                        texture2d<float, access::sample> bloom [[texture(2)]],
+                        texture2d<float, access::sample> bloomHi [[texture(2)]],
+                        texture2d<float, access::sample> bloomMid [[texture(3)]],
+                        texture2d<float, access::sample> bloomLo [[texture(4)]],
                         constant float &bass [[buffer(0)]],
                         constant float &mid [[buffer(1)]],
+                        constant float &renderTime [[buffer(2)]],
                         uint2 gid [[thread_position_in_grid]]) {
   uint w = output.get_width();
   uint h = output.get_height();
+  if (gid.x >= w || gid.y >= h) return;
 
   constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
   float2 center = (float2(gid) + 0.5) / float2(w, h);
   float2 texel = 1.0 / float2(dye.get_width(), dye.get_height());
 
+  float2 jitter = curlNoiseOffset(center, renderTime) * 0.0015;
+  float2 sampleCenter = center + jitter;
+
   float4 color = float4(0);
-  color += dye.sample(bilinear, center + float2(-0.25, -0.75) * texel);
-  color += dye.sample(bilinear, center + float2( 0.75, -0.25) * texel);
-  color += dye.sample(bilinear, center + float2(-0.75,  0.25) * texel);
-  color += dye.sample(bilinear, center + float2( 0.25,  0.75) * texel);
+  color += dye.sample(bilinear, sampleCenter + float2(-0.25, -0.75) * texel);
+  color += dye.sample(bilinear, sampleCenter + float2( 0.75, -0.25) * texel);
+  color += dye.sample(bilinear, sampleCenter + float2(-0.75,  0.25) * texel);
+  color += dye.sample(bilinear, sampleCenter + float2( 0.25,  0.75) * texel);
   color *= 0.25;
 
   float3 c = max(color.rgb, float3(0.0));
 
-  c += bloom.sample(bilinear, center).rgb * 0.5;
+  float3 bHi  = bloomHi.sample(bilinear, sampleCenter).rgb;
+  float3 bMid = bloomMid.sample(bilinear, sampleCenter).rgb;
+  float3 bLo  = bloomLo.sample(bilinear, sampleCenter).rgb;
+  c += bHi * 0.40 + bMid * 0.35 + bLo * 0.30;
 
   c *= 1.0 + bass * 0.4 + mid * 0.25;
 
-  c *= 0.5;
+  float lum0 = dot(c, float3(0.299, 0.587, 0.114));
+  float saturation = 1.8 + mid * 0.4;
+  c = mix(float3(lum0), c, saturation);
+  c = max(c, float3(0.0));
 
   float lum = dot(c, float3(0.299, 0.587, 0.114));
-  float scaledLum = lum / (1.0 + lum);
+  float whitePoint = 4.0;
+  float scaledLum = (lum * (1.0 + lum / (whitePoint * whitePoint))) / (1.0 + lum);
   c = c * (scaledLum / max(lum, 1e-4));
-
-  lum = dot(c, float3(0.299, 0.587, 0.114));
-  float saturation = 1.8 + mid * 0.4;
-  c = mix(float3(lum), c, saturation);
   c = clamp(c, 0.0, 1.0);
 
-  c.r = pow(max(c.r, 0.0f), 1.0f / 2.2f);
-  c.g = pow(max(c.g, 0.0f), 1.0f / 2.2f);
-  c.b = pow(max(c.b, 0.0f), 1.0f / 2.2f);
+  c = float3(srgbEncode(c.r), srgbEncode(c.g), srgbEncode(c.b));
 
   output.write(float4(c, 1.0), gid);
 }
@@ -443,4 +462,94 @@ kernel void fluidClearRGBA(texture2d<float, access::write> t [[texture(0)]],
                            uint2 gid [[thread_position_in_grid]]) {
   if (gid.x >= t.get_width() || gid.y >= t.get_height()) return;
   t.write(float4(0), gid);
+}
+
+kernel void fluidCurl(texture2d<float, access::read> velocity [[texture(0)]],
+                      texture2d<float, access::write> curlOut [[texture(1)]],
+                      uint2 gid [[thread_position_in_grid]]) {
+  uint w = velocity.get_width();
+  uint h = velocity.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  uint2 L = uint2(max(int(gid.x) - 1, 0),     gid.y);
+  uint2 R = uint2(min(int(gid.x) + 1, int(w) - 1), gid.y);
+  uint2 D = uint2(gid.x, max(int(gid.y) - 1, 0));
+  uint2 U = uint2(gid.x, min(int(gid.y) + 1, int(h) - 1));
+  float dvy_dx = 0.5 * (velocity.read(R).y - velocity.read(L).y);
+  float dvx_dy = 0.5 * (velocity.read(U).x - velocity.read(D).x);
+  curlOut.write(float4(dvy_dx - dvx_dy, 0, 0, 0), gid);
+}
+
+kernel void fluidVorticityConfinement(texture2d<float, access::read> curl [[texture(0)]],
+                                      texture2d<float, access::read_write> velocity [[texture(1)]],
+                                      constant float &dt [[buffer(0)]],
+                                      constant float &epsilon [[buffer(1)]],
+                                      uint2 gid [[thread_position_in_grid]]) {
+  uint w = velocity.get_width();
+  uint h = velocity.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  uint2 L = uint2(max(int(gid.x) - 1, 0),     gid.y);
+  uint2 R = uint2(min(int(gid.x) + 1, int(w) - 1), gid.y);
+  uint2 D = uint2(gid.x, max(int(gid.y) - 1, 0));
+  uint2 U = uint2(gid.x, min(int(gid.y) + 1, int(h) - 1));
+
+  float cL = abs(curl.read(L).x);
+  float cR = abs(curl.read(R).x);
+  float cD = abs(curl.read(D).x);
+  float cU = abs(curl.read(U).x);
+  float cC = curl.read(gid).x;
+
+  float2 grad = float2(0.5 * (cR - cL), 0.5 * (cU - cD));
+  float len = length(grad) + 1e-5;
+  float2 N = grad / len;
+  float2 force = epsilon * float2(N.y, -N.x) * cC;
+
+  float4 vel = velocity.read(gid);
+  vel.xy += dt * force;
+  velocity.write(vel, gid);
+}
+
+kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[texture(0)]],
+                                   texture2d<float, access::sample> phiHat1  [[texture(1)]],
+                                   texture2d<float, access::sample> phiHat0  [[texture(2)]],
+                                   texture2d<float, access::read>   velocity [[texture(3)]],
+                                   texture2d<float, access::write>  phiOut   [[texture(4)]],
+                                   constant float &dt [[buffer(0)]],
+                                   constant float &dissipation [[buffer(1)]],
+                                   uint2 gid [[thread_position_in_grid]]) {
+  uint w = phiOut.get_width();
+  uint h = phiOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+
+  constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
+
+  float2 pos = float2(gid) + 0.5;
+  float2 vel = velocity.read(gid).xy;
+  if (any(isnan(vel)) || any(isinf(vel))) vel = float2(0);
+  float sp = length(vel);
+  if (sp > 500.0) vel *= 500.0 / sp;
+
+  float2 backPos = pos - dt * vel;
+  float2 invSize = 1.0 / float2(w, h);
+
+  float4 forward = phiHat1.sample(linearSampler, backPos * invSize);
+  float4 backward = phiHat0.sample(linearSampler, pos * invSize);
+  float4 source = phiN.sample(linearSampler, backPos * invSize);
+
+  float4 corrected = forward + 0.5 * (source - backward);
+
+  int2 base = int2(floor(backPos - 0.5));
+  int2 c00 = clamp(base,              int2(0), int2(w - 1, h - 1));
+  int2 c10 = clamp(base + int2(1, 0), int2(0), int2(w - 1, h - 1));
+  int2 c01 = clamp(base + int2(0, 1), int2(0), int2(w - 1, h - 1));
+  int2 c11 = clamp(base + int2(1, 1), int2(0), int2(w - 1, h - 1));
+  float4 s00 = phiN.read(uint2(c00));
+  float4 s10 = phiN.read(uint2(c10));
+  float4 s01 = phiN.read(uint2(c01));
+  float4 s11 = phiN.read(uint2(c11));
+  float4 lo = min(min(s00, s10), min(s01, s11));
+  float4 hi = max(max(s00, s10), max(s01, s11));
+
+  corrected = clamp(corrected, lo, hi);
+  corrected *= dissipation;
+  phiOut.write(corrected, gid);
 }

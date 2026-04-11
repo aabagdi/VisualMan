@@ -25,6 +25,9 @@ extension NavierStokesRenderer {
     let render: MTLComputePipelineState
     let clearRG: MTLComputePipelineState
     let clearRGBA: MTLComputePipelineState
+    let curl: MTLComputePipelineState
+    let vorticityConfinement: MTLComputePipelineState
+    let macCormackCorrect: MTLComputePipelineState
   }
   
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
@@ -61,7 +64,10 @@ extension NavierStokesRenderer {
           let bloomThresholdBlurH = makePipeline("fluidBloomThresholdBlurH"),
           let render = makePipeline("fluidRender"),
           let clearRG = makePipeline("fluidClearRG"),
-          let clearRGBA = makePipeline("fluidClearRGBA") else {
+          let clearRGBA = makePipeline("fluidClearRGBA"),
+          let curl = makePipeline("fluidCurl"),
+          let vorticityConfinement = makePipeline("fluidVorticityConfinement"),
+          let macCormackCorrect = makePipeline("fluidMacCormackCorrect") else {
       return nil
     }
     
@@ -71,7 +77,9 @@ extension NavierStokesRenderer {
                      divergence: divergence, jacobiRedBlack: jacobiRedBlack,
                      gradientSubtract: gradientSubtract, blurH: blurH,
                      blurV: blurV, bloomThresholdBlurH: bloomThresholdBlurH,
-                     render: render, clearRG: clearRG, clearRGBA: clearRGBA)
+                     render: render, clearRG: clearRG, clearRGBA: clearRGBA,
+                     curl: curl, vorticityConfinement: vorticityConfinement,
+                     macCormackCorrect: macCormackCorrect)
   }
   
   struct Textures {
@@ -81,8 +89,13 @@ extension NavierStokesRenderer {
     let divergence: MTLTexture
     let dyeA: MTLTexture
     let dyeB: MTLTexture
+    let dyeC: MTLTexture
     let bloomA: MTLTexture
     let bloomB: MTLTexture
+    let bloomMidA: MTLTexture
+    let bloomMidB: MTLTexture
+    let bloomLoA: MTLTexture
+    let bloomLoB: MTLTexture
     let psiA: MTLTexture
     let psiB: MTLTexture
     let u0: MTLTexture
@@ -95,6 +108,8 @@ extension NavierStokesRenderer {
   }
 
   static let bloomSize: Int = 256
+  static let bloomSizeMid: Int = 128
+  static let bloomSizeLo: Int = 64
 
   static func createTextures(device: MTLDevice) -> Textures? {
     func makeTexture(format: MTLPixelFormat, label: String,
@@ -119,10 +134,19 @@ extension NavierStokesRenderer {
           let divergence = makeTexture(format: .r16Float, label: "divergence"),
           let dyeA = makeTexture(format: .rgba16Float, label: "dyeA"),
           let dyeB = makeTexture(format: .rgba16Float, label: "dyeB"),
+          let dyeC = makeTexture(format: .rgba16Float, label: "dyeC"),
           let bloomA = makeTexture(format: .rgba16Float, label: "bloomA",
                                    width: bloomSize, height: bloomSize),
           let bloomB = makeTexture(format: .rgba16Float, label: "bloomB",
                                    width: bloomSize, height: bloomSize),
+          let bloomMidA = makeTexture(format: .rgba16Float, label: "bloomMidA",
+                                      width: bloomSizeMid, height: bloomSizeMid),
+          let bloomMidB = makeTexture(format: .rgba16Float, label: "bloomMidB",
+                                      width: bloomSizeMid, height: bloomSizeMid),
+          let bloomLoA = makeTexture(format: .rgba16Float, label: "bloomLoA",
+                                     width: bloomSizeLo, height: bloomSizeLo),
+          let bloomLoB = makeTexture(format: .rgba16Float, label: "bloomLoB",
+                                     width: bloomSizeLo, height: bloomSizeLo),
           let psiA = makeTexture(format: .rg16Float, label: "psiA"),
           let psiB = makeTexture(format: .rg16Float, label: "psiB"),
           let u0 = makeTexture(format: .rg16Float, label: "u0") else {
@@ -131,8 +155,10 @@ extension NavierStokesRenderer {
 
     return Textures(velocityA: velocityA, velocityB: velocityB,
                     pressure: pressure,
-                    divergence: divergence, dyeA: dyeA, dyeB: dyeB,
+                    divergence: divergence, dyeA: dyeA, dyeB: dyeB, dyeC: dyeC,
                     bloomA: bloomA, bloomB: bloomB,
+                    bloomMidA: bloomMidA, bloomMidB: bloomMidB,
+                    bloomLoA: bloomLoA, bloomLoB: bloomLoB,
                     psiA: psiA, psiB: psiB, u0: u0)
   }
 }
