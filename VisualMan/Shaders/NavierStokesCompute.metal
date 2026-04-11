@@ -94,26 +94,27 @@ kernel void fluidDivergence(texture2d<float, access::read> velocity [[texture(0)
   divergenceOut.write(float4(-div, 0, 0, 0), gid);
 }
 
-kernel void fluidJacobi(texture2d<float, access::read> pressureIn [[texture(0)]],
-                        texture2d<float, access::read> divergence [[texture(1)]],
-                        texture2d<float, access::write> pressureOut [[texture(2)]],
-                        uint2 gid [[thread_position_in_grid]]) {
-  uint w = pressureIn.get_width();
-  uint h = pressureIn.get_height();
-  
+kernel void fluidJacobiRedBlack(texture2d<float, access::read_write> pressure [[texture(0)]],
+                                texture2d<float, access::read> divergence [[texture(1)]],
+                                constant uint &parity [[buffer(0)]],
+                                uint2 gid [[thread_position_in_grid]]) {
+  uint w = pressure.get_width();
+  uint h = pressure.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  if (((gid.x + gid.y) & 1u) != parity) return;
+
   uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
   uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
   uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
   uint2 up    = uint2(gid.x, min(gid.y + 1, h - 1));
-  
-  float pL = pressureIn.read(left).x;
-  float pR = pressureIn.read(right).x;
-  float pB = pressureIn.read(down).x;
-  float pT = pressureIn.read(up).x;
+
+  float pL = pressure.read(left).x;
+  float pR = pressure.read(right).x;
+  float pB = pressure.read(down).x;
+  float pT = pressure.read(up).x;
   float div = divergence.read(gid).x;
-  
-  float pressure = (pL + pR + pB + pT + div) * 0.25;
-  pressureOut.write(float4(pressure, 0, 0, 0), gid);
+
+  pressure.write(float4((pL + pR + pB + pT + div) * 0.25, 0, 0, 0), gid);
 }
 
 kernel void fluidGradientSubtract(texture2d<float, access::read> pressure [[texture(0)]],
@@ -236,22 +237,50 @@ kernel void fluidBlurV(texture2d<float, access::read> fieldIn [[texture(0)]],
   fieldOut.write(sum, gid);
 }
 
-kernel void fluidBloomThreshold(texture2d<float, access::sample> dye [[texture(0)]],
-                                texture2d<float, access::write> bloomOut [[texture(1)]],
-                                constant float &threshold [[buffer(0)]],
-                                uint2 gid [[thread_position_in_grid]]) {
-  uint bw = bloomOut.get_width();
-  uint bh = bloomOut.get_height();
-  if (gid.x >= bw || gid.y >= bh) return;
-  
-  constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
-  float2 uv = (float2(gid) + 0.5) / float2(bw, bh);
-  float4 color = dye.sample(bilinear, uv);
-  
+inline float3 bloomThresholdSample(float4 color, float threshold) {
   float brightness = dot(color.rgb, float3(0.299, 0.587, 0.114));
   float contrib = max(brightness - threshold, 0.0);
   float factor = contrib / max(brightness, 1e-4);
-  bloomOut.write(float4(color.rgb * factor, 0.0), gid);
+  return color.rgb * factor;
+}
+
+kernel void fluidBloomThresholdBlurH(texture2d<float, access::sample> dye [[texture(0)]],
+                                     texture2d<float, access::write> bloomOut [[texture(1)]],
+                                     constant float &threshold [[buffer(0)]],
+                                     uint2 gid [[thread_position_in_grid]],
+                                     uint2 tid [[thread_position_in_threadgroup]],
+                                     uint2 tgid [[threadgroup_position_in_grid]]) {
+  uint bw = bloomOut.get_width();
+  uint bh = bloomOut.get_height();
+
+  constexpr uint TILE_W = 24;
+  threadgroup float4 tile[TILE_W * 16];
+
+  int tileOriginX = int(tgid.x * 16) - 4;
+  int tileOriginY = int(tgid.y * 16);
+
+  constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
+  float2 invBloom = 1.0 / float2(bw, bh);
+
+  uint localIdx = tid.y * 16 + tid.x;
+  for (uint idx = localIdx; idx < TILE_W * 16; idx += 256) {
+    uint tileX = idx % TILE_W;
+    uint tileY = idx / TILE_W;
+    float2 uv = (float2(float(tileOriginX + int(tileX)) + 0.5,
+                        float(tileOriginY + int(tileY)) + 0.5)) * invBloom;
+    float4 c = dye.sample(bilinear, uv);
+    tile[idx] = float4(bloomThresholdSample(c, threshold), 0.0);
+  }
+
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  if (gid.x >= bw || gid.y >= bh) return;
+
+  float4 sum = float4(0.0);
+  for (int i = -4; i <= 4; i++) {
+    uint tileCol = uint(int(tid.x) + 4 + i);
+    sum += tile[tid.y * TILE_W + tileCol] * blurWeights[i + 4];
+  }
+  bloomOut.write(sum, gid);
 }
 
 kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],

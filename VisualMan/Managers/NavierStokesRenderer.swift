@@ -34,12 +34,12 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   
   var advectPipeline: MTLComputePipelineState
   var divergencePipeline: MTLComputePipelineState
-  var jacobiPipeline: MTLComputePipelineState
+  var jacobiRedBlackPipeline: MTLComputePipelineState
   var gradientSubtractPipeline: MTLComputePipelineState
   var splatBatchPipeline: MTLComputePipelineState
   var blurHPipeline: MTLComputePipelineState
   var blurVPipeline: MTLComputePipelineState
-  var bloomThresholdPipeline: MTLComputePipelineState
+  var bloomThresholdBlurHPipeline: MTLComputePipelineState
   var renderPipeline: MTLComputePipelineState
   var psiInitPipeline: MTLComputePipelineState
   var psiAdvectPipeline: MTLComputePipelineState
@@ -51,7 +51,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var velocityA: MTLTexture
   var velocityB: MTLTexture
   var pressure: MTLTexture
-  var pressureTemp: MTLTexture
   var divergenceTexture: MTLTexture
   var dyeA: MTLTexture
   var dyeB: MTLTexture
@@ -67,7 +66,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var prevMid: Float = 0
   private let velocityDissipation: Float = 0.985
   private let dyeDissipation: Float = 0.98
-  private let maxJacobiIterations: Int = 32
+  private let maxJacobiIterations: Int = 16
   private let rampUpFrames: UInt64 = 180
   var renderFrameCount: UInt64 = 0
   
@@ -135,11 +134,11 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.covectorPullbackPipeline = pipelines.covectorPullback
     self.copyRGPipeline = pipelines.copyRG
     self.divergencePipeline = pipelines.divergence
-    self.jacobiPipeline = pipelines.jacobi
+    self.jacobiRedBlackPipeline = pipelines.jacobiRedBlack
     self.gradientSubtractPipeline = pipelines.gradientSubtract
     self.blurHPipeline = pipelines.blurH
     self.blurVPipeline = pipelines.blurV
-    self.bloomThresholdPipeline = pipelines.bloomThreshold
+    self.bloomThresholdBlurHPipeline = pipelines.bloomThresholdBlurH
     self.renderPipeline = pipelines.render
     self.clearRGPipeline = pipelines.clearRG
     self.clearRGBAPipeline = pipelines.clearRGBA
@@ -147,7 +146,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.velocityA = textures.velocityA
     self.velocityB = textures.velocityB
     self.pressure = textures.pressure
-    self.pressureTemp = textures.pressureTemp
     self.divergenceTexture = textures.divergence
     self.dyeA = textures.dyeA
     self.dyeB = textures.dyeB
@@ -268,9 +266,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     swap(&dyeA, &dyeB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    bloomThreshold(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    blurBloomH(encoder: encoder)
+    bloomThresholdBlurH(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     blurBloomV(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
@@ -323,7 +319,7 @@ private extension NavierStokesRenderer {
       dispatchGrid(encoder: encoder)
     }
 
-    for tex in [pressure, pressureTemp, divergenceTexture] {
+    for tex in [pressure, divergenceTexture] {
       argumentTable.setTexture(tex.gpuResourceID, index: 0)
       dispatchGrid(encoder: encoder)
     }
@@ -351,7 +347,6 @@ private extension NavierStokesRenderer {
     residencySet.addAllocation(velocityA)
     residencySet.addAllocation(velocityB)
     residencySet.addAllocation(pressure)
-    residencySet.addAllocation(pressureTemp)
     residencySet.addAllocation(divergenceTexture)
     residencySet.addAllocation(dyeA)
     residencySet.addAllocation(dyeB)

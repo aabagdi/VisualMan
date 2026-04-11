@@ -21,7 +21,7 @@ extension NavierStokesRenderer {
     }
 
     let textures: [MTLTexture] = [
-      velocityA, pressure, pressureTemp,
+      velocityA, pressure,
       divergenceTexture, dyeA, dyeB, bloomA, bloomB,
       psiA, psiB, u0
     ]

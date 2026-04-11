@@ -17,11 +17,11 @@ extension NavierStokesRenderer {
     let covectorPullback: MTLComputePipelineState
     let copyRG: MTLComputePipelineState
     let divergence: MTLComputePipelineState
-    let jacobi: MTLComputePipelineState
+    let jacobiRedBlack: MTLComputePipelineState
     let gradientSubtract: MTLComputePipelineState
     let blurH: MTLComputePipelineState
     let blurV: MTLComputePipelineState
-    let bloomThreshold: MTLComputePipelineState
+    let bloomThresholdBlurH: MTLComputePipelineState
     let render: MTLComputePipelineState
     let clearRG: MTLComputePipelineState
     let clearRGBA: MTLComputePipelineState
@@ -54,11 +54,11 @@ extension NavierStokesRenderer {
           let covectorPullback = makePipeline("fluidCovectorPullback"),
           let copyRG = makePipeline("fluidCopyRG"),
           let divergence = makePipeline("fluidDivergence"),
-          let jacobi = makePipeline("fluidJacobi"),
+          let jacobiRedBlack = makePipeline("fluidJacobiRedBlack"),
           let gradientSubtract = makePipeline("fluidGradientSubtract"),
           let blurH = makePipeline("fluidBlurH"),
           let blurV = makePipeline("fluidBlurV"),
-          let bloomThreshold = makePipeline("fluidBloomThreshold"),
+          let bloomThresholdBlurH = makePipeline("fluidBloomThresholdBlurH"),
           let render = makePipeline("fluidRender"),
           let clearRG = makePipeline("fluidClearRG"),
           let clearRGBA = makePipeline("fluidClearRGBA") else {
@@ -68,9 +68,9 @@ extension NavierStokesRenderer {
     return Pipelines(splatBatch: splatBatch, advect: advect,
                      psiInit: psiInit, psiAdvect: psiAdvect,
                      covectorPullback: covectorPullback, copyRG: copyRG,
-                     divergence: divergence, jacobi: jacobi,
+                     divergence: divergence, jacobiRedBlack: jacobiRedBlack,
                      gradientSubtract: gradientSubtract, blurH: blurH,
-                     blurV: blurV, bloomThreshold: bloomThreshold,
+                     blurV: blurV, bloomThresholdBlurH: bloomThresholdBlurH,
                      render: render, clearRG: clearRG, clearRGBA: clearRGBA)
   }
   
@@ -78,7 +78,6 @@ extension NavierStokesRenderer {
     let velocityA: MTLTexture
     let velocityB: MTLTexture
     let pressure: MTLTexture
-    let pressureTemp: MTLTexture
     let divergence: MTLTexture
     let dyeA: MTLTexture
     let dyeB: MTLTexture
@@ -117,7 +116,6 @@ extension NavierStokesRenderer {
     guard let velocityA = makeTexture(format: .rg16Float, label: "velocityA"),
           let velocityB = makeTexture(format: .rg16Float, label: "velocityB"),
           let pressure = makeTexture(format: .r16Float, label: "pressure"),
-          let pressureTemp = makeTexture(format: .r16Float, label: "pressureTemp"),
           let divergence = makeTexture(format: .r16Float, label: "divergence"),
           let dyeA = makeTexture(format: .rgba16Float, label: "dyeA"),
           let dyeB = makeTexture(format: .rgba16Float, label: "dyeB"),
@@ -132,7 +130,7 @@ extension NavierStokesRenderer {
     }
 
     return Textures(velocityA: velocityA, velocityB: velocityB,
-                    pressure: pressure, pressureTemp: pressureTemp,
+                    pressure: pressure,
                     divergence: divergence, dyeA: dyeA, dyeB: dyeB,
                     bloomA: bloomA, bloomB: bloomB,
                     psiA: psiA, psiB: psiB, u0: u0)

@@ -281,21 +281,26 @@ extension NavierStokesRenderer {
     computeDivergence(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    encoder.setComputePipelineState(jacobiPipeline)
-    for _ in 0..<jacobiIterations {
-      jacobiIteration(encoder: encoder)
-      swap(&pressure, &pressureTemp)
-      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    }
-    
-    gradientSubtract(encoder: encoder)
-  }
-  
-  func jacobiIteration(encoder: any MTL4ComputeCommandEncoder) {
+    encoder.setComputePipelineState(jacobiRedBlackPipeline)
     argumentTable.setTexture(pressure.gpuResourceID, index: 0)
     argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
-    argumentTable.setTexture(pressureTemp.gpuResourceID, index: 2)
-    dispatchGrid(encoder: encoder)
+
+    let halfIterations = max(jacobiIterations / 2, 2)
+    for _ in 0..<halfIterations {
+      argumentTable.setAddress(writeUniform(UInt32(0)), index: 0)
+      dispatchGrid(encoder: encoder)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+      argumentTable.setAddress(writeUniform(UInt32(1)), index: 0)
+      dispatchGrid(encoder: encoder)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    }
+
+    gradientSubtract(encoder: encoder)
+  }
+
+  func jacobiIteration(encoder: any MTL4ComputeCommandEncoder) {
+    // Retained for API compatibility; unused after red-black refactor.
   }
 
   func computeDivergence(encoder: any MTL4ComputeCommandEncoder) {
@@ -330,24 +335,25 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder)
   }
   
-  func bloomThreshold(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(bloomThresholdPipeline)
+  func bloomThresholdBlurH(encoder: any MTL4ComputeCommandEncoder) {
+    encoder.setComputePipelineState(bloomThresholdBlurHPipeline)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
-    argumentTable.setTexture(bloomA.gpuResourceID, index: 1)
+    argumentTable.setTexture(bloomB.gpuResourceID, index: 1)
     let threshold: Float = 0.8
     argumentTable.setAddress(writeUniform(threshold), index: 0)
     let bs = Self.bloomSize
     dispatchGrid(encoder: encoder, width: bs, height: bs)
   }
-  
+
   func blurBloomH(encoder: any MTL4ComputeCommandEncoder) {
+    // Retained for API compatibility; replaced by fused bloomThresholdBlurH.
     encoder.setComputePipelineState(blurHPipeline)
     argumentTable.setTexture(bloomA.gpuResourceID, index: 0)
     argumentTable.setTexture(bloomB.gpuResourceID, index: 1)
     let bs = Self.bloomSize
     dispatchGrid(encoder: encoder, width: bs, height: bs)
   }
-  
+
   func blurBloomV(encoder: any MTL4ComputeCommandEncoder) {
     encoder.setComputePipelineState(blurVPipeline)
     argumentTable.setTexture(bloomB.gpuResourceID, index: 0)
