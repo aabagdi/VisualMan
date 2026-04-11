@@ -258,41 +258,43 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::write> output [[texture(1)]],
                         texture2d<float, access::sample> bloom [[texture(2)]],
                         constant float &bass [[buffer(0)]],
+                        constant float &mid [[buffer(1)]],
                         uint2 gid [[thread_position_in_grid]]) {
   uint w = output.get_width();
   uint h = output.get_height();
-  
+
   constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
   float2 center = (float2(gid) + 0.5) / float2(w, h);
   float2 texel = 1.0 / float2(dye.get_width(), dye.get_height());
-  
+
   float4 color = float4(0);
   color += dye.sample(bilinear, center + float2(-0.25, -0.75) * texel);
   color += dye.sample(bilinear, center + float2( 0.75, -0.25) * texel);
   color += dye.sample(bilinear, center + float2(-0.75,  0.25) * texel);
   color += dye.sample(bilinear, center + float2( 0.25,  0.75) * texel);
   color *= 0.25;
-  
+
   float3 c = max(color.rgb, float3(0.0));
-  
+
   c += bloom.sample(bilinear, center).rgb * 0.5;
-  
-  c *= 1.0 + bass * 0.4;
-  
+
+  c *= 1.0 + bass * 0.4 + mid * 0.25;
+
   c *= 0.5;
-  
+
   float lum = dot(c, float3(0.299, 0.587, 0.114));
   float scaledLum = lum / (1.0 + lum);
   c = c * (scaledLum / max(lum, 1e-4));
-  
+
   lum = dot(c, float3(0.299, 0.587, 0.114));
-  c = mix(float3(lum), c, 1.8);
+  float saturation = 1.8 + mid * 0.4;
+  c = mix(float3(lum), c, saturation);
   c = clamp(c, 0.0, 1.0);
-  
+
   c.r = pow(max(c.r, 0.0f), 1.0f / 2.2f);
   c.g = pow(max(c.g, 0.0f), 1.0f / 2.2f);
   c.b = pow(max(c.b, 0.0f), 1.0f / 2.2f);
-  
+
   output.write(float4(c, 1.0), gid);
 }
 

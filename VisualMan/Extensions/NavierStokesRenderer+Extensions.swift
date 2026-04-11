@@ -157,6 +157,24 @@ extension NavierStokesRenderer {
       let midColor = hsv2rgb(h: midHue, s: 0.75, v: mid * 0.6) * midBoost
       dyeSplats.append(SplatParams(position: pos, value: midColor, radius: midRadius * 1.3))
     }
+
+    if midOnset > 0.12 {
+      let burstCount = 5
+      let burstForce = midOnset * 350.0
+      let burstRadius = gs * 0.035
+      for i in 0..<burstCount {
+        let angle = Float(i) * (.pi * 2.0 / Float(burstCount)) + time * 1.5
+        let dir = SIMD2<Float>(cos(angle), sin(angle))
+        let splatPos = SIMD2<Float>(center, center) + dir * gs * 0.2
+        let tangent = SIMD2<Float>(-dir.y, dir.x)
+        let force = SIMD3<Float>(tangent.x, tangent.y, 0) * burstForce
+        forceSplats.append(SplatParams(position: splatPos, value: force, radius: burstRadius))
+
+        let hue = fmod(time * 0.07 + Float(i) * 0.2, 1.0)
+        let color = hsv2rgb(h: hue, s: 0.9, v: mid * 0.8)
+        dyeSplats.append(SplatParams(position: splatPos, value: color, radius: burstRadius * 1.3))
+      }
+    }
   }
 
   private func collectHighSplats(high: Float,
@@ -338,12 +356,13 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder, width: bs, height: bs)
   }
   
-  func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture, bass: Float) {
+  func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture, bass: Float, mid: Float) {
     encoder.setComputePipelineState(renderPipeline)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(output.gpuResourceID, index: 1)
     argumentTable.setTexture(bloomA.gpuResourceID, index: 2)
     argumentTable.setAddress(writeUniform(bass), index: 0)
+    argumentTable.setAddress(writeUniform(mid), index: 1)
     dispatchGrid(encoder: encoder, width: output.width, height: output.height)
   }
   

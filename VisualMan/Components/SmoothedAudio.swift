@@ -15,6 +15,6 @@ struct SmoothedAudio {
     bass = bass * 0.5 + levels.bassLevel * 0.5
     mid = mid * 0.6 + levels.midLevel * 0.4
     high = high * 0.4 + levels.highLevel * 0.6
-    time += dt * (1.0 + bass * 0.5)
+    time += dt * (1.0 + bass * 0.5 + mid * 0.3)
   }
 }

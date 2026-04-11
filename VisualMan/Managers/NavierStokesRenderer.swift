@@ -214,7 +214,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     uniformOffset = 0
     
     renderFrameCount += 1
-    time += dt * (1.0 + bass * 0.5)
+    time += dt * (1.0 + bass * 0.5 + mid * 0.3)
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
@@ -262,7 +262,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
 
-    let dynamicDyeDissipation: Float = 0.98 + bass * 0.015
+    let dynamicDyeDissipation: Float = 0.98 + bass * 0.01 + mid * 0.008
     advect(encoder: encoder, velocityIn: velocityA, fieldIn: dyeA,
            fieldOut: dyeB, dissipation: dynamicDyeDissipation)
     swap(&dyeA, &dyeB)
@@ -275,7 +275,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     blurBloomV(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    render(encoder: encoder, output: output, bass: bass)
+    render(encoder: encoder, output: output, bass: bass, mid: mid)
   }
 }
 
