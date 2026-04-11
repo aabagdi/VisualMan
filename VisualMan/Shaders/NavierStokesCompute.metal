@@ -327,7 +327,6 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float2 center = (float2(gid) + 0.5) / float2(w, h);
   float2 texel = 1.0 / float2(dye.get_width(), dye.get_height());
 
-  // Subtle curl-noise UV jitter — masks grid artifacts, adds organic shimmer.
   float2 jitter = curlNoiseOffset(center, renderTime) * 0.0015;
   float2 sampleCenter = center + jitter;
 
@@ -340,7 +339,6 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
 
   float3 c = max(color.rgb, float3(0.0));
 
-  // Multi-scale bloom: tight core + medium halo + wide soft glow.
   float3 bHi  = bloomHi.sample(bilinear, sampleCenter).rgb;
   float3 bMid = bloomMid.sample(bilinear, sampleCenter).rgb;
   float3 bLo  = bloomLo.sample(bilinear, sampleCenter).rgb;
@@ -348,20 +346,17 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
 
   c *= 1.0 + bass * 0.4 + mid * 0.25;
 
-  // Saturation BEFORE tonemap so highlights stay colorful.
   float lum0 = dot(c, float3(0.299, 0.587, 0.114));
   float saturation = 1.8 + mid * 0.4;
   c = mix(float3(lum0), c, saturation);
   c = max(c, float3(0.0));
 
-  // Reinhard with white point — preserves bright detail without flattening.
   float lum = dot(c, float3(0.299, 0.587, 0.114));
   float whitePoint = 4.0;
   float scaledLum = (lum * (1.0 + lum / (whitePoint * whitePoint))) / (1.0 + lum);
   c = c * (scaledLum / max(lum, 1e-4));
   c = clamp(c, 0.0, 1.0);
 
-  // Proper sRGB encoding instead of plain gamma 2.2.
   c = float3(srgbEncode(c.r), srgbEncode(c.g), srgbEncode(c.b));
 
   float3 finalColor = c;
@@ -530,7 +525,6 @@ kernel void fluidVorticityConfinement(texture2d<float, access::read> curl [[text
   float2 grad = float2(0.5 * (cR - cL), 0.5 * (cU - cD));
   float len = length(grad) + 1e-5;
   float2 N = grad / len;
-  // 2D confinement force: epsilon * (N x curl_z) = epsilon * (N.y, -N.x) * curl
   float2 force = epsilon * float2(N.y, -N.x) * cC;
 
   float4 vel = velocity.read(gid);
@@ -565,10 +559,8 @@ kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[t
   float4 backward = phiHat0.sample(linearSampler, pos * invSize);
   float4 source = phiN.sample(linearSampler, backPos * invSize);
 
-  // Corrected estimate
   float4 corrected = forward + 0.5 * (source - backward);
 
-  // Clamp to neighborhood min/max at backPos to suppress overshoots
   int2 base = int2(floor(backPos - 0.5));
   int2 c00 = clamp(base,              int2(0), int2(w - 1, h - 1));
   int2 c10 = clamp(base + int2(1, 0), int2(0), int2(w - 1, h - 1));
