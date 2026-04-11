@@ -10,13 +10,14 @@ import MetalKit
 
 struct LiquidLightVisualizerView: View {
   @Environment(VisualizerRendererCache.self) private var cache
+  @State private var renderer: LiquidLightRenderer?
 
   let audioLevels: [1024 of Float]
 
   var body: some View {
     ZStack {
       Color.black
-      if let renderer = cache.renderer(LiquidLightRenderer.self, make: { LiquidLightRenderer() }) {
+      if let renderer {
         AudioMetalView(renderer: renderer,
                        audioLevels: audioLevels,
                        config: MetalViewConfig(
@@ -25,5 +26,12 @@ struct LiquidLightVisualizerView: View {
       }
     }
     .ignoresSafeArea()
+    .task {
+      if let cached = cache.renderer(LiquidLightRenderer.self) {
+        renderer = cached
+      } else {
+        renderer = await cache.renderer(LiquidLightRenderer.self) { await LiquidLightRenderer.create() }
+      }
+    }
   }
 }

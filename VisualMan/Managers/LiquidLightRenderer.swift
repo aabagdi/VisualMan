@@ -55,12 +55,26 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   private var lastDrawableWidth: Int = 0
   private var lastDrawableHeight: Int = 0
 
-  init?() {
-    guard let device = MTLCreateSystemDefaultDevice(),
-          let commandQueue = device.makeMTL4CommandQueue(),
+  static func create() async -> LiquidLightRenderer? {
+    let prepared = await Task.detached(priority: .userInitiated) {
+      guard let device = MTLCreateSystemDefaultDevice(),
+            let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+        return nil as (MTLDevice, Pipelines)?
+      }
+      guard let pipelines = createPipelines(device: device, compiler: compiler) else {
+        return nil
+      }
+      return (device, pipelines)
+    }.value
+
+    guard let (device, pipelines) = prepared else { return nil }
+    return LiquidLightRenderer(device: device, pipelines: pipelines)
+  }
+
+  private init?(device: MTLDevice, pipelines: Pipelines) {
+    guard let commandQueue = device.makeMTL4CommandQueue(),
           let commandBuffer = device.makeCommandBuffer(),
-          let sharedEvent = device.makeSharedEvent(),
-          let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+          let sharedEvent = device.makeSharedEvent() else {
       return nil
     }
     sharedEvent.signaledValue = 0
@@ -71,8 +85,6 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     guard let firstUniformBuffer = uniformBuffers.first else { return nil }
 
     guard let argumentTable = Self.createArgumentTable(device: device) else { return nil }
-
-    guard let pipelines = Self.createPipelines(device: device, compiler: compiler) else { return nil }
 
     let setDesc = MTLResidencySetDescriptor()
     setDesc.initialCapacity = 4

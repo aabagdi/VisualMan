@@ -146,7 +146,7 @@ struct MusicPlayerView: View {
       viewModel.start(audioSources: _audioSources, startingIndex: _startingIndex)
     }
     .task {
-      rendererCache.preWarm()
+      await rendererCache.preWarm()
     }
     .onDisappear {
       viewModel.cleanup()

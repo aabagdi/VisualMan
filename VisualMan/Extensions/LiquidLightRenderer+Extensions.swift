@@ -8,7 +8,7 @@
 import Metal
 import os
 
-private let liquidLightLogger = Logger(subsystem: "com.VisualMan", category: "LiquidLightRenderer")
+private nonisolated let liquidLightLogger = Logger(subsystem: "com.VisualMan", category: "LiquidLightRenderer")
 
 extension LiquidLightRenderer {
   struct Pipelines {
@@ -16,7 +16,7 @@ extension LiquidLightRenderer {
     let blur: MTLComputePipelineState
   }
 
-  static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
+  nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
     guard let library = device.makeDefaultLibrary() else {
       liquidLightLogger.error("Failed to create default Metal library")
       return nil

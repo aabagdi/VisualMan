@@ -12,6 +12,7 @@ extension NavierStokesRenderer {
     time = 0
     prevBass = 0
     prevMid = 0
+    renderFrameCount = 0
 
     guard let blitQueue = device.makeCommandQueue(),
           let cmd = blitQueue.makeCommandBuffer(),
@@ -21,7 +22,8 @@ extension NavierStokesRenderer {
 
     let textures: [MTLTexture] = [
       velocityA, pressure, pressureTemp,
-      divergenceTexture, dyeA, dyeB, bloomA, bloomB
+      divergenceTexture, dyeA, dyeB, bloomA, bloomB,
+      psiA, psiB, u0
     ]
 
     for tex in textures {
@@ -48,6 +50,7 @@ extension NavierStokesRenderer {
     blit.endEncoding()
     cmd.commit()
     cmd.waitUntilCompleted()
+    framesSinceReinit = reinitInterval
   }
 
   private func bytesPerPixel(for format: MTLPixelFormat) -> Int {

@@ -23,7 +23,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     let mtkView = MTKView()
     mtkView.device = renderer.device
     mtkView.delegate = context.coordinator
-    mtkView.preferredFramesPerSecond = 60
+    mtkView.preferredFramesPerSecond = 120
     mtkView.colorPixelFormat = .bgra8Unorm
     mtkView.framebufferOnly = false
     mtkView.isPaused = false
@@ -128,7 +128,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     }
     
     private func applyDrawableScale(to view: MTKView) {
-      view.preferredFramesPerSecond = gpuRampedUp ? targetFPS : 60
+      view.preferredFramesPerSecond = targetFPS
       guard nativeDrawableSize != .zero else { return }
       let scaledSize = CGSize(
         width: nativeDrawableSize.width * drawableScaleFactor,

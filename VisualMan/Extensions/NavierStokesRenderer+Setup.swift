@@ -11,10 +11,11 @@ import os
 extension NavierStokesRenderer {
   struct Pipelines {
     let splatBatch: MTLComputePipelineState
-    let diffuse: MTLComputePipelineState
     let advect: MTLComputePipelineState
-    let covectorAdvect: MTLComputePipelineState
-    let vorticityConfine: MTLComputePipelineState
+    let psiInit: MTLComputePipelineState
+    let psiAdvect: MTLComputePipelineState
+    let covectorPullback: MTLComputePipelineState
+    let copyRG: MTLComputePipelineState
     let divergence: MTLComputePipelineState
     let jacobi: MTLComputePipelineState
     let gradientSubtract: MTLComputePipelineState
@@ -22,9 +23,11 @@ extension NavierStokesRenderer {
     let blurV: MTLComputePipelineState
     let bloomThreshold: MTLComputePipelineState
     let render: MTLComputePipelineState
+    let clearRG: MTLComputePipelineState
+    let clearRGBA: MTLComputePipelineState
   }
   
-  static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
+  nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
     guard let library = device.makeDefaultLibrary() else {
       logger.error("Failed to create default Metal library")
       return nil
@@ -45,27 +48,30 @@ extension NavierStokesRenderer {
     }
     
     guard let splatBatch = makePipeline("fluidSplatBatch"),
-          let diffuse = makePipeline("fluidDiffuse"),
           let advect = makePipeline("fluidAdvect"),
-          let covectorAdvect = makePipeline("fluidAdvectCovector"),
-          let vorticityConfine = makePipeline("fluidVorticityConfine"),
+          let psiInit = makePipeline("fluidPsiInit"),
+          let psiAdvect = makePipeline("fluidPsiAdvect"),
+          let covectorPullback = makePipeline("fluidCovectorPullback"),
+          let copyRG = makePipeline("fluidCopyRG"),
           let divergence = makePipeline("fluidDivergence"),
           let jacobi = makePipeline("fluidJacobi"),
           let gradientSubtract = makePipeline("fluidGradientSubtract"),
           let blurH = makePipeline("fluidBlurH"),
           let blurV = makePipeline("fluidBlurV"),
           let bloomThreshold = makePipeline("fluidBloomThreshold"),
-          let render = makePipeline("fluidRender") else {
+          let render = makePipeline("fluidRender"),
+          let clearRG = makePipeline("fluidClearRG"),
+          let clearRGBA = makePipeline("fluidClearRGBA") else {
       return nil
     }
     
-    return Pipelines(splatBatch: splatBatch, diffuse: diffuse, advect: advect,
-                     covectorAdvect: covectorAdvect,
-                     vorticityConfine: vorticityConfine,
+    return Pipelines(splatBatch: splatBatch, advect: advect,
+                     psiInit: psiInit, psiAdvect: psiAdvect,
+                     covectorPullback: covectorPullback, copyRG: copyRG,
                      divergence: divergence, jacobi: jacobi,
                      gradientSubtract: gradientSubtract, blurH: blurH,
                      blurV: blurV, bloomThreshold: bloomThreshold,
-                     render: render)
+                     render: render, clearRG: clearRG, clearRGBA: clearRGBA)
   }
   
   struct Textures {
@@ -78,13 +84,26 @@ extension NavierStokesRenderer {
     let dyeB: MTLTexture
     let bloomA: MTLTexture
     let bloomB: MTLTexture
+    let psiA: MTLTexture
+    let psiB: MTLTexture
+    let u0: MTLTexture
   }
   
+  static func createResidencySet(device: MTLDevice) -> MTLResidencySet? {
+    let desc = MTLResidencySetDescriptor()
+    desc.initialCapacity = 16
+    return try? device.makeResidencySet(descriptor: desc)
+  }
+
+  static let bloomSize: Int = 256
+
   static func createTextures(device: MTLDevice) -> Textures? {
     func makeTexture(format: MTLPixelFormat, label: String,
+                     width: Int = gridSize,
+                     height: Int = gridSize,
                      usage: MTLTextureUsage = [.shaderRead, .shaderWrite]) -> MTLTexture? {
       let desc = MTLTextureDescriptor.texture2DDescriptor(
-        pixelFormat: format, width: gridSize, height: gridSize, mipmapped: false
+        pixelFormat: format, width: width, height: height, mipmapped: false
       )
       desc.usage = usage
       desc.storageMode = .private
@@ -102,14 +121,20 @@ extension NavierStokesRenderer {
           let divergence = makeTexture(format: .r16Float, label: "divergence"),
           let dyeA = makeTexture(format: .rgba16Float, label: "dyeA"),
           let dyeB = makeTexture(format: .rgba16Float, label: "dyeB"),
-          let bloomA = makeTexture(format: .rgba16Float, label: "bloomA"),
-          let bloomB = makeTexture(format: .rgba16Float, label: "bloomB") else {
+          let bloomA = makeTexture(format: .rgba16Float, label: "bloomA",
+                                   width: bloomSize, height: bloomSize),
+          let bloomB = makeTexture(format: .rgba16Float, label: "bloomB",
+                                   width: bloomSize, height: bloomSize),
+          let psiA = makeTexture(format: .rg16Float, label: "psiA"),
+          let psiB = makeTexture(format: .rg16Float, label: "psiB"),
+          let u0 = makeTexture(format: .rg16Float, label: "u0") else {
       return nil
     }
-    
+
     return Textures(velocityA: velocityA, velocityB: velocityB,
                     pressure: pressure, pressureTemp: pressureTemp,
                     divergence: divergence, dyeA: dyeA, dyeB: dyeB,
-                    bloomA: bloomA, bloomB: bloomB)
+                    bloomA: bloomA, bloomB: bloomB,
+                    psiA: psiA, psiB: psiB, u0: u0)
   }
 }

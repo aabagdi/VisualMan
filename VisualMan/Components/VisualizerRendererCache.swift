@@ -11,18 +11,40 @@ import SwiftUI
 @Observable
 final class VisualizerRendererCache {
   private var renderers: [ObjectIdentifier: any MetalVisualizerRenderer] = [:]
+  private var inFlightTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
-  func renderer<R: MetalVisualizerRenderer>(_ type: R.Type, make: () -> R?) -> R? {
-    let key = ObjectIdentifier(type)
-    if let existing = renderers[key] as? R { return existing }
-    guard let new = make() else { return nil }
-    renderers[key] = new
-    return new
+  func renderer<R: MetalVisualizerRenderer>(_ type: R.Type) -> R? {
+    renderers[ObjectIdentifier(type)] as? R
   }
 
-  func preWarm() {
-    _ = renderer(NavierStokesRenderer.self) { NavierStokesRenderer() }
-    _ = renderer(LiquidLightRenderer.self) { LiquidLightRenderer() }
+  func renderer<R: MetalVisualizerRenderer>(_ type: R.Type, make: @escaping @MainActor () async -> R?) async -> R? {
+    let key = ObjectIdentifier(type)
+    if let existing = renderers[key] as? R { return existing }
+
+    if let task = inFlightTasks[key] {
+      await task.value
+      return renderers[key] as? R
+    }
+
+    let task = Task<Void, Never> { @MainActor in
+      if let new = await make() {
+        self.renderers[key] = new
+      }
+    }
+    inFlightTasks[key] = task
+    await task.value
+    inFlightTasks.removeValue(forKey: key)
+    return renderers[key] as? R
+  }
+
+  func preWarm() async {
+    async let ns: Void = {
+      _ = await self.renderer(NavierStokesRenderer.self) { await NavierStokesRenderer.create() }
+    }()
+    async let ll: Void = {
+      _ = await self.renderer(LiquidLightRenderer.self) { await LiquidLightRenderer.create() }
+    }()
+    _ = await (ns, ll)
   }
 
   func resetAll() {

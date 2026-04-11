@@ -28,14 +28,11 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
   
-  static let logger = Logger(subsystem: "com.VisualMan", category: "NavierStokesRenderer")
+  nonisolated static let logger = Logger(subsystem: "com.VisualMan", category: "NavierStokesRenderer")
   static let gridSize: Int = 1024
   var gridSize: Int { Self.gridSize }
   
-  var diffusePipeline: MTLComputePipelineState
   var advectPipeline: MTLComputePipelineState
-  var covectorAdvectPipeline: MTLComputePipelineState
-  var vorticityConfinePipeline: MTLComputePipelineState
   var divergencePipeline: MTLComputePipelineState
   var jacobiPipeline: MTLComputePipelineState
   var gradientSubtractPipeline: MTLComputePipelineState
@@ -44,9 +41,15 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var blurVPipeline: MTLComputePipelineState
   var bloomThresholdPipeline: MTLComputePipelineState
   var renderPipeline: MTLComputePipelineState
+  var psiInitPipeline: MTLComputePipelineState
+  var psiAdvectPipeline: MTLComputePipelineState
+  var covectorPullbackPipeline: MTLComputePipelineState
+  var copyRGPipeline: MTLComputePipelineState
+  var clearRGPipeline: MTLComputePipelineState
+  var clearRGBAPipeline: MTLComputePipelineState
   
   var velocityA: MTLTexture
-  private var velocityB: MTLTexture
+  var velocityB: MTLTexture
   var pressure: MTLTexture
   var pressureTemp: MTLTexture
   var divergenceTexture: MTLTexture
@@ -54,6 +57,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var dyeB: MTLTexture
   var bloomA: MTLTexture
   var bloomB: MTLTexture
+  var psiA: MTLTexture
+  var psiB: MTLTexture
+  var u0: MTLTexture
   
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
@@ -61,10 +67,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var prevMid: Float = 0
   private let velocityDissipation: Float = 0.985
   private let dyeDissipation: Float = 0.98
-  let jacobiIterations: Int = 32
-  let viscosity: Float = 0.0002
-  let diffuseIterations: Int = 4
-  let vorticityStrength: Float = 0.5
+  private let maxJacobiIterations: Int = 32
+  private let rampUpFrames: UInt64 = 180
+  var renderFrameCount: UInt64 = 0
   
   private static let maxFramesInFlight: UInt64 = 3
   private var commandAllocators = [any MTL4CommandAllocator]()
@@ -76,47 +81,59 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   private let sharedEvent: MTLSharedEvent
   private var frameNumber: UInt64 = 0
   private let residencySet: MTLResidencySet
+  let reinitInterval: Int = 6
+  var framesSinceReinit: Int = 6
   
   private var currentUniformBuffer: MTLBuffer
   
-  init?() {
-    guard let device = MTLCreateSystemDefaultDevice(),
-          let commandQueue = device.makeMTL4CommandQueue(),
+  static func create() async -> NavierStokesRenderer? {
+    let prepared = await Task.detached(priority: .userInitiated) {
+      guard let device = MTLCreateSystemDefaultDevice(),
+            let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+        return nil as (MTLDevice, Pipelines)?
+      }
+      guard let pipelines = createPipelines(device: device, compiler: compiler) else {
+        return nil
+      }
+      return (device, pipelines)
+    }.value
+
+    guard let (device, pipelines) = prepared else { return nil }
+    guard let renderer = NavierStokesRenderer(device: device, pipelines: pipelines) else { return nil }
+    renderer.warmUpGPU()
+    return renderer
+  }
+
+  private init?(device: MTLDevice, pipelines: Pipelines) {
+    guard let commandQueue = device.makeMTL4CommandQueue(),
           let commandBuffer = device.makeCommandBuffer(),
-          let sharedEvent = device.makeSharedEvent(),
-          let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+          let sharedEvent = device.makeSharedEvent() else {
       return nil
     }
     sharedEvent.signaledValue = 0
-    
-    guard let allocatorsAndBuffers = Self.createAllocatorsAndBuffers(device: device) else { return nil }
-    let commandAllocators = allocatorsAndBuffers.allocators
-    let uniformBuffers = allocatorsAndBuffers.buffers
-    guard let firstUniformBuffer = uniformBuffers.first else { return nil }
-    
+
+    guard let allocatorsAndBuffers = Self.createAllocatorsAndBuffers(device: device),
+          let firstUniformBuffer = allocatorsAndBuffers.buffers.first else { return nil }
+
     guard let argumentTable = Self.createArgumentTable(device: device) else { return nil }
-    
-    guard let pipelines = Self.createPipelines(device: device, compiler: compiler) else { return nil }
-    
     guard let textures = Self.createTextures(device: device) else { return nil }
-    
-    let rsDesc = MTLResidencySetDescriptor()
-    rsDesc.initialCapacity = 16
-    guard let residencySet = try? device.makeResidencySet(descriptor: rsDesc) else { return nil }
-    
+    guard let residencySet = Self.createResidencySet(device: device) else { return nil }
+
     self.device = device
     self.commandQueue = commandQueue
     self.commandBuffer = commandBuffer
     self.sharedEvent = sharedEvent
-    self.commandAllocators = commandAllocators
-    self.uniformBuffers = uniformBuffers
+    self.commandAllocators = allocatorsAndBuffers.allocators
+    self.uniformBuffers = allocatorsAndBuffers.buffers
     self.currentUniformBuffer = firstUniformBuffer
     self.argumentTable = argumentTable
+    
     self.splatBatchPipeline = pipelines.splatBatch
-    self.diffusePipeline = pipelines.diffuse
     self.advectPipeline = pipelines.advect
-    self.covectorAdvectPipeline = pipelines.covectorAdvect
-    self.vorticityConfinePipeline = pipelines.vorticityConfine
+    self.psiInitPipeline = pipelines.psiInit
+    self.psiAdvectPipeline = pipelines.psiAdvect
+    self.covectorPullbackPipeline = pipelines.covectorPullback
+    self.copyRGPipeline = pipelines.copyRG
     self.divergencePipeline = pipelines.divergence
     self.jacobiPipeline = pipelines.jacobi
     self.gradientSubtractPipeline = pipelines.gradientSubtract
@@ -124,6 +141,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.blurVPipeline = pipelines.blurV
     self.bloomThresholdPipeline = pipelines.bloomThreshold
     self.renderPipeline = pipelines.render
+    self.clearRGPipeline = pipelines.clearRG
+    self.clearRGBAPipeline = pipelines.clearRGBA
+    
     self.velocityA = textures.velocityA
     self.velocityB = textures.velocityB
     self.pressure = textures.pressure
@@ -133,8 +153,12 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.dyeB = textures.dyeB
     self.bloomA = textures.bloomA
     self.bloomB = textures.bloomB
-    self.residencySet = residencySet
+    self.psiA = textures.psiA
+    self.psiB = textures.psiB
+    self.u0 = textures.u0
     
+    self.residencySet = residencySet
+
     configureResidencySet()
   }
   
@@ -174,21 +198,24 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
               mid: Float,
               high: Float,
               drawable: CAMetalDrawable) {
-    frameNumber += 1
-    let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
-    
-    let waitValue = frameNumber > Self.maxFramesInFlight
-      ? frameNumber - Self.maxFramesInFlight
-      : 0
-    sharedEvent.wait(untilSignaledValue: waitValue, timeoutMS: 1000)
+    let nextFrame = frameNumber + 1
+    let frameIndex = Int(nextFrame % Self.maxFramesInFlight)
+
+    if nextFrame > Self.maxFramesInFlight {
+      let waitValue = nextFrame - Self.maxFramesInFlight
+      guard sharedEvent.signaledValue >= waitValue else { return }
+    }
+
+    frameNumber = nextFrame
     
     let allocator = commandAllocators[frameIndex]
     currentUniformBuffer = uniformBuffers[frameIndex]
     allocator.reset()
     uniformOffset = 0
     
+    renderFrameCount += 1
     time += dt * (1.0 + bass * 0.5)
-    
+
     commandBuffer.beginCommandBuffer(allocator: allocator)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
@@ -206,48 +233,48 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     drawable.present()
   }
 
+  private var currentJacobiIterations: Int {
+    let t = min(Float(renderFrameCount) / Float(rampUpFrames), 1.0)
+    return max(Int(Float(maxJacobiIterations) * t), 4)
+  }
+  
   private func runSimulationPass(encoder: any MTL4ComputeCommandEncoder,
                                  bass: Float, mid: Float, high: Float,
                                  output: MTLTexture) {
-    injectAudioSplats(encoder: encoder, bass: bass, mid: mid, high: high)
+    advectPsi(encoder: encoder)
+    swap(&psiA, &psiB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    diffuseField(encoder: encoder, fieldA: &velocityA, fieldB: &velocityB)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    applyVorticityConfinement(encoder: encoder, bass: bass)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    advectCovector(encoder: encoder,
-                   velocityIn: velocityA,
-                   covectorOut: velocityB,
-                   dissipation: velocityDissipation)
+
+    covectorPullback(encoder: encoder, dissipation: 0.995)
     swap(&velocityA, &velocityB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    project(encoder: encoder)
+
+    injectAudioSplats(encoder: encoder, bass: bass, mid: mid, high: high)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    let dynamicDyeDissipation = dyeDissipation + bass * 0.015
+
+    project(encoder: encoder, jacobiIterations: currentJacobiIterations)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    framesSinceReinit += 1
+    if framesSinceReinit >= reinitInterval {
+      reinitFlowMap(encoder: encoder)
+      framesSinceReinit = 0
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    }
+
+    let dynamicDyeDissipation: Float = 0.98 + bass * 0.015
     advect(encoder: encoder, velocityIn: velocityA, fieldIn: dyeA,
            fieldOut: dyeB, dissipation: dynamicDyeDissipation)
     swap(&dyeA, &dyeB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
-    blurDyeH(encoder: encoder)
-    swap(&dyeA, &dyeB)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    blurDyeV(encoder: encoder)
-    swap(&dyeA, &dyeB)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
+
     bloomThreshold(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     blurBloomH(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     blurBloomV(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    
+
     render(encoder: encoder, output: output, bass: bass)
   }
 }
@@ -280,6 +307,46 @@ private extension NavierStokesRenderer {
     }
   }
   
+  func warmUpGPU() {
+    let allocator = commandAllocators[0]
+    currentUniformBuffer = uniformBuffers[0]
+    allocator.reset()
+    uniformOffset = 0
+
+    commandBuffer.beginCommandBuffer(allocator: allocator)
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+    encoder.setArgumentTable(argumentTable)
+
+    encoder.setComputePipelineState(clearRGPipeline)
+    for tex in [velocityA, velocityB, u0] {
+      argumentTable.setTexture(tex.gpuResourceID, index: 0)
+      dispatchGrid(encoder: encoder)
+    }
+
+    for tex in [pressure, pressureTemp, divergenceTexture] {
+      argumentTable.setTexture(tex.gpuResourceID, index: 0)
+      dispatchGrid(encoder: encoder)
+    }
+
+    encoder.setComputePipelineState(clearRGBAPipeline)
+    for tex in [dyeA, dyeB, bloomA, bloomB] {
+      argumentTable.setTexture(tex.gpuResourceID, index: 0)
+      dispatchGrid(encoder: encoder)
+    }
+
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    encoder.setComputePipelineState(psiInitPipeline)
+    argumentTable.setTexture(psiA.gpuResourceID, index: 0)
+    dispatchGrid(encoder: encoder)
+
+    encoder.endEncoding()
+    commandBuffer.endCommandBuffer()
+    commandQueue.commit([commandBuffer])
+    commandQueue.signalEvent(sharedEvent, value: 1)
+    frameNumber = 1
+  }
+
   func configureResidencySet() {
     residencySet.addAllocation(velocityA)
     residencySet.addAllocation(velocityB)
@@ -290,6 +357,9 @@ private extension NavierStokesRenderer {
     residencySet.addAllocation(dyeB)
     residencySet.addAllocation(bloomA)
     residencySet.addAllocation(bloomB)
+    residencySet.addAllocation(psiA)
+    residencySet.addAllocation(psiB)
+    residencySet.addAllocation(u0)
     
     for buf in uniformBuffers { residencySet.addAllocation(buf) }
     
