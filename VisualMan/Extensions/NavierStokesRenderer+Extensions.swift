@@ -410,9 +410,25 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(bloomA.gpuResourceID, index: 2)
     argumentTable.setTexture(bloomMidA.gpuResourceID, index: 3)
     argumentTable.setTexture(bloomLoA.gpuResourceID, index: 4)
+
+    let usePrev = (frameNumber & 1) == 0
+    let historyPrev = usePrev ? taaHistoryA : taaHistoryB
+    let historyNext = usePrev ? taaHistoryB : taaHistoryA
+    if let hPrev = historyPrev, let hNext = historyNext {
+      argumentTable.setTexture(hPrev.gpuResourceID, index: 5)
+      argumentTable.setTexture(hNext.gpuResourceID, index: 6)
+    } else {
+      argumentTable.setTexture(output.gpuResourceID, index: 5)
+      argumentTable.setTexture(output.gpuResourceID, index: 6)
+    }
+
     argumentTable.setAddress(writeUniform(bass), index: 0)
     argumentTable.setAddress(writeUniform(mid), index: 1)
     argumentTable.setAddress(writeUniform(time), index: 2)
+    argumentTable.setAddress(writeUniform(taaBlendFactor), index: 3)
+    let validFlag: UInt32 = (taaHistoryValid && historyPrev != nil) ? 1 : 0
+    argumentTable.setAddress(writeUniform(validFlag), index: 4)
+
     dispatchGrid(encoder: encoder, width: output.width, height: output.height)
   }
   

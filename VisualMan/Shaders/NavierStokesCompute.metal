@@ -299,9 +299,13 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::sample> bloomHi [[texture(2)]],
                         texture2d<float, access::sample> bloomMid [[texture(3)]],
                         texture2d<float, access::sample> bloomLo [[texture(4)]],
+                        texture2d<float, access::sample> historyIn [[texture(5)]],
+                        texture2d<float, access::write> historyOut [[texture(6)]],
                         constant float &bass [[buffer(0)]],
                         constant float &mid [[buffer(1)]],
                         constant float &renderTime [[buffer(2)]],
+                        constant float &taaBlend [[buffer(3)]],
+                        constant uint &historyValid [[buffer(4)]],
                         uint2 gid [[thread_position_in_grid]]) {
   uint w = output.get_width();
   uint h = output.get_height();
@@ -343,7 +347,15 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
 
   c = float3(srgbEncode(c.r), srgbEncode(c.g), srgbEncode(c.b));
 
-  output.write(float4(c, 1.0), gid);
+  float3 finalColor = c;
+  if (historyValid != 0u) {
+    float3 prev = historyIn.sample(bilinear, center).rgb;
+    finalColor = mix(c, prev, taaBlend);
+  }
+
+  float4 outColor = float4(finalColor, 1.0);
+  output.write(outColor, gid);
+  historyOut.write(outColor, gid);
 }
 
 kernel void fluidPsiInit(texture2d<float, access::write> psiOut [[texture(0)]],

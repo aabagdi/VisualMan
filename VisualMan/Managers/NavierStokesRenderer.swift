@@ -86,9 +86,16 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   private var uniformOffset: Int = 0
   private static let uniformBufferSize: Int = 16384
   private let sharedEvent: MTLSharedEvent
-  private var frameNumber: UInt64 = 0
+  var frameNumber: UInt64 = 0
   private let residencySet: MTLResidencySet
   let reinitInterval: Int = 6
+
+  var taaHistoryA: MTLTexture?
+  var taaHistoryB: MTLTexture?
+  var taaHistoryValid: Bool = false
+  private var taaHistoryWidth: Int = 0
+  private var taaHistoryHeight: Int = 0
+  let taaBlendFactor: Float = 0.85
   var framesSinceReinit: Int = 6
   
   private var currentUniformBuffer: MTLBuffer
@@ -234,8 +241,14 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
+    ensureTAAHistory(width: drawable.texture.width, height: drawable.texture.height)
+
     runSimulationPass(encoder: encoder, bass: bass, mid: mid, high: high,
                       output: drawable.texture)
+
+    if taaHistoryA != nil && taaHistoryB != nil {
+      taaHistoryValid = true
+    }
     
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -320,8 +333,8 @@ private extension NavierStokesRenderer {
   
   static func createArgumentTable(device: MTLDevice) -> (any MTL4ArgumentTable)? {
     let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 5
-    desc.maxBufferBindCount = 3
+    desc.maxTextureBindCount = 7
+    desc.maxBufferBindCount = 5
     do {
       return try device.makeArgumentTable(descriptor: desc)
     } catch {
@@ -368,6 +381,44 @@ private extension NavierStokesRenderer {
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: 1)
     frameNumber = 1
+  }
+
+  func ensureTAAHistory(width: Int, height: Int) {
+    if width == taaHistoryWidth && height == taaHistoryHeight && taaHistoryA != nil { return }
+
+    if let a = taaHistoryA {
+      if frameNumber > 0 {
+        sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
+      }
+      residencySet.removeAllocation(a)
+    }
+    if let b = taaHistoryB { residencySet.removeAllocation(b) }
+
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+
+    guard let a = device.makeTexture(descriptor: desc),
+          let b = device.makeTexture(descriptor: desc) else {
+      taaHistoryA = nil
+      taaHistoryB = nil
+      taaHistoryValid = false
+      taaHistoryWidth = 0
+      taaHistoryHeight = 0
+      residencySet.commit()
+      return
+    }
+
+    residencySet.addAllocation(a)
+    residencySet.addAllocation(b)
+    residencySet.commit()
+
+    taaHistoryA = a
+    taaHistoryB = b
+    taaHistoryValid = false
+    taaHistoryWidth = width
+    taaHistoryHeight = height
   }
 
   func configureResidencySet() {
