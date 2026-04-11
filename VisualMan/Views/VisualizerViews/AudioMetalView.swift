@@ -23,7 +23,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     let mtkView = MTKView()
     mtkView.device = renderer.device
     mtkView.delegate = context.coordinator
-    mtkView.preferredFramesPerSecond = 120
+    mtkView.preferredFramesPerSecond = 60
     mtkView.colorPixelFormat = .bgra8Unorm
     mtkView.framebufferOnly = false
     mtkView.isPaused = false
@@ -71,6 +71,9 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private weak var mtkView: MTKView?
     private var targetFPS: Int = 120
     private var isApplyingScale = false
+    private var framesRendered: Int = 0
+    private var gpuRampedUp = false
+    private let rampUpFrameThreshold = 30
     
     init(renderer: R) {
       self.renderer = renderer
@@ -125,7 +128,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     }
     
     private func applyDrawableScale(to view: MTKView) {
-      view.preferredFramesPerSecond = targetFPS
+      view.preferredFramesPerSecond = gpuRampedUp ? targetFPS : 60
       guard nativeDrawableSize != .zero else { return }
       let scaledSize = CGSize(
         width: nativeDrawableSize.width * drawableScaleFactor,
@@ -151,9 +154,15 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         mtkView = view
         applyDrawableScale(to: view)
       }
-      
+
+      framesRendered += 1
+      if !gpuRampedUp && framesRendered >= rampUpFrameThreshold {
+        gpuRampedUp = true
+        applyDrawableScale(to: view)
+      }
+
       guard let drawable = view.currentDrawable else { return }
-      
+
       let now = CACurrentMediaTime()
       if lastFrameTime > 0 {
         let delta = Float(now - lastFrameTime)
