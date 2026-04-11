@@ -15,6 +15,7 @@ struct MusicPlayerView: View {
   
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(AudioPlaylistManager.self) private var playlistManager
+  @Environment(VisualizerRendererCache.self) private var rendererCache
   
   private let _audioSources: [any AudioSource]
   private let _startingIndex: Int
@@ -143,6 +144,9 @@ struct MusicPlayerView: View {
     .toolbar(.hidden, for: .tabBar)
     .onAppear {
       viewModel.start(audioSources: _audioSources, startingIndex: _startingIndex)
+    }
+    .task {
+      rendererCache.preWarm()
     }
     .onDisappear {
       viewModel.cleanup()

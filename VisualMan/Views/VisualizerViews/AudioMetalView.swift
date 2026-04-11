@@ -43,6 +43,12 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   func updateUIView(_ uiView: MTKView, context: Context) {
     context.coordinator.audioLevels = audioLevels
   }
+
+  static func dismantleUIView(_ uiView: MTKView, coordinator: Coordinator) {
+    if let metalLayer = uiView.layer as? CAMetalLayer {
+      coordinator.renderer.commandQueue.removeResidencySet(metalLayer.residencySet)
+    }
+  }
   
   func makeCoordinator() -> Coordinator {
     Coordinator(renderer: renderer)
@@ -55,6 +61,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var smoothedBass: Float = 0
     private var smoothedMid: Float = 0
     private var smoothedHigh: Float = 0
+    private var needsSeedSmoothing = true
     private var lastFrameTime: CFTimeInterval = 0
     
     nonisolated(unsafe) private var thermalObserver: (any NSObjectProtocol)?
@@ -157,15 +164,22 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       let bass = audioLevels.bassLevel
       let mid = audioLevels.midLevel
       let high = audioLevels.highLevel
-      
-      let bSmooth: Float = bass > smoothedBass ? 0.2 : 0.85
-      smoothedBass = smoothedBass * bSmooth + bass * (1.0 - bSmooth)
-      
-      let mSmooth: Float = mid > smoothedMid ? 0.25 : 0.8
-      smoothedMid = smoothedMid * mSmooth + mid * (1.0 - mSmooth)
-      
-      let hSmooth: Float = high > smoothedHigh ? 0.15 : 0.75
-      smoothedHigh = smoothedHigh * hSmooth + high * (1.0 - hSmooth)
+
+      if needsSeedSmoothing {
+        smoothedBass = bass
+        smoothedMid = mid
+        smoothedHigh = high
+        needsSeedSmoothing = false
+      } else {
+        let bSmooth: Float = bass > smoothedBass ? 0.2 : 0.85
+        smoothedBass = smoothedBass * bSmooth + bass * (1.0 - bSmooth)
+
+        let mSmooth: Float = mid > smoothedMid ? 0.25 : 0.8
+        smoothedMid = smoothedMid * mSmooth + mid * (1.0 - mSmooth)
+
+        let hSmooth: Float = high > smoothedHigh ? 0.15 : 0.75
+        smoothedHigh = smoothedHigh * hSmooth + high * (1.0 - hSmooth)
+      }
       
       renderer.update(bass: smoothedBass,
                       mid: smoothedMid,

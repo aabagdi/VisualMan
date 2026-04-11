@@ -20,6 +20,11 @@ final class VisualizerRendererCache {
     return new
   }
 
+  func preWarm() {
+    _ = renderer(NavierStokesRenderer.self) { NavierStokesRenderer() }
+    _ = renderer(LiquidLightRenderer.self) { LiquidLightRenderer() }
+  }
+
   func resetAll() {
     for renderer in renderers.values {
       renderer.reset()

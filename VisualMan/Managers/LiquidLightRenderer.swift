@@ -113,11 +113,10 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
       return
     }
 
-    if frameNumber > 0 {
-      sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
-    }
-
     if let old = intermediateTexture {
+      if frameNumber > 0 {
+        sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
+      }
       residencySet.removeAllocation(old)
     }
 
