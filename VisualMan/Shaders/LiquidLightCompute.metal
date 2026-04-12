@@ -38,6 +38,18 @@ inline float hash21(float2 p) {
   return fract((p3.x + p3.y) * p3.z);
 }
 
+inline float vnoise(float2 p) {
+  float2 i = floor(p);
+  float2 f = fract(p);
+  float2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i);
+  float b = hash21(i + float2(1.0, 0.0));
+  float c = hash21(i + float2(0.0, 1.0));
+  float d = hash21(i + float2(1.0, 1.0));
+  float n = mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  return n * 2.0 - 1.0;
+}
+
 inline float2x2 rot2(float a) {
   float c = fast::cos(a), s = fast::sin(a);
   return float2x2(c, s, -s, c);
@@ -304,7 +316,7 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   float minEdge = min(v1.edgeDist, v2.edgeDist * 1.3);
 
   float rimMask = fast::exp(-minEdge * 40.0);
-  float thicknessJitter = snoise(warped * 4.0 + time * 0.08) * 0.2;
+  float thicknessJitter = vnoise(warped * 4.0 + time * 0.08) * 0.2;
   half thickness = half(rimMask * (1.0 + thicknessJitter));
 
   half3 filmPhase = half3(5.5h, 7.0h, 8.5h) * thickness * half(1.0 + bass * 0.25);
@@ -322,15 +334,22 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   half3 tint = iridescence * 2.0h;
   result *= mix(half3(1.0h), tint, rimIntensity * 0.55h);
 
-  float specf = snoise(ROT2 * warped * 2.5 + time * 0.08);
-  specf = fast::pow(max(specf, 0.0f), 10.0f);
+  float specf = vnoise(ROT2 * warped * 2.5 + time * 0.08);
+  specf = max(specf, 0.0f);
+  float s2 = specf * specf;
+  float s4 = s2 * s2;
+  float s8 = s4 * s4;
+  specf = s8 * s2;
   half spec = half(specf);
   half specMask = edge1 * half(smoothstep(0.0, 0.25, v1.dist1));
   result += half3(1.0h, 0.95h, 0.9h) * spec * 0.4h * specMask;
 
   result *= 1.0h + half(bass) * 0.45h;
-  float shimmerf = snoise(ROT3 * coords * 4.0 + time * 1.2);
-  shimmerf = fast::pow(max(shimmerf, 0.0f), 6.0f) * high * 0.35;
+  float shimmerf = vnoise(ROT3 * coords * 4.0 + time * 1.2);
+  shimmerf = max(shimmerf, 0.0f);
+  float sh2 = shimmerf * shimmerf;
+  float sh4 = sh2 * sh2;
+  shimmerf = sh4 * sh2 * high * 0.35;
   half shimmer = half(shimmerf);
   result += half3(0.35h, 0.25h, 0.45h) * shimmer * specMask;
 
@@ -352,7 +371,8 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
     result = clamp((x * (a * x + b)) / (x * (2.43h * x + d) + e), 0.0h, 1.0h);
   }
 
-  result = pow(result, half3(0.95h, 1.0h, 1.05h));
+  result.r = half(fast::pow(float(result.r), 0.95f));
+  result.b = half(fast::pow(float(result.b), 1.05f));
 
   output.write(float4(float3(result), 1.0), gid);
 }
