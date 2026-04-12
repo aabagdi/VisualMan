@@ -39,7 +39,7 @@ inline float hash21(float2 p) {
 }
 
 inline float2x2 rot2(float a) {
-  float c = cos(a), s = sin(a);
+  float c = fast::cos(a), s = fast::sin(a);
   return float2x2(c, s, -s, c);
 }
 
@@ -47,7 +47,7 @@ constant float2x2 ROT1 = float2x2( 0.7974,  0.6034, -0.6034,  0.7974);
 constant float2x2 ROT2 = float2x2(-0.4161,  0.9093, -0.9093, -0.4161);
 constant float2x2 ROT3 = float2x2( 0.2837, -0.9589,  0.9589,  0.2837);
 
-constant float2 OS2_GRAD[24] = {
+constant float2 OS2_GRAD[32] = {
   float2( 0.130526192220052,  0.991444861373810),
   float2( 0.382683432365090,  0.923879532511287),
   float2( 0.608761429008721,  0.793353340291235),
@@ -72,6 +72,14 @@ constant float2 OS2_GRAD[24] = {
   float2(-0.608761429008721,  0.793353340291235),
   float2(-0.382683432365090,  0.923879532511287),
   float2(-0.130526192220052,  0.991444861373810),
+  float2( 0.130526192220052,  0.991444861373810),
+  float2( 0.382683432365090,  0.923879532511287),
+  float2( 0.608761429008721,  0.793353340291235),
+  float2( 0.793353340291235,  0.608761429008721),
+  float2( 0.923879532511287,  0.382683432365090),
+  float2( 0.991444861373810,  0.130526192220052),
+  float2( 0.991444861373810, -0.130526192220052),
+  float2( 0.923879532511287, -0.382683432365090),
 };
 
 inline int os2_gradIndex(int ix, int iy) {
@@ -81,8 +89,7 @@ inline int os2_gradIndex(int ix, int iy) {
   h ^= h >> 12;
   h *= 0xd168aaad;
   h ^= h >> 16;
-  int idx = h % 24;
-  return idx < 0 ? idx + 24 : idx;
+  return h & 31;
 }
 
 inline float os2_contrib(int ix, int iy, float dx, float dy) {
@@ -194,30 +201,30 @@ inline VoronoiResult voronoi(float2 p) {
   }
 
   float2 midpoint = 0.5 * (nearestDelta + secondDelta);
-  float2 edgeDir = normalize(secondDelta - nearestDelta);
+  float2 edgeDir = fast::normalize(secondDelta - nearestDelta);
 
   VoronoiResult r;
-  r.dist1 = sqrt(dist1);
+  r.dist1 = fast::sqrt(dist1);
   r.edgeDist = dot(midpoint, edgeDir);
   r.cellID = cellID;
   return r;
 }
 
-inline float3 liquidColor(float id, float time) {
-  float h = fract(id * 5.0 + time);
-  float3 color;
-  if (h < 0.18)
-    color = mix(float3(0.6, 0.0, 0.02), float3(0.85, 0.02, 0.1), h / 0.18);
-  else if (h < 0.35)
-    color = mix(float3(0.85, 0.02, 0.1), float3(0.6, 0.0, 0.55), (h - 0.18) / 0.17);
-  else if (h < 0.52)
-    color = mix(float3(0.6, 0.0, 0.55), float3(0.02, 0.06, 0.7), (h - 0.35) / 0.17);
-  else if (h < 0.68)
-    color = mix(float3(0.02, 0.06, 0.7), float3(0.0, 0.5, 0.6), (h - 0.52) / 0.16);
-  else if (h < 0.84)
-    color = mix(float3(0.0, 0.5, 0.6), float3(0.7, 0.35, 0.0), (h - 0.68) / 0.16);
+inline half3 liquidColor(float id, float time) {
+  half h = half(fract(id * 5.0 + time));
+  half3 color;
+  if (h < 0.18h)
+    color = mix(half3(0.6h, 0.0h, 0.02h), half3(0.85h, 0.02h, 0.1h), h / 0.18h);
+  else if (h < 0.35h)
+    color = mix(half3(0.85h, 0.02h, 0.1h), half3(0.6h, 0.0h, 0.55h), (h - 0.18h) / 0.17h);
+  else if (h < 0.52h)
+    color = mix(half3(0.6h, 0.0h, 0.55h), half3(0.02h, 0.06h, 0.7h), (h - 0.35h) / 0.17h);
+  else if (h < 0.68h)
+    color = mix(half3(0.02h, 0.06h, 0.7h), half3(0.0h, 0.5h, 0.6h), (h - 0.52h) / 0.16h);
+  else if (h < 0.84h)
+    color = mix(half3(0.0h, 0.5h, 0.6h), half3(0.7h, 0.35h, 0.0h), (h - 0.68h) / 0.16h);
   else
-    color = mix(float3(0.7, 0.35, 0.0), float3(0.6, 0.0, 0.02), (h - 0.84) / 0.16);
+    color = mix(half3(0.7h, 0.35h, 0.0h), half3(0.6h, 0.0h, 0.02h), (h - 0.84h) / 0.16h);
   return color;
 }
 
@@ -244,28 +251,29 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
 
   float2 coords = p * 1.8;
 
-  float breath = 1.0 + 0.08 * sin(time * 0.35) + bass * 0.1;
-  float2 drift = float2(cos(time * 0.07), sin(time * 0.09)) * time * 0.015;
+  float breath = 1.0 + 0.08 * fast::sin(time * 0.35) + bass * 0.1;
+  float2 drift = float2(fast::cos(time * 0.07), fast::sin(time * 0.09)) * time * 0.015;
   coords = coords * breath + drift;
 
-  float3 dropTint = float3(0.0);
-  float dropTintWeight = 0.0;
+  half3 dropTint = half3(0.0h);
+  half  dropTintWeight = 0.0h;
   for (int i = 0; i < 4; i++) {
     float4 drop = params.drops[i];
     float age = time - drop.z;
     if (drop.z < 0.0 || age < 0.0 || age > 4.0) continue;
 
     float2 toCenter = p - drop.xy;
-    float d = length(toCenter);
+    float d = fast::length(toCenter);
     float2 dir = d > 1e-4 ? toCenter / d : float2(0.0);
 
     float ringRadius = age * 0.35;
-    float pulse = exp(-pow((d - ringRadius) * 6.0, 2.0));
+    float e = (d - ringRadius) * 6.0;
+    float pulse = fast::exp(-e * e);
     float fade = 1.0 - smoothstep(0.0, 4.0, age);
 
     coords += dir * pulse * fade * 0.12;
 
-    float washStrength = pulse * fade;
+    half washStrength = half(pulse * fade);
     dropTint += liquidColor(drop.w, colorShift) * washStrength;
     dropTintWeight += washStrength;
   }
@@ -280,71 +288,73 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   float paletteField = snoise(p * 0.6 + time * 0.02) * 0.5 + 0.5;
   float cellVariation1 = v1.cellID * 0.25;
   float cellVariation2 = v2.cellID * 0.25;
-  float3 color1 = liquidColor(paletteField + cellVariation1, colorShift);
-  float3 color2 = liquidColor(paletteField + cellVariation2 + 0.15, colorShift + 1.5);
+  half3 color1 = liquidColor(paletteField + cellVariation1, colorShift);
+  half3 color2 = liquidColor(paletteField + cellVariation2 + 0.15, colorShift + 1.5);
 
-  float edge1 = 1.0 - exp(-v1.edgeDist * edgeSharpness);
-  float edge2 = 1.0 - exp(-v2.edgeDist * (edgeSharpness * 0.7));
+  half edge1 = half(1.0 - fast::exp(-v1.edgeDist * edgeSharpness));
+  half edge2 = half(1.0 - fast::exp(-v2.edgeDist * (edgeSharpness * 0.7)));
 
-  float cellFill1 = mix(0.78, 1.0, edge1);
-  float cellFill2 = mix(0.78, 1.0, edge2);
+  half cellFill1 = mix(0.78h, 1.0h, edge1);
+  half cellFill2 = mix(0.78h, 1.0h, edge2);
 
-  float3 result = color1 * cellFill1;
-  float blend2 = smoothstep(0.18, 0.55, v2.dist1) * 0.32;
+  half3 result = color1 * cellFill1;
+  half blend2 = half(smoothstep(0.18, 0.55, v2.dist1) * 0.32);
   result = mix(result, color2 * cellFill2, blend2);
 
   float minEdge = min(v1.edgeDist, v2.edgeDist * 1.3);
 
-  float rimMask = exp(-minEdge * 40.0);
+  float rimMask = fast::exp(-minEdge * 40.0);
   float thicknessJitter = snoise(warped * 4.0 + time * 0.08) * 0.2;
-  float thickness = rimMask * (1.0 + thicknessJitter);
+  half thickness = half(rimMask * (1.0 + thicknessJitter));
 
-  float3 filmPhase = float3(5.5, 7.0, 8.5) * thickness * (1.0 + bass * 0.25);
-  float3 iridescence = 0.5 + 0.18 * cos(filmPhase + float3(0.0, 2.094, 4.188));
+  half3 filmPhase = half3(5.5h, 7.0h, 8.5h) * thickness * half(1.0 + bass * 0.25);
+  half3 iridescence = 0.5h + 0.18h * cos(filmPhase + half3(0.0h, 2.094h, 4.188h));
 
   float edgeAA = 1.62 / float(h) * 1.5;
   float rimOuter = 1.0 - smoothstep(0.0, 0.05, minEdge);
   float rimInner = smoothstep(0.0, max(0.012, edgeAA), minEdge);
-  float rimIntensity = rimOuter * rimInner;
+  half rimIntensity = half(rimOuter * rimInner);
 
-  float cellSizeScale = 0.45 + 0.55 * smoothstep(0.05, 0.25, v1.dist1);
-  float contactLine = smoothstep(0.065, 0.008, minEdge) * cellSizeScale;
-  result *= (1.0 - contactLine * 0.45);
+  half cellSizeScale = half(0.45 + 0.55 * smoothstep(0.05, 0.25, v1.dist1));
+  half contactLine = half(smoothstep(0.065, 0.008, minEdge)) * cellSizeScale;
+  result *= (1.0h - contactLine * 0.45h);
 
-  float3 tint = iridescence * 2.0;
-  result *= mix(float3(1.0), tint, rimIntensity * 0.55);
+  half3 tint = iridescence * 2.0h;
+  result *= mix(half3(1.0h), tint, rimIntensity * 0.55h);
 
-  float spec = snoise(ROT2 * warped * 2.5 + time * 0.08);
-  spec = pow(max(spec, 0.0), 10.0);
-  float specMask = edge1 * smoothstep(0.0, 0.25, v1.dist1);
-  result += float3(1.0, 0.95, 0.9) * spec * 0.4 * specMask;
+  float specf = snoise(ROT2 * warped * 2.5 + time * 0.08);
+  specf = fast::pow(max(specf, 0.0f), 10.0f);
+  half spec = half(specf);
+  half specMask = edge1 * half(smoothstep(0.0, 0.25, v1.dist1));
+  result += half3(1.0h, 0.95h, 0.9h) * spec * 0.4h * specMask;
 
-  result *= 1.0 + bass * 0.45;
-  float shimmer = snoise(ROT3 * coords * 4.0 + time * 1.2);
-  shimmer = pow(max(shimmer, 0.0), 6.0) * high * 0.35;
-  result += float3(0.35, 0.25, 0.45) * shimmer * specMask;
+  result *= 1.0h + half(bass) * 0.45h;
+  float shimmerf = snoise(ROT3 * coords * 4.0 + time * 1.2);
+  shimmerf = fast::pow(max(shimmerf, 0.0f), 6.0f) * high * 0.35;
+  half shimmer = half(shimmerf);
+  result += half3(0.35h, 0.25h, 0.45h) * shimmer * specMask;
 
   float2 hotUV = p * float2(1.0, 1.1);
-  float hotDist = length(hotUV);
+  float hotDist = fast::length(hotUV);
   float falloff = 1.0 - smoothstep(0.2, 1.0, hotDist);
-  float hotspot = exp(-hotDist * hotDist * 2.2);
-  result *= falloff * (0.65 + hotspot * 0.55);
-  result += float3(0.22, 0.15, 0.07) * hotspot * 0.35;
+  float hotspot = fast::exp(-hotDist * hotDist * 2.2);
+  result *= half(falloff * (0.65 + hotspot * 0.55));
+  result += half3(0.22h, 0.15h, 0.07h) * half(hotspot * 0.35);
 
-  if (dropTintWeight > 0.0) {
-    float3 avgTint = dropTint / max(dropTintWeight, 1.0);
-    result = mix(result, avgTint, saturate(dropTintWeight * 0.5));
+  if (dropTintWeight > 0.0h) {
+    half3 avgTint = dropTint / max(dropTintWeight, 1.0h);
+    result = mix(result, avgTint, saturate(dropTintWeight * 0.5h));
   }
 
   {
-    float3 x = result;
-    float a = 2.51, b = 0.03, d = 0.59, e = 0.14;
-    result = clamp((x * (a * x + b)) / (x * (2.43 * x + d) + e), 0.0, 1.0);
+    half3 x = result;
+    half a = 2.51h, b = 0.03h, d = 0.59h, e = 0.14h;
+    result = clamp((x * (a * x + b)) / (x * (2.43h * x + d) + e), 0.0h, 1.0h);
   }
 
-  result = pow(result, float3(0.95, 1.0, 1.05));
+  result = pow(result, half3(0.95h, 1.0h, 1.05h));
 
-  output.write(float4(result, 1.0), gid);
+  output.write(float4(float3(result), 1.0), gid);
 }
 
 constant constexpr int BLUR_TILE_DIM     = 16;

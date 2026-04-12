@@ -260,7 +260,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     )
     argumentTable.setAddress(writeUniform(params), index: 0)
 
-    let threadGroupSize = MTLSize(width: 8, height: 8, depth: 1)
+    let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
     let gridDimensions = MTLSize(width: output.width, height: output.height, depth: 1)
     encoder.dispatchThreads(threadsPerGrid: gridDimensions,
                             threadsPerThreadgroup: threadGroupSize)
