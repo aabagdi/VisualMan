@@ -64,6 +64,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
+  private var lastFrameTime: CFTimeInterval = 0
+  private var smoothedBass: Float = 0
+  private var smoothedMid: Float = 0
   var prevBass: Float = 0
   var prevMid: Float = 0
   private let velocityDissipation: Float = 0.985
@@ -213,7 +216,21 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     uniformOffset = 0
     
     renderFrameCount += 1
-    time += dt * (1.0 + bass * 0.5 + mid * 0.3)
+
+    let now = CACurrentMediaTime()
+    if lastFrameTime == 0 {
+      dt = 1.0 / 60.0
+    } else {
+      dt = Float(max(1.0 / 240.0, min(1.0 / 30.0, now - lastFrameTime)))
+    }
+    lastFrameTime = now
+
+    let bassTau: Float = bass > smoothedBass ? 0.04 : 0.15
+    let midTau: Float = mid  > smoothedMid  ? 0.05 : 0.18
+    smoothedBass += (bass - smoothedBass) * (1 - exp(-dt / bassTau))
+    smoothedMid  += (mid  - smoothedMid)  * (1 - exp(-dt / midTau))
+
+    time += dt * (1.0 + smoothedBass * 0.5 + smoothedMid * 0.3)
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
