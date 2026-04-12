@@ -13,6 +13,7 @@ struct LiquidLightParams {
   float bass;
   float mid;
   float high;
+  float4 drops[4];
 };
 
 struct BlurParams {
@@ -142,10 +143,8 @@ inline float2 liquidWarp(float2 p, float time, float intensity) {
   float2 pX1 = ROT1 * p;
   float2 pY1 = ROT2 * p;
   float2 q = float2(
-    snoise(pX1 + float2(0.0, 0.0) + time * 0.04)
-      + 0.5 * snoise(ROT3 * p * 2.0 + float2(3.0, 7.0) + time * 0.06),
+    snoise(pX1 + time * 0.04),
     snoise(pY1 + float2(5.2, 1.3) + time * 0.035)
-      + 0.5 * snoise(ROT1 * p * 2.1 + float2(8.1, 2.5) + time * 0.05)
   );
 
   float2 warped = p + 3.0 * q;
@@ -245,28 +244,75 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
 
   float2 coords = p * 1.8;
 
+  float breath = 1.0 + 0.08 * sin(time * 0.35) + bass * 0.1;
+  float2 drift = float2(cos(time * 0.07), sin(time * 0.09)) * time * 0.015;
+  coords = coords * breath + drift;
+
+  float3 dropTint = float3(0.0);
+  float dropTintWeight = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float4 drop = params.drops[i];
+    float age = time - drop.z;
+    if (drop.z < 0.0 || age < 0.0 || age > 4.0) continue;
+
+    float2 toCenter = p - drop.xy;
+    float d = length(toCenter);
+    float2 dir = d > 1e-4 ? toCenter / d : float2(0.0);
+
+    float ringRadius = age * 0.35;
+    float pulse = exp(-pow((d - ringRadius) * 6.0, 2.0));
+    float fade = 1.0 - smoothstep(0.0, 4.0, age);
+
+    coords += dir * pulse * fade * 0.12;
+
+    float washStrength = pulse * fade;
+    dropTint += liquidColor(drop.w, colorShift) * washStrength;
+    dropTintWeight += washStrength;
+  }
+
   float2 warped = liquidWarp(coords, time, warpIntensity);
 
-  VoronoiResult v1 = voronoi(warped * 0.9 + flowSpeed * 0.25);
-  VoronoiResult v2 = voronoi(warped * 1.4 + float2(4.0, 8.0) + flowSpeed * 0.18);
+  float scaleField = snoise(p * 1.2 + time * 0.015) * 0.45 + 1.0;
 
-  float3 color1 = liquidColor(v1.cellID, colorShift);
-  float3 color2 = liquidColor(v2.cellID + 0.33, colorShift + 1.5);
+  VoronoiResult v1 = voronoi(warped * (0.9 * scaleField) + flowSpeed * 0.25);
+  VoronoiResult v2 = voronoi(warped * (1.4 * scaleField) + float2(4.0, 8.0) + flowSpeed * 0.18);
+
+  float paletteField = snoise(p * 0.6 + time * 0.02) * 0.5 + 0.5;
+  float cellVariation1 = v1.cellID * 0.25;
+  float cellVariation2 = v2.cellID * 0.25;
+  float3 color1 = liquidColor(paletteField + cellVariation1, colorShift);
+  float3 color2 = liquidColor(paletteField + cellVariation2 + 0.15, colorShift + 1.5);
 
   float edge1 = 1.0 - exp(-v1.edgeDist * edgeSharpness);
   float edge2 = 1.0 - exp(-v2.edgeDist * (edgeSharpness * 0.7));
 
-  float3 result = color1 * edge1;
-  float blend2 = smoothstep(0.12, 0.5, v2.dist1) * 0.55;
-  result = mix(result, color2 * edge2, blend2);
+  float cellFill1 = mix(0.78, 1.0, edge1);
+  float cellFill2 = mix(0.78, 1.0, edge2);
+
+  float3 result = color1 * cellFill1;
+  float blend2 = smoothstep(0.18, 0.55, v2.dist1) * 0.32;
+  result = mix(result, color2 * cellFill2, blend2);
 
   float minEdge = min(v1.edgeDist, v2.edgeDist * 1.3);
-  float darkBorder = smoothstep(0.06, 0.0, minEdge);
-  result *= (1.0 - darkBorder * 0.85);
 
-  float fringe = smoothstep(0.0, 0.04, minEdge) * smoothstep(0.10, 0.04, minEdge);
-  float3 fringeColor = (color1 + color2) * 0.5 + float3(0.2, 0.1, 0.2);
-  result += fringeColor * fringe * 0.35;
+  float rimMask = exp(-minEdge * 40.0);
+  float thicknessJitter = snoise(warped * 4.0 + time * 0.08) * 0.2;
+  float thickness = rimMask * (1.0 + thicknessJitter);
+
+  float3 filmPhase = float3(5.5, 7.0, 8.5) * thickness * (1.0 + bass * 0.25);
+  float3 iridescence = 0.5 + 0.18 * cos(filmPhase + float3(0.0, 2.094, 4.188));
+
+  float edgeAA = 1.62 / float(h) * 1.5;
+  float rimOuter = 1.0 - smoothstep(0.0, 0.05, minEdge);
+  float rimInner = smoothstep(0.0, max(0.012, edgeAA), minEdge);
+  float rimIntensity = rimOuter * rimInner;
+
+  float cellSizeScale = 0.45 + 0.55 * smoothstep(0.05, 0.25, v1.dist1);
+  float contactLine = smoothstep(0.065, 0.008, minEdge) * cellSizeScale;
+  result *= (1.0 - contactLine * 0.45);
+
+  float3 tint = iridescence * 2.0;
+  result *= mix(float3(1.0), tint, rimIntensity * 0.55);
 
   float spec = snoise(ROT2 * warped * 2.5 + time * 0.08);
   spec = pow(max(spec, 0.0), 10.0);
@@ -278,10 +324,17 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   shimmer = pow(max(shimmer, 0.0), 6.0) * high * 0.35;
   result += float3(0.35, 0.25, 0.45) * shimmer * specMask;
 
-  float2 vigUV = p * float2(1.0, 1.1);
-  float dist = length(vigUV);
-  float vignette = 1.0 - smoothstep(0.55, 1.2, dist);
-  result *= vignette;
+  float2 hotUV = p * float2(1.0, 1.1);
+  float hotDist = length(hotUV);
+  float falloff = 1.0 - smoothstep(0.2, 1.0, hotDist);
+  float hotspot = exp(-hotDist * hotDist * 2.2);
+  result *= falloff * (0.65 + hotspot * 0.55);
+  result += float3(0.22, 0.15, 0.07) * hotspot * 0.35;
+
+  if (dropTintWeight > 0.0) {
+    float3 avgTint = dropTint / max(dropTintWeight, 1.0);
+    result = mix(result, avgTint, saturate(dropTintWeight * 0.5));
+  }
 
   {
     float3 x = result;
@@ -294,16 +347,61 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   output.write(float4(result, 1.0), gid);
 }
 
+constant constexpr int BLUR_TILE_DIM     = 16;
+constant constexpr int BLUR_HALO         = 13;
+constant constexpr int BLUR_SHARED_DIM   = BLUR_TILE_DIM + 2 * BLUR_HALO;
+constant constexpr int BLUR_SHARED_COUNT = BLUR_SHARED_DIM * BLUR_SHARED_DIM;
+
+constant float4 BLUR_SAMPLES[16] = {
+  float4( 0.697581f,  0.716505f, 0.176777f, 0.992218f),
+  float4(-0.840742f, -0.541437f, 0.306186f, 0.931558f),
+  float4( 0.211276f, -0.977432f, 0.395285f, 0.824084f),
+  float4( 0.642915f,  0.765938f, 0.467707f, 0.680319f),
+  float4(-0.999893f, -0.014610f, 0.529150f, 0.522046f),
+  float4( 0.758020f, -0.652232f, 0.583095f, 0.371577f),
+  float4(-0.119523f,  0.992831f, 0.631614f, 0.243117f),
+  float4(-0.582199f, -0.813048f, 0.676123f, 0.144862f),
+  float4( 0.970273f,  0.242007f, 0.717137f, 0.078662f),
+  float4(-0.813781f,  0.581171f, 0.755190f, 0.038988f),
+  float4( 0.274818f, -0.961502f, 0.790569f, 0.017639f),
+  float4( 0.478860f,  0.877891f, 0.823754f, 0.007262f),
+  float4(-0.988253f,  0.152809f, 0.854990f, 0.002714f),
+  float4( 0.865665f, -0.500622f, 0.884529f, 0.000921f),
+  float4(-0.329257f,  0.944240f, 0.912576f, 0.000283f),
+  float4(-0.406217f,  0.913776f, 0.939150f, 0.000079f),
+};
+
 kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)]],
                              texture2d<float, access::write> output  [[texture(1)]],
                              constant BlurParams &params             [[buffer(0)]],
-                             uint2 gid [[thread_position_in_grid]]) {
-  uint w = input.get_width();
-  uint h = input.get_height();
-  if (gid.x >= w || gid.y >= h) return;
+                             uint2 gid  [[thread_position_in_grid]],
+                             uint2 ltid [[thread_position_in_threadgroup]],
+                             uint2 tgid [[threadgroup_position_in_grid]]) {
+  threadgroup half4 tile[BLUR_SHARED_COUNT];
+
+  const int w = int(input.get_width());
+  const int h = int(input.get_height());
+
+  const int2 tileOrigin = int2(tgid.xy) * BLUR_TILE_DIM - int2(BLUR_HALO);
+  const uint lid = ltid.y * uint(BLUR_TILE_DIM) + ltid.x;
+  const uint threadCount = uint(BLUR_TILE_DIM * BLUR_TILE_DIM);
+
+  for (uint i = lid; i < uint(BLUR_SHARED_COUNT); i += threadCount) {
+    int lx = int(i) % BLUR_SHARED_DIM;
+    int ly = int(i) / BLUR_SHARED_DIM;
+    int2 src = tileOrigin + int2(lx, ly);
+    src = clamp(src, int2(0), int2(w - 1, h - 1));
+    tile[i] = half4(saturate(input.read(uint2(src))));
+  }
+
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+
+  if (int(gid.x) >= w || int(gid.y) >= h) return;
+
+  const int2 localCenter = int2(ltid) + int2(BLUR_HALO);
+  const half4 sharp_h = tile[localCenter.y * BLUR_SHARED_DIM + localCenter.x];
 
   float2 uv = (float2(gid) + 0.5) / float2(w, h);
-
   float2 norm = (uv - 0.5) * 2.0;
   float dist = length(norm);
 
@@ -311,48 +409,42 @@ kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)
   float dynamicOuter = params.outerRadius - params.bass * 0.1;
 
   float blurStrength = smoothstep(dynamicInner, dynamicOuter, dist);
+  blurStrength *= blurStrength;
 
   if (blurStrength < 0.001) {
-    output.write(input.read(gid), gid);
+    output.write(float4(sharp_h), gid);
     return;
   }
 
   float radius = blurStrength * params.maxBlurRadius * (1.0 + params.bass * 0.3);
 
-  const int SAMPLES = 28;
-  const float goldenAngle = 2.39996323;
+  half4 accum = half4(0.0h);
+  half  totalWeight = 0.0h;
 
-  float4 accum = float4(0.0);
-  float totalWeight = 0.0;
+  for (int i = 0; i < 16; i++) {
+    float4 s = BLUR_SAMPLES[i];
+    float2 offset = s.xy * (s.z * radius);
 
-  for (int i = 0; i < SAMPLES; i++) {
-    float fi = float(i) + 0.5;
-    float t = fi / float(SAMPLES);
-    float r = sqrt(t) * radius;
-    float theta = fi * goldenAngle;
-    float2 offset = float2(cos(theta), sin(theta)) * r;
+    int2 sp = localCenter + int2(round(offset));
+    sp = clamp(sp, int2(0), int2(BLUR_SHARED_DIM - 1));
 
-    int2 samplePos = int2(float2(gid) + offset);
-    samplePos = clamp(samplePos, int2(0), int2(w - 1, h - 1));
-
-    float weight = exp(-2.5 * t * t);
-    accum += input.read(uint2(samplePos)) * weight;
+    half weight = half(s.w);
+    accum += tile[sp.y * BLUR_SHARED_DIM + sp.x] * weight;
     totalWeight += weight;
   }
 
-  if (totalWeight < 1e-4) {
-    output.write(input.read(gid), gid);
+  if (totalWeight < 1e-4h) {
+    output.write(float4(sharp_h), gid);
     return;
   }
-  float4 blurred = accum / totalWeight;
-  float4 sharp = input.read(gid);
-  float4 result = mix(sharp, blurred, blurStrength);
+  half4 blurred_h = accum / totalWeight;
+  half4 result_h = mix(sharp_h, blurred_h, half(blurStrength));
 
-  float luma = dot(result.rgb, float3(0.2126, 0.7152, 0.0722));
-  float desatAmount = blurStrength * max(0.2 - params.mid * 0.15, 0.05);
-  result.rgb = mix(result.rgb, float3(luma), desatAmount);
+  half luma = dot(result_h.rgb, half3(0.2126h, 0.7152h, 0.0722h));
+  half desatAmount = half(blurStrength * max(0.2 - params.mid * 0.15, 0.05));
+  result_h.rgb = mix(result_h.rgb, half3(luma), desatAmount);
 
-  result.rgb += float3(0.02, 0.02, 0.03) * blurStrength;
+  result_h.rgb += half3(0.02h, 0.02h, 0.03h) * half(blurStrength);
 
-  output.write(result, gid);
+  output.write(float4(saturate(result_h)), gid);
 }

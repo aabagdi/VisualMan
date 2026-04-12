@@ -9,11 +9,19 @@ import Metal
 import os
 import QuartzCore
 
+struct LiquidLightDrops {
+  var d0: SIMD4<Float>
+  var d1: SIMD4<Float>
+  var d2: SIMD4<Float>
+  var d3: SIMD4<Float>
+}
+
 struct LiquidLightParams {
   var time: Float
   var bass: Float
   var mid: Float
   var high: Float
+  var drops: LiquidLightDrops
 }
 
 struct BlurParams {
@@ -37,6 +45,16 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
   private var smoothedSpeed: Float = 0.05
+
+  private var envBass: Float = 0
+  private var envMid: Float = 0
+  private var envHigh: Float = 0
+
+  private var smoothedBass: Float = 0
+  private var lastDropTime: Float = -10
+  private var drops: [SIMD4<Float>] = Array(repeating: SIMD4<Float>(0, 0, -1, 0), count: 4)
+  private var nextDropSlot: Int = 0
+  private var dropHueCounter: Float = 0
 
   static let maxFramesInFlight: UInt64 = 3
   private var commandAllocators = [any MTL4CommandAllocator]()
@@ -158,15 +176,41 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     lastDrawableHeight = height
   }
 
+  private func processAudio(bass: Float, mid: Float, high: Float) -> (Float, Float, Float) {
+    let attack: Float = 0.55
+    let decay: Float  = 0.08
+    envBass += (bass - envBass) * (bass > envBass ? attack : decay)
+    envMid  += (mid  - envMid)  * (mid  > envMid  ? attack : decay)
+    envHigh += (high - envHigh) * (high > envHigh ? attack : decay)
+
+    let audioEnergy = (envBass + envMid + envHigh) / 3.0
+    let targetSpeed = 0.05 + audioEnergy * 0.95
+    let alpha: Float = targetSpeed > smoothedSpeed ? 0.08 : 0.06
+    smoothedSpeed += (targetSpeed - smoothedSpeed) * alpha
+    time += dt * smoothedSpeed
+
+    let bassBaseline: Float = 0.08
+    smoothedBass += (bass - smoothedBass) * (bass > smoothedBass ? 0.15 : 0.05)
+    let transient = bass > smoothedBass * 1.6 && bass > bassBaseline
+    let cooldownOK = (time - lastDropTime) > 0.35
+    if transient && cooldownOK {
+      lastDropTime = time
+      dropHueCounter = (dropHueCounter + 0.37).truncatingRemainder(dividingBy: 1.0)
+      let seed = Float(frameNumber) * 0.6180339
+      let x = sin(seed * 12.9) * 0.4
+      let y = cos(seed * 7.3) * 0.35
+      drops[nextDropSlot] = SIMD4<Float>(x, y, time, dropHueCounter)
+      nextDropSlot = (nextDropSlot + 1) % 4
+    }
+
+    return (envBass, envMid, envHigh)
+  }
+
   func update(bass: Float,
               mid: Float,
               high: Float,
               drawable: CAMetalDrawable) {
-    let audioEnergy = (bass + mid + high) / 3.0
-    let targetSpeed = 0.05 + audioEnergy * 0.95
-    let alpha: Float = targetSpeed > smoothedSpeed ? 0.025 : 0.06
-    smoothedSpeed += (targetSpeed - smoothedSpeed) * alpha
-    time += dt * smoothedSpeed
+    let (sBass, sMid, sHigh) = processAudio(bass: bass, mid: mid, high: high)
 
     let nextFrame = frameNumber + 1
     let frameIndex = Int(nextFrame % Self.maxFramesInFlight)
@@ -191,15 +235,10 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
-    let rampFactor = min(smoothedSpeed / max(targetSpeed, 0.05), 1.0)
-    let rBass = bass * rampFactor
-    let rMid  = mid  * rampFactor
-    let rHigh = high * rampFactor
-
     renderLiquidLight(encoder: encoder, output: intermediateTex,
-                      bass: rBass, mid: rMid, high: rHigh)
+                      bass: sBass, mid: sMid, high: sHigh)
 
-    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, bass: rBass, mid: rMid)
+    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, bass: sBass, mid: sMid)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -217,10 +256,13 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     encoder.setComputePipelineState(renderPipeline)
     argumentTable.setTexture(output.gpuResourceID, index: 0)
 
-    let params = LiquidLightParams(time: time, bass: bass, mid: mid, high: high)
+    let params = LiquidLightParams(
+      time: time, bass: bass, mid: mid, high: high,
+      drops: LiquidLightDrops(d0: drops[0], d1: drops[1], d2: drops[2], d3: drops[3])
+    )
     argumentTable.setAddress(writeUniform(params), index: 0)
 
-    let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
+    let threadGroupSize = MTLSize(width: 8, height: 8, depth: 1)
     let gridDimensions = MTLSize(width: output.width, height: output.height, depth: 1)
     encoder.dispatchThreads(threadsPerGrid: gridDimensions,
                             threadsPerThreadgroup: threadGroupSize)
@@ -247,9 +289,12 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     )
     argumentTable.setAddress(writeUniform(blurParams), index: 0)
 
-    let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
-    let gridDimensions = MTLSize(width: output.width, height: output.height, depth: 1)
-    encoder.dispatchThreads(threadsPerGrid: gridDimensions,
-                            threadsPerThreadgroup: threadGroupSize)
+    let tg = MTLSize(width: 16, height: 16, depth: 1)
+    let groups = MTLSize(
+      width: (output.width + 15) / 16,
+      height: (output.height + 15) / 16,
+      depth: 1
+    )
+    encoder.dispatchThreadgroups(threadgroupsPerGrid: groups, threadsPerThreadgroup: tg)
   }
 }
