@@ -46,9 +46,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   var dt: Float = 1.0 / 60.0
   private var smoothedSpeed: Float = 0.05
 
-  private var envBass: Float = 0
-  private var envMid: Float = 0
-  private var envHigh: Float = 0
+  private var envelope: SIMD3<Float> = .zero
 
   private var smoothedBass: Float = 0
   private var lastDropTime: Float = -10
@@ -176,14 +174,15 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     lastDrawableHeight = height
   }
 
-  private func processAudio(bass: Float, mid: Float, high: Float) -> (Float, Float, Float) {
-    let attack: Float = 0.55
-    let decay: Float  = 0.08
-    envBass += (bass - envBass) * (bass > envBass ? attack : decay)
-    envMid  += (mid  - envMid)  * (mid  > envMid  ? attack : decay)
-    envHigh += (high - envHigh) * (high > envHigh ? attack : decay)
+  private func processAudio(bass: Float, mid: Float, high: Float) -> SIMD3<Float> {
+    let input = SIMD3<Float>(bass, mid, high)
+    let attack = SIMD3<Float>(repeating: 0.55)
+    let decay  = SIMD3<Float>(repeating: 0.08)
+    var rate = decay
+    rate.replace(with: attack, where: input .> envelope)
+    envelope += (input - envelope) * rate
 
-    let audioEnergy = (envBass + envMid + envHigh) / 3.0
+    let audioEnergy = envelope.sum() / 3.0
     let targetSpeed = 0.05 + audioEnergy * 0.95
     let alpha: Float = targetSpeed > smoothedSpeed ? 0.08 : 0.06
     smoothedSpeed += (targetSpeed - smoothedSpeed) * alpha
@@ -203,14 +202,14 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
       nextDropSlot = (nextDropSlot + 1) % 4
     }
 
-    return (envBass, envMid, envHigh)
+    return envelope
   }
 
   func update(bass: Float,
               mid: Float,
               high: Float,
               drawable: CAMetalDrawable) {
-    let (sBass, sMid, sHigh) = processAudio(bass: bass, mid: mid, high: high)
+    let smoothed = processAudio(bass: bass, mid: mid, high: high)
 
     let nextFrame = frameNumber + 1
     let frameIndex = Int(nextFrame % Self.maxFramesInFlight)
@@ -235,10 +234,9 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
-    renderLiquidLight(encoder: encoder, output: intermediateTex,
-                      bass: sBass, mid: sMid, high: sHigh)
+    renderLiquidLight(encoder: encoder, output: intermediateTex, audio: smoothed)
 
-    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, bass: sBass, mid: sMid)
+    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, audio: smoothed)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -252,12 +250,12 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
 
   private func renderLiquidLight(encoder: any MTL4ComputeCommandEncoder,
                                  output: MTLTexture,
-                                 bass: Float, mid: Float, high: Float) {
+                                 audio: SIMD3<Float>) {
     encoder.setComputePipelineState(renderPipeline)
     argumentTable.setTexture(output.gpuResourceID, index: 0)
 
     let params = LiquidLightParams(
-      time: time, bass: bass, mid: mid, high: high,
+      time: time, bass: audio.x, mid: audio.y, high: audio.z,
       drops: LiquidLightDrops(d0: drops[0], d1: drops[1], d2: drops[2], d3: drops[3])
     )
     argumentTable.setAddress(writeUniform(params), index: 0)
@@ -271,21 +269,20 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   private func renderBlur(encoder: any MTL4ComputeCommandEncoder,
                           input: MTLTexture,
                           output: MTLTexture,
-                          bass: Float,
-                          mid: Float) {
+                          audio: SIMD3<Float>) {
     encoder.setComputePipelineState(blurPipeline)
 
     argumentTable.setTexture(input.gpuResourceID, index: 0)
     argumentTable.setTexture(output.gpuResourceID, index: 1)
 
     let blurParams = BlurParams(
-      innerRadius: 0.45 + mid * 0.05,
+      innerRadius: 0.45 + audio.y * 0.05,
       outerRadius: 1.15,
-      maxBlurRadius: 8.0 + mid * 2.0,
+      maxBlurRadius: 8.0 + audio.y * 2.0,
       texWidth: Float(input.width),
       texHeight: Float(input.height),
-      bass: bass,
-      mid: mid
+      bass: audio.x,
+      mid: audio.y
     )
     argumentTable.setAddress(writeUniform(blurParams), index: 0)
 
