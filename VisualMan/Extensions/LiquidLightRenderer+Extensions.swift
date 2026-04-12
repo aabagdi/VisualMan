@@ -46,8 +46,8 @@ extension LiquidLightRenderer {
 
   static func createAllocatorsAndBuffers(device: MTLDevice)
     -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
-    var allocators: [any MTL4CommandAllocator] = []
-    var buffers: [MTLBuffer] = []
+    var allocators = [any MTL4CommandAllocator]()
+    var buffers = [MTLBuffer]()
     for _ in 0..<maxFramesInFlight {
       guard let allocator = device.makeCommandAllocator(),
             let buffer = device.makeBuffer(length: uniformBufferSize, options: .storageModeShared) else {
