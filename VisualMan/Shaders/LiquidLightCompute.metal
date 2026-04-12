@@ -14,6 +14,8 @@ struct LiquidLightParams {
   float mid;
   float high;
   float4 drops[4];
+  float4 dropPrecomp[4];
+  float4 dropColors[4];
 };
 
 struct BlurParams {
@@ -270,23 +272,22 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   half3 dropTint = half3(0.0h);
   half  dropTintWeight = 0.0h;
   for (int i = 0; i < 4; i++) {
-    float4 drop = params.drops[i];
-    float age = time - drop.z;
-    if (drop.z < 0.0 || age < 0.0 || age > 4.0) continue;
+    float4 pre = params.dropPrecomp[i];
+    if (pre.z < 0.5) continue;
 
+    float4 drop = params.drops[i];
     float2 toCenter = p - drop.xy;
     float d = fast::length(toCenter);
     float2 dir = d > 1e-4 ? toCenter / d : float2(0.0);
 
-    float ringRadius = age * 0.35;
-    float e = (d - ringRadius) * 6.0;
+    float e = (d - pre.x) * 4.0;
     float pulse = fast::exp(-e * e);
-    float fade = 1.0 - smoothstep(0.0, 4.0, age);
+    float pf = pulse * pre.y;
 
-    coords += dir * pulse * fade * 0.12;
+    coords += dir * pf * 0.12;
 
-    half washStrength = half(pulse * fade);
-    dropTint += liquidColor(drop.w, colorShift) * washStrength;
+    half washStrength = half(pf);
+    dropTint += half3(params.dropColors[i].rgb) * washStrength;
     dropTintWeight += washStrength;
   }
 
@@ -300,8 +301,10 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   float paletteField = snoise(p * 0.6 + time * 0.02) * 0.5 + 0.5;
   float cellVariation1 = v1.cellID * 0.25;
   float cellVariation2 = v2.cellID * 0.25;
-  half3 color1 = liquidColor(paletteField + cellVariation1, colorShift);
-  half3 color2 = liquidColor(paletteField + cellVariation2 + 0.15, colorShift + 1.5);
+  float cellPhase1 = colorShift * (0.3 + v1.cellID * 0.7);
+  float cellPhase2 = colorShift * (0.3 + v2.cellID * 0.7) + 1.5;
+  half3 color1 = liquidColor(paletteField + cellVariation1, cellPhase1);
+  half3 color2 = liquidColor(paletteField + cellVariation2 + 0.15, cellPhase2);
 
   half edge1 = half(1.0 - fast::exp(-v1.edgeDist * edgeSharpness));
   half edge2 = half(1.0 - fast::exp(-v2.edgeDist * (edgeSharpness * 0.7)));
@@ -357,7 +360,7 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   float hotDist = fast::length(hotUV);
   float falloff = 1.0 - smoothstep(0.2, 1.0, hotDist);
   float hotspot = fast::exp(-hotDist * hotDist * 2.2);
-  result *= half(falloff * (0.65 + hotspot * 0.55));
+  result *= half(mix(0.55, 1.0, falloff) * (1.0 + hotspot * 0.30));
   result += half3(0.22h, 0.15h, 0.07h) * half(hotspot * 0.35);
 
   if (dropTintWeight > 0.0h) {
@@ -371,16 +374,11 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
     result = clamp((x * (a * x + b)) / (x * (2.43h * x + d) + e), 0.0h, 1.0h);
   }
 
-  result.r = half(fast::pow(float(result.r), 0.95f));
-  result.b = half(fast::pow(float(result.b), 1.05f));
+  result.r = result.r * (1.0h - 0.05h * (1.0h - result.r));
+  result.b = result.b * (1.0h + 0.05h * (1.0h - result.b));
 
   output.write(float4(float3(result), 1.0), gid);
 }
-
-constant constexpr int BLUR_TILE_DIM     = 16;
-constant constexpr int BLUR_HALO         = 13;
-constant constexpr int BLUR_SHARED_DIM   = BLUR_TILE_DIM + 2 * BLUR_HALO;
-constant constexpr int BLUR_SHARED_COUNT = BLUR_SHARED_DIM * BLUR_SHARED_DIM;
 
 constant float4 BLUR_SAMPLES[16] = {
   float4( 0.697581f,  0.716505f, 0.176777f, 0.992218f),
@@ -404,32 +402,13 @@ constant float4 BLUR_SAMPLES[16] = {
 kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)]],
                              texture2d<float, access::write> output  [[texture(1)]],
                              constant BlurParams &params             [[buffer(0)]],
-                             uint2 gid  [[thread_position_in_grid]],
-                             uint2 ltid [[thread_position_in_threadgroup]],
-                             uint2 tgid [[threadgroup_position_in_grid]]) {
-  threadgroup half4 tile[BLUR_SHARED_COUNT];
-
+                             uint2 gid [[thread_position_in_grid]]) {
   const int w = int(input.get_width());
   const int h = int(input.get_height());
-
-  const int2 tileOrigin = int2(tgid.xy) * BLUR_TILE_DIM - int2(BLUR_HALO);
-  const uint lid = ltid.y * uint(BLUR_TILE_DIM) + ltid.x;
-  const uint threadCount = uint(BLUR_TILE_DIM * BLUR_TILE_DIM);
-
-  for (uint i = lid; i < uint(BLUR_SHARED_COUNT); i += threadCount) {
-    int lx = int(i) % BLUR_SHARED_DIM;
-    int ly = int(i) / BLUR_SHARED_DIM;
-    int2 src = tileOrigin + int2(lx, ly);
-    src = clamp(src, int2(0), int2(w - 1, h - 1));
-    tile[i] = half4(saturate(input.read(uint2(src))));
-  }
-
-  threadgroup_barrier(mem_flags::mem_threadgroup);
-
   if (int(gid.x) >= w || int(gid.y) >= h) return;
 
-  const int2 localCenter = int2(ltid) + int2(BLUR_HALO);
-  const half4 sharp_h = tile[localCenter.y * BLUR_SHARED_DIM + localCenter.x];
+  const int2 maxXY = int2(w - 1, h - 1);
+  const half4 sharp_h = half4(saturate(input.read(gid)));
 
   float2 uv = (float2(gid) + 0.5) / float2(w, h);
   float2 norm = (uv - 0.5) * 2.0;
@@ -448,18 +427,22 @@ kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)
 
   float radius = blurStrength * params.maxBlurRadius * (1.0 + params.bass * 0.3);
 
+  float rndAngle = fract(sin(dot(float2(gid), float2(12.9898, 78.233))) * 43758.5453) * 6.2831853;
+  float rc = fast::cos(rndAngle), rs = fast::sin(rndAngle);
+
   half4 accum = half4(0.0h);
   half  totalWeight = 0.0h;
 
+  const int2 centeri = int2(gid);
   for (int i = 0; i < 16; i++) {
     float4 s = BLUR_SAMPLES[i];
-    float2 offset = s.xy * (s.z * radius);
+    float2 o = float2(s.x * rc - s.y * rs, s.x * rs + s.y * rc);
+    float2 offset = o * (s.z * radius);
 
-    int2 sp = localCenter + int2(round(offset));
-    sp = clamp(sp, int2(0), int2(BLUR_SHARED_DIM - 1));
+    int2 sp = clamp(centeri + int2(round(offset)), int2(0), maxXY);
 
     half weight = half(s.w);
-    accum += tile[sp.y * BLUR_SHARED_DIM + sp.x] * weight;
+    accum += half4(input.read(uint2(sp))) * weight;
     totalWeight += weight;
   }
 
@@ -469,6 +452,18 @@ kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)
   }
   half4 blurred_h = accum / totalWeight;
   half4 result_h = mix(sharp_h, blurred_h, half(blurStrength));
+
+  float rimCA = blurStrength * (1.0 - blurStrength) * 4.0;
+  if (rimCA > 0.01) {
+    float2 radialDir = dist > 1e-4 ? norm / dist : float2(1.0, 0.0);
+    int2 offR = clamp(centeri + int2(round(radialDir *  1.5)), int2(0), maxXY);
+    int2 offB = clamp(centeri - int2(round(radialDir *  1.5)), int2(0), maxXY);
+    half rCh = half(input.read(uint2(offR)).r);
+    half bCh = half(input.read(uint2(offB)).b);
+    half mixAmt = half(rimCA * 0.35);
+    result_h.r = mix(result_h.r, rCh, mixAmt);
+    result_h.b = mix(result_h.b, bCh, mixAmt);
+  }
 
   half luma = dot(result_h.rgb, half3(0.2126h, 0.7152h, 0.0722h));
   half desatAmount = half(blurStrength * max(0.2 - params.mid * 0.15, 0.05));
