@@ -24,6 +24,7 @@ actor DSPProcessor {
     static let presenceHighFrequency: Float = 8000.0
     static let attackTime: Float = 0.15
     static let releaseTime: Float = 0.5
+    static let referenceFrameRate: Float = 60.0
     static let gainHistorySize = 30
     static let minGain: Float = 0.3
     static let maxGain: Float = 2.0
@@ -47,18 +48,26 @@ actor DSPProcessor {
   private var hannWindow: [2048 of Float] = .init(repeating: 0.0)
   private var aWeightTable: [1024 of Float] = .init(repeating: 0.0)
   private var cachedSampleRate: Float = 0.0
-  private var realIn: [2048 of Float] = .init(repeating: 0.0)
-  private var imagIn: [2048 of Float] = .init(repeating: 0.0)
-  private var realOut: [2048 of Float] = .init(repeating: 0.0)
-  private var imagOut: [2048 of Float] = .init(repeating: 0.0)
+  
+  private var ringBuffer: [2048 of Float] = .init(repeating: 0.0)
+  private var ringWriteIndex: Int = 0
+  
+  private var windowBuffer: [2048 of Float] = .init(repeating: 0.0)
+  
+  private var realIn: [1024 of Float] = .init(repeating: 0.0)
+  private var imagIn: [1024 of Float] = .init(repeating: 0.0)
+  private var realOut: [1024 of Float] = .init(repeating: 0.0)
+  private var imagOut: [1024 of Float] = .init(repeating: 0.0)
   private var magnitudes: [1024 of Float] = .init(repeating: 0.0)
   private var weightedMagnitudes: [1024 of Float] = .init(repeating: 0.0)
   private var logMagnitudes: [1024 of Float] = .init(repeating: 0.0)
 
   init() {
-    dftSetup = vDSP_DFT_zop_CreateSetup(nil, 2048, vDSP_DFT_Direction.FORWARD)
+    dftSetup = vDSP_DFT_zrop_CreateSetup(nil,
+                                         vDSP_Length(Constants.fftSize),
+                                         vDSP_DFT_Direction.FORWARD)
     hannWindow.withUnsafeElementPointer { hann in
-      vDSP_hann_window(hann, 2048, Int32(vDSP_HANN_NORM))
+      vDSP_hann_window(hann, vDSP_Length(Constants.fftSize), Int32(vDSP_HANN_NORM))
     }
   }
 
@@ -71,10 +80,13 @@ actor DSPProcessor {
   func reset() {
     audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
-    realIn = [2048 of Float](repeating: 0.0)
-    imagIn = [2048 of Float](repeating: 0.0)
-    realOut = [2048 of Float](repeating: 0.0)
-    imagOut = [2048 of Float](repeating: 0.0)
+    ringBuffer = [2048 of Float](repeating: 0.0)
+    ringWriteIndex = 0
+    windowBuffer = [2048 of Float](repeating: 0.0)
+    realIn = [1024 of Float](repeating: 0.0)
+    imagIn = [1024 of Float](repeating: 0.0)
+    realOut = [1024 of Float](repeating: 0.0)
+    imagOut = [1024 of Float](repeating: 0.0)
     magnitudes = [1024 of Float](repeating: 0.0)
     weightedMagnitudes = [1024 of Float](repeating: 0.0)
     logMagnitudes = [1024 of Float](repeating: 0.0)
@@ -83,7 +95,9 @@ actor DSPProcessor {
   }
 
   func processSamples(_ samples: [Float], sampleRate: Float) -> DSPResult {
-    guard samples.withUnsafeBufferPointer({ computeFFTMagnitudes($0) }) else {
+    writeToRing(samples)
+    
+    guard computeFFTMagnitudes() else {
       return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
     }
     
@@ -92,29 +106,71 @@ actor DSPProcessor {
     audioLevels.withUnsafeElementPointer { al in
       logMagnitudes.withUnsafeElementPointer { lm in
         var interpolation: Float = Constants.interpolation
-        vDSP_vintb(al, 1, lm, 1, &interpolation, al, 1, 1024)
+        vDSP_vintb(al, 1, lm, 1, &interpolation, al, 1, vDSP_Length(Constants.spectrumSize))
       }
     }
     
     let newBars = createVisualizerBars(from: audioLevels, sampleRate: sampleRate)
     updateAutomaticGainControl(bars: newBars)
-    smoothVisualizerBars(newBars)
+    
+    let dt = sampleRate > 0 ? Float(samples.count) / sampleRate : 1.0 / 60.0
+    smoothVisualizerBars(newBars, dt: dt)
     
     return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
   }
   
-  private func computeFFTMagnitudes(_ samples: UnsafeBufferPointer<Float>) -> Bool {
-    let sampleCount = min(samples.count, 2048)
-    realIn.withUnsafeElementPointer { ri in
-      hannWindow.withUnsafeElementPointer { hann in
-        if let baseAddress = samples.baseAddress {
-          ri.update(from: baseAddress, count: sampleCount)
+  private func writeToRing(_ samples: [Float]) {
+    let n = samples.count
+    guard n > 0 else { return }
+    
+    let effective = min(n, Constants.fftSize)
+    let skipFront = n - effective
+    
+    ringBuffer.withUnsafeElementPointer { ring in
+      samples.withUnsafeBufferPointer { src in
+        guard let base = src.baseAddress else { return }
+        let srcStart = base + skipFront
+        
+        let firstChunk = min(effective, Constants.fftSize - ringWriteIndex)
+        (ring + ringWriteIndex).update(from: srcStart, count: firstChunk)
+        
+        let remaining = effective - firstChunk
+        if remaining > 0 {
+          ring.update(from: srcStart + firstChunk, count: remaining)
         }
-        vDSP_vmul(ri, 1, hann, 1, ri, 1, vDSP_Length(sampleCount))
       }
     }
     
+    ringWriteIndex = (ringWriteIndex + effective) % Constants.fftSize
+  }
+  
+  private func computeFFTMagnitudes() -> Bool {
     guard let dftSetup else { return false }
+    
+    let splitPoint = ringWriteIndex
+    ringBuffer.withUnsafeElementPointer { ring in
+      windowBuffer.withUnsafeElementPointer { wb in
+        let tailCount = Constants.fftSize - splitPoint
+        wb.update(from: ring + splitPoint, count: tailCount)
+        if splitPoint > 0 {
+          (wb + tailCount).update(from: ring, count: splitPoint)
+        }
+        hannWindow.withUnsafeElementPointer { hann in
+          vDSP_vmul(wb, 1, hann, 1, wb, 1, vDSP_Length(Constants.fftSize))
+        }
+      }
+    }
+    
+    windowBuffer.withUnsafeElementPointer { wb in
+      realIn.withUnsafeElementPointer { ri in
+        imagIn.withUnsafeElementPointer { ii in
+          var split = DSPSplitComplex(realp: ri, imagp: ii)
+          wb.withMemoryRebound(to: DSPComplex.self, capacity: Constants.spectrumSize) { complexPtr in
+            vDSP_ctoz(complexPtr, 2, &split, 1, vDSP_Length(Constants.spectrumSize))
+          }
+        }
+      }
+    }
     
     realIn.withUnsafeElementPointer { ri in
       imagIn.withUnsafeElementPointer { ii in
@@ -126,18 +182,21 @@ actor DSPProcessor {
       }
     }
     
+    realOut[0] = 0
+    imagOut[0] = 0
+    
     realOut.withUnsafeElementPointer { ro in
       imagOut.withUnsafeElementPointer { io in
         magnitudes.withUnsafeElementPointer { mag in
           var complex = DSPSplitComplex(realp: ro, imagp: io)
-          vDSP_zvabs(&complex, 1, mag, 1, 1024)
+          vDSP_zvabs(&complex, 1, mag, 1, vDSP_Length(Constants.spectrumSize))
         }
       }
     }
     
-    var scaleFactor: Float = 2.0 / Float(2048)
+    var scaleFactor: Float = 2.0 / Float(Constants.fftSize)
     magnitudes.withUnsafeElementPointer { mag in
-      vDSP_vsmul(mag, 1, &scaleFactor, mag, 1, 1024)
+      vDSP_vsmul(mag, 1, &scaleFactor, mag, 1, vDSP_Length(Constants.spectrumSize))
     }
     
     return true
@@ -154,7 +213,6 @@ actor DSPProcessor {
         weightedMagnitudes.withUnsafeElementPointer { wm in
           var floor: Float = 1e-10
           vDSP_vsadd(mag, 1, &floor, wm, 1, 1024)
-          
           vDSP_vmul(wm, 1, aw, 1, wm, 1, 1024)
         }
       }
@@ -177,17 +235,17 @@ actor DSPProcessor {
     }
   }
   
-  private func smoothVisualizerBars(_ newBars: [32 of Float]) {
+  private func smoothVisualizerBars(_ newBars: [32 of Float], dt: Float) {
+    let steps = max(dt * Constants.referenceFrameRate, 0.0001)
+    let attackRetention = pow(Constants.attackTime, steps)
+    let releaseRetention = pow(Constants.releaseTime, steps)
+    
     for i in 0..<Constants.barCount {
       let currentLevel = visualizerBars[i]
       let targetLevel = newBars[i] * currentGain
+      let retention = targetLevel > currentLevel ? attackRetention : releaseRetention
       
-      if targetLevel > currentLevel {
-        visualizerBars[i] = currentLevel + (targetLevel - currentLevel) * (1.0 - Constants.attackTime)
-      } else {
-        visualizerBars[i] = currentLevel + (targetLevel - currentLevel) * (1.0 - Constants.releaseTime)
-      }
-      
+      visualizerBars[i] = targetLevel + (currentLevel - targetLevel) * retention
       visualizerBars[i] = min(1.0, visualizerBars[i])
     }
   }
@@ -210,78 +268,73 @@ actor DSPProcessor {
     }
     
     let averagePeak = gainHistory.reduce(0, +) / Float(gainHistory.count)
-    
     var desiredGain: Float = 1.0
-    
     if averagePeak > 0.01 {
       desiredGain = Constants.targetPeak / averagePeak
     }
-    
     desiredGain = max(Constants.minGain, min(Constants.maxGain, desiredGain))
-    
     currentGain = currentGain * Constants.gainSmoothingFactor + desiredGain * (1.0 - Constants.gainSmoothingFactor)
   }
-  
+}
+
+extension DSPProcessor {
   private func rebuildAWeightTable(sampleRate: Float) {
     let binFrequencyWidth = sampleRate / Float(Constants.fftSize)
-    
+
     let c1: Float = 12194.217 * 12194.217
     let c2: Float = 20.598997 * 20.598997
     let c3: Float = 107.65265 * 107.65265
     let c4: Float = 737.86223 * 737.86223
-    
+
     for i in 0..<1024 {
       let frequency = Float(i) * binFrequencyWidth
-      
       let f2 = frequency * frequency
       let f4 = f2 * f2
-      
       let num = c1 * f4
-      
+
       let term1 = f2 + c2
       let term2 = f2 + c3
       let term3 = f2 + c4
       let term4 = f2 + c1
       let sqrtTerm = sqrt(term2 * term3)
       let den = term1 * sqrtTerm * term4
-      
+
       var aWeight: Float = 0.0
       if den > 0 && frequency > 10 {
         aWeight = 2.0 + 20.0 * log10(num / den)
       } else if frequency <= 10 {
         aWeight = -50.0
       }
-      
       aWeightTable[i] = pow(10.0, aWeight / 20.0)
     }
   }
-  
+
   private func createVisualizerBars(from fftData: [1024 of Float], sampleRate: Float) -> [32 of Float] {
     var bars = [32 of Float](repeating: 0.0)
     var fftData = fftData
-    
+
     let logMinFreq = log10(Constants.minFrequency)
     let logMaxFreq = log10(Constants.maxFrequency)
     let binWidth = sampleRate / Float(Constants.fftSize)
     let logBoostCeiling = log10(Constants.boostCeilingFrequency)
-    
+
     fftData.withUnsafeElementPointer { fft in
       for i in 0..<Constants.barCount {
         let logFreqLow = logMinFreq + (logMaxFreq - logMinFreq) * Float(i) / Float(Constants.barCount)
         let logFreqHigh = logMinFreq + (logMaxFreq - logMinFreq) * Float(i + 1) / Float(Constants.barCount)
-        
+
         let freqLow = pow(10, logFreqLow)
         let freqHigh = pow(10, logFreqHigh)
-        
+
         let fracBinLow = freqLow / binWidth
         let fracBinHigh = freqHigh / binWidth
         let startBin = max(0, min(Int(fracBinLow), 1023))
         let endBin = max(startBin + 1, min(Int(fracBinHigh), 1024))
         let count = vDSP_Length(endBin - startBin)
-        
+
         var maxMag: Float = 0
         var avgMag: Float = 0
-        
+
         if count <= 2 {
           let centerBin = (fracBinLow + fracBinHigh) / 2.0
           let binIndex = max(0, min(Int(centerBin), 1022))
@@ -294,26 +347,22 @@ actor DSPProcessor {
           vDSP_maxv(fft + startBin, 1, &maxMag, count)
           vDSP_meanv(fft + startBin, 1, &avgMag, count)
         }
-        
+
         let rawMag = avgMag * Constants.avgWeight + maxMag * Constants.maxWeight
         let logCenter = (logFreqLow + logFreqHigh) / 2.0
         bars[i] = applyFrequencyBoosts(rawMag,
                                        logCenter: logCenter,
                                        logMinFreq: logMinFreq,
                                        logBoostCeiling: logBoostCeiling)
-        
+
         bars[i] = tanh(bars[i] * Constants.tanhScale)
-        
         bars[i] = max(0, min(1, bars[i]))
       }
     }
-    
+
     return bars
   }
-  
-}
 
-extension DSPProcessor {
   private func applyFrequencyBoosts(_ magnitude: Float,
                                     logCenter: Float,
                                     logMinFreq: Float,
