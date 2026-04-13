@@ -104,7 +104,7 @@ extension MusicPlayerView {
           playingError = error
           failedPlaying = true
         } catch {
-          playingError = VMError.failedToPlay
+          playingError = VMError.failedToPlay(underlying: error)
           failedPlaying = true
         }
       }

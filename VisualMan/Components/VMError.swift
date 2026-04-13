@@ -8,12 +8,12 @@
 import Foundation
 
 enum VMError: LocalizedError, Sendable {
-  case invalidSession
+  case invalidSession(underlying: (any Error & Sendable)?)
   case invalidURL
   case nilEngineOrPlayer
   case failedToCreateFile
-  case unableToInitialize
-  case failedToPlay
+  case unableToInitialize(underlying: (any Error & Sendable)?)
+  case failedToPlay(underlying: (any Error & Sendable)?)
   case fileAccessDenied
   
   var errorDescription: String? {
@@ -25,6 +25,13 @@ enum VMError: LocalizedError, Sendable {
     case .unableToInitialize: "The player is having trouble initializing. Please try again."
     case .failedToPlay: "The player failed to play. Please try again."
     case .fileAccessDenied: "Unable to access the selected file. Please try again."
+    }
+  }
+  
+  var underlyingError: (any Error & Sendable)? {
+    switch self {
+    case .invalidSession(let e), .unableToInitialize(let e), .failedToPlay(let e): e
+    default: nil
     }
   }
 }

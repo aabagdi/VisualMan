@@ -69,14 +69,14 @@ final class AudioEngineManager {
       try setupAudioEngine()
       isInitialized = true
     } catch {
-      initializationError = VMError.unableToInitialize
+      initializationError = VMError.unableToInitialize(underlying: error)
       isInitialized = false
       failedToInitialize = true
     }
     observeAudioSessionInterruptions()
   }
   
-  deinit {
+  isolated deinit {
     displayLinkTask?.cancel()
     pauseDecayTask?.cancel()
     nowPlayingTask?.cancel()
@@ -88,7 +88,7 @@ final class AudioEngineManager {
       try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
       try AVAudioSession.sharedInstance().setActive(true)
     } catch {
-      throw VMError.invalidSession
+      throw VMError.invalidSession(underlying: error)
     }
     
     engine = AVAudioEngine()
@@ -102,8 +102,6 @@ final class AudioEngineManager {
     
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
     
-    engine.stop()
-    
     engine.attach(player)
     engine.connect(player, to: engine.mainMixerNode, format: format)
   }
@@ -113,6 +111,7 @@ final class AudioEngineManager {
     
     player?.stop()
     
+    audioTapProcessor.stopForwarding()
     engine?.mainMixerNode.removeTap(onBus: 0)
     
     audioLevels = [1024 of Float](repeating: 0.0)
@@ -176,7 +175,7 @@ final class AudioEngineManager {
     } catch {
       playbackState = .idle
       stopDisplayLink()
-      throw VMError.failedToPlay
+      throw VMError.failedToPlay(underlying: error)
     }
     
     installAudioTap(on: engine)
@@ -190,10 +189,15 @@ final class AudioEngineManager {
     
     let sampleRate = Float(format.sampleRate)
     engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable buffer, _ in
-      guard let channelData = buffer.floatChannelData?[0] else { return }
+      guard let channelData = buffer.floatChannelData else { return }
       let frameLength = Int(buffer.frameLength)
-      let samples = UnsafeBufferPointer(start: channelData, count: frameLength)
-      tapProcessor.processSamples(samples, sampleRate: sampleRate)
+      let channelCount = Int(buffer.format.channelCount)
+      tapProcessor.processSamples(
+        channels: channelData,
+        channelCount: channelCount,
+        frameCount: frameLength,
+        sampleRate: sampleRate
+      )
     }
     
     startVisualizerForwarding()
@@ -232,6 +236,8 @@ final class AudioEngineManager {
           self.audioLevels[i] *= decayFactor
           if self.audioLevels[i] < threshold {
             self.audioLevels[i] = 0
+          } else {
+            allZero = false
           }
         }
         
