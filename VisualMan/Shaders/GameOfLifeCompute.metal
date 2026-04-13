@@ -100,7 +100,6 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
   uint offY = (outH - gridH) / 2u;
 
   float scanline = 1.0 - 0.08 * float(gid.y % 2u);
-
   float3 bgColor = float3(0.059, 0.220, 0.059) * scanline;
 
   if (gid.x < offX || gid.y < offY || gid.x >= offX + gridW || gid.y >= offY + gridH) {
@@ -138,44 +137,16 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
 
     color = saturate(c) * scanline;
   } else if (!insideCell) {
-    int dx = 0, dy = 0;
-    if (local.x < inset)            dx = -1;
-    else if (local.x > 1.0 - inset) dx = 1;
-    if (local.y < inset)            dy = -1;
-    else if (local.y > 1.0 - inset) dy = 1;
-
-    float coronaStrength = 0.0;
-    float3 coronaTint = float3(0.0);
-
-    if (dx != 0 || dy != 0) {
-      int sdx = landscape ? dy : dx;
-      int sdy = landscape ? dx : dy;
-      uint nx = (sx + uint(sdx + int(params.simWidth)))  % params.simWidth;
-      uint ny = (sy + uint(sdy + int(params.simHeight))) % params.simHeight;
-      half4 nb = sim.read(uint2(nx, ny));
-      if (nb.r > 0.5h) {
-        float nAge = float(nb.g);
-        float youth = 1.0 - saturate(nAge * 24.0);
-        if (youth > 0.0) {
-          float edgeDist;
-          if (dx != 0 && dy != 0) {
-            float ex = (dx < 0) ? (inset - local.x) : (local.x - (1.0 - inset));
-            float ey = (dy < 0) ? (inset - local.y) : (local.y - (1.0 - inset));
-            edgeDist = max(ex, ey);
-          } else if (dx != 0) {
-            edgeDist = (dx < 0) ? (inset - local.x) : (local.x - (1.0 - inset));
-          } else {
-            edgeDist = (dy < 0) ? (inset - local.y) : (local.y - (1.0 - inset));
-          }
-          float falloff = 1.0 - saturate(edgeDist / inset);
-          coronaStrength = youth * falloff * 0.55;
-          coronaTint = ageColor(nAge);
-        }
+    if (alive) {
+      float youth = 1.0 - saturate(age * 24.0);
+      if (youth > 0.0) {
+        float d = max(abs(local.x - 0.5), abs(local.y - 0.5));
+        float gutterT = saturate((d - (0.5 - inset)) / inset);
+        float coronaStrength = youth * (1.0 - gutterT) * 0.55;
+        color = bgColor + ageColor(age) * coronaStrength * scanline;
       }
     }
-
-    color = (bgColor + coronaTint * coronaStrength) * scanline;
   }
-
+  
   output.write(float4(color, 1.0), gid);
 }

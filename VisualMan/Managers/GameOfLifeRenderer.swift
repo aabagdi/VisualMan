@@ -196,27 +196,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     renderFrameCount += 1
     time += dt
 
-    let bassTau: Float = bass > smoothedBass ? 0.04 : 0.15
-    let midTau: Float = mid > smoothedMid ? 0.05 : 0.18
-    smoothedBass += (bass - smoothedBass) * (1 - exp(-dt / bassTau))
-    smoothedMid += (mid - smoothedMid) * (1 - exp(-dt / midTau))
-
-    let stepInterval = max(3, Self.baseStepInterval - Int(smoothedBass * 6.0))
-    stepAccumulator += 1
-    let shouldStep = stepAccumulator >= stepInterval
-
-    let spawnRate: Float = 0.0008 + smoothedBass * 0.006
-
-    let params = GameOfLifeParams(
-      bass: bass,
-      mid: mid,
-      high: high,
-      time: time,
-      simWidth: UInt32(simWidth),
-      simHeight: UInt32(simHeight),
-      frameCount: simFrameCount,
-      spawnRate: spawnRate
-    )
+    let (shouldStep, params) = updateAudioAndParams(bass: bass, mid: mid, high: high)
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
@@ -245,6 +225,32 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     }
   }
 
+  private func updateAudioAndParams(bass: Float, mid: Float, high: Float) ->
+  (shouldStep: Bool, params: GameOfLifeParams) {
+    let bassTau: Float = bass > smoothedBass ? 0.04 : 0.15
+    let midTau: Float = mid > smoothedMid ? 0.05 : 0.18
+    smoothedBass += (bass - smoothedBass) * (1 - exp(-dt / bassTau))
+    smoothedMid += (mid - smoothedMid) * (1 - exp(-dt / midTau))
+
+    let stepInterval = max(3, Self.baseStepInterval - Int(smoothedBass * 6.0))
+    stepAccumulator += 1
+    let shouldStep = stepAccumulator >= stepInterval
+
+    let spawnRate: Float = 0.0008 + smoothedBass * 0.006
+
+    let params = GameOfLifeParams(
+      bass: bass,
+      mid: mid,
+      high: high,
+      time: time,
+      simWidth: UInt32(simWidth),
+      simHeight: UInt32(simHeight),
+      frameCount: simFrameCount,
+      spawnRate: spawnRate
+    )
+    return (shouldStep, params)
+  }
+
   func reset() {
     time = 0
     renderFrameCount = 0
@@ -255,7 +261,10 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     seedInitialState()
   }
 
-  private func encodeStep(encoder: some MTL4ComputeCommandEncoder, simA: MTLTexture, simB: MTLTexture, params: GameOfLifeParams) {
+  private func encodeStep(encoder: some MTL4ComputeCommandEncoder,
+                          simA: MTLTexture,
+                          simB: MTLTexture,
+                          params: GameOfLifeParams) {
     encoder.setComputePipelineState(stepPipeline)
     argumentTable.setTexture(simA.gpuResourceID, index: 0)
     argumentTable.setTexture(simB.gpuResourceID, index: 1)
@@ -271,7 +280,10 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
   }
 
-  private func encodeRender(encoder: some MTL4ComputeCommandEncoder, simSource: MTLTexture, outputTex: MTLTexture, params: GameOfLifeParams) {
+  private func encodeRender(encoder: some MTL4ComputeCommandEncoder,
+                            simSource: MTLTexture,
+                            outputTex: MTLTexture,
+                            params: GameOfLifeParams) {
     encoder.setComputePipelineState(renderPipeline)
     argumentTable.setTexture(simSource.gpuResourceID, index: 0)
     argumentTable.setTexture(outputTex.gpuResourceID, index: 1)
