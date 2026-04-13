@@ -22,6 +22,7 @@ final class AudioTapProcessor: Sendable {
 
   nonisolated(unsafe) private var ringBuffer: [8192 of Float] = .init(repeating: 0.0)
   nonisolated(unsafe) private var monoScratch: [8192 of Float] = .init(repeating: 0.0)
+  nonisolated(unsafe) private var drainScratch: [Float] = Array(repeating: 0, count: ringCapacity)
   private let writeIndex = Atomic<Int>(0)
   private let readIndex = Atomic<Int>(0)
   private let sampleRateBits = Atomic<UInt32>(0)
@@ -105,8 +106,7 @@ final class AudioTapProcessor: Sendable {
       return
     }
     
-    var batch = [Float](repeating: 0, count: count)
-    batch.withUnsafeMutableBufferPointer { dst in
+    drainScratch.withUnsafeMutableBufferPointer { dst in
       guard let dstBase = dst.baseAddress else { return }
       let readPos = r & Self.ringMask
       let firstChunk = min(count, Self.ringCapacity - readPos)
@@ -121,7 +121,7 @@ final class AudioTapProcessor: Sendable {
     
     readIndex.store(w, ordering: .releasing)
     
-    let result = await dsp.processSamples(batch, sampleRate: rate)
+    let result = await dsp.processSamples(drainScratch[0..<count], sampleRate: rate)
     forwardingState.withLock { _ = $0.continuation?.yield(result) }
   }
   

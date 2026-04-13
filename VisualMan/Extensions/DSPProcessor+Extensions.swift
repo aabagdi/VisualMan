@@ -8,6 +8,34 @@
 import Accelerate
 
 extension DSPProcessor {
+  enum Constants {
+    static let fftSize = 2048
+    static let ringMask = fftSize - 1
+    static let spectrumSize = 1024
+    static let barCount = 32
+    static let minFrequency: Float = 60.0
+    static let maxFrequency: Float = 13000.0
+    static let boostCeilingFrequency: Float = 500.0
+    static let presenceLowFrequency: Float = 2000.0
+    static let presenceHighFrequency: Float = 8000.0
+    static let attackTau: Float = 0.009
+    static let releaseTau: Float = 0.024
+    static let gainHistorySize = 30
+    static let minGain: Float = 0.3
+    static let maxGain: Float = 2.0
+    static let targetPeak: Float = 0.75
+    static let dbOffset: Float = 60.0
+    static let dbRange: Float = 80.0
+    static let interpolation: Float = 0.2
+    static let avgWeight: Float = 0.7
+    static let maxWeight: Float = 0.3
+    static let tanhScale: Float = 1.5
+    static let lowFrequencyBoostFactor: Float = 0.5
+    static let presenceBoostFactor: Float = 0.4
+    static let gainSmoothingFactor: Float = 0.95
+    static let gainHistoryRebuildInterval = 1024
+  }
+
   func rebuildAWeightTable(sampleRate: Float) {
     let binFrequencyWidth = sampleRate / Float(Constants.fftSize)
 

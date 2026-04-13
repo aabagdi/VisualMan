@@ -12,34 +12,6 @@ actor DSPProcessor {
     let audioLevels: [1024 of Float]
     let visualizerBars: [32 of Float]
   }
-  
-  enum Constants {
-    static let fftSize = 2048
-    static let ringMask = fftSize - 1
-    static let spectrumSize = 1024
-    static let barCount = 32
-    static let minFrequency: Float = 60.0
-    static let maxFrequency: Float = 13000.0
-    static let boostCeilingFrequency: Float = 500.0
-    static let presenceLowFrequency: Float = 2000.0
-    static let presenceHighFrequency: Float = 8000.0
-    static let attackTau: Float = 0.009
-    static let releaseTau: Float = 0.024
-    static let gainHistorySize = 30
-    static let minGain: Float = 0.3
-    static let maxGain: Float = 2.0
-    static let targetPeak: Float = 0.75
-    static let dbOffset: Float = 60.0
-    static let dbRange: Float = 80.0
-    static let interpolation: Float = 0.2
-    static let avgWeight: Float = 0.7
-    static let maxWeight: Float = 0.3
-    static let tanhScale: Float = 1.5
-    static let lowFrequencyBoostFactor: Float = 0.5
-    static let presenceBoostFactor: Float = 0.4
-    static let gainSmoothingFactor: Float = 0.95
-    static let gainHistoryRebuildInterval = 1024
-  }
 
   private let dftSetup: OpaquePointer?
   private var audioLevels: [1024 of Float] = .init(repeating: 0.0)
@@ -69,6 +41,8 @@ actor DSPProcessor {
   private var normalizedSpectrum: [1024 of Float] = .init(repeating: 0.0)
 
   init() {
+    precondition(Constants.fftSize > 0 && Constants.fftSize.nonzeroBitCount == 1,
+                 "fftSize must be a power of two (ringMask relies on this)")
     dftSetup = vDSP_DFT_zrop_CreateSetup(nil,
                                          vDSP_Length(Constants.fftSize),
                                          vDSP_DFT_Direction.FORWARD)
@@ -104,7 +78,7 @@ actor DSPProcessor {
     currentGain = 1.0
   }
 
-  func processSamples(_ samples: [Float], sampleRate: Float) -> DSPResult {
+  func processSamples(_ samples: ArraySlice<Float>, sampleRate: Float) -> DSPResult {
     writeToRing(samples)
     
     guard computeFFTMagnitudes() else {
@@ -129,7 +103,7 @@ actor DSPProcessor {
     return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
   }
   
-  private func writeToRing(_ samples: [Float]) {
+  private func writeToRing(_ samples: ArraySlice<Float>) {
     let n = samples.count
     guard n > 0 else { return }
     
@@ -261,8 +235,9 @@ actor DSPProcessor {
   
   private func updateAutomaticGainControl(bars: [32 of Float]) {
     var maxBar: Float = 0
-    for i in 0..<Constants.barCount where bars[i] > maxBar {
-      maxBar = bars[i]
+    var barsCopy = bars
+    barsCopy.withUnsafeElementPointer { ptr in
+      vDSP_maxv(ptr, 1, &maxBar, vDSP_Length(Constants.barCount))
     }
     
     if maxBar < 0.01 {
