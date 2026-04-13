@@ -91,6 +91,8 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   private var lastDrawableWidth: Int = 0
   private var lastDrawableHeight: Int = 0
 
+  private var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
+
   static func create() async -> LiquidLightRenderer? {
     let prepared = await Task.detached(priority: .userInitiated) {
       guard let device = MTLCreateSystemDefaultDevice(),
@@ -156,20 +158,30 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     return addr
   }
 
-  private func ensureIntermediateTexture(width: Int, height: Int) {
+  private func drainPendingTextureReleases() {
+    guard !pendingTextureReleases.isEmpty else { return }
+    let signaled = sharedEvent.signaledValue
+    var removedAny = false
+    pendingTextureReleases.removeAll { entry in
+      if signaled >= entry.frame {
+        residencySet.removeAllocation(entry.texture)
+        removedAny = true
+        return true
+      }
+      return false
+    }
+    if removedAny {
+      residencySet.commit()
+    }
+  }
+
+  private func ensureIntermediateTexture(width: Int, height: Int) -> Bool {
     if width == lastDrawableWidth && height == lastDrawableHeight && intermediateTexture != nil {
-      return
+      return true
     }
 
     if let old = intermediateTexture {
-      if frameNumber > 0 {
-        let ok = sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
-        if !ok {
-          Self.logger.error("Timed out waiting for GPU before recreating intermediate texture; keeping old texture")
-          return
-        }
-      }
-      residencySet.removeAllocation(old)
+      pendingTextureReleases.append((frame: frameNumber, texture: old))
     }
 
     let desc = MTLTextureDescriptor.texture2DDescriptor(
@@ -185,8 +197,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
       intermediateTexture = nil
       lastDrawableWidth = 0
       lastDrawableHeight = 0
-      residencySet.commit()
-      return
+      return false
     }
 
     residencySet.addAllocation(tex)
@@ -195,13 +206,20 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     intermediateTexture = tex
     lastDrawableWidth = width
     lastDrawableHeight = height
+    return false
   }
 
   func update(bass: Float,
               mid: Float,
               high: Float,
               drawable: CAMetalDrawable) {
+    drainPendingTextureReleases()
+
     let smoothed = processAudio(bass: bass, mid: mid, high: high)
+
+    let outputTex = drawable.texture
+    let textureReady = ensureIntermediateTexture(width: outputTex.width, height: outputTex.height)
+    guard textureReady, let intermediateTex = intermediateTexture else { return }
 
     let nextFrame = frameNumber + 1
     let frameIndex = Int(nextFrame % Self.maxFramesInFlight)
@@ -217,10 +235,6 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     currentUniformBuffer = uniformBuffers[frameIndex]
     allocator.reset()
     uniformOffset = 0
-
-    let outputTex = drawable.texture
-    ensureIntermediateTexture(width: outputTex.width, height: outputTex.height)
-    guard let intermediateTex = intermediateTexture else { return }
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
