@@ -72,10 +72,10 @@ struct ThreeDBarsVisualizerView: View {
           }
       )
       .gesture(
-        MagnificationGesture()
+        MagnifyGesture()
           .onChanged { value in
             let zoomSensitivity: Float = 0.5
-            let targetDistance = cameraDistance / Float(value)
+            let targetDistance = cameraDistance / Float(value.magnification)
             cameraDistance += (targetDistance - cameraDistance) * zoomSensitivity
             cameraDistance = max(10.0, min(30.0, cameraDistance))
             updateCameraPosition()
