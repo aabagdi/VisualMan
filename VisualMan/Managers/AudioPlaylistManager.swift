@@ -10,7 +10,7 @@ import Foundation
 @Observable
 @MainActor
 final class AudioPlaylistManager {
-  var audioSources: [any AudioSource] = []
+  var audioSources = [any AudioSource]()
   var currentIndex: Int = 0
   
   func setPlaylist(_ sources: [any AudioSource], startingIndex: Int = 0) {

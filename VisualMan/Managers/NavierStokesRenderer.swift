@@ -93,6 +93,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var taaHistoryWidth: Int = 0
   var taaHistoryHeight: Int = 0
   let taaBlendFactor: Float = 0.85
+  var pendingTAAHistoryReleases = [(frame: UInt64, texture: MTLTexture)]()
 
   var frameUniformsAddress: MTLGPUAddress = 0
   var framesSinceReinit: Int = 6

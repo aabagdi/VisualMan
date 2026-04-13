@@ -29,13 +29,13 @@ extension NavierStokesRenderer {
     let vorticityConfinement: MTLComputePipelineState
     let macCormackCorrect: MTLComputePipelineState
   }
-  
+
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
     guard let library = device.makeDefaultLibrary() else {
       logger.error("Failed to create default Metal library")
       return nil
     }
-    
+
     func makePipeline(_ name: String) -> MTLComputePipelineState? {
       let functionDesc = MTL4LibraryFunctionDescriptor()
       functionDesc.name = name
@@ -49,7 +49,7 @@ extension NavierStokesRenderer {
         return nil
       }
     }
-    
+
     guard let splatBatch = makePipeline("fluidSplatBatch"),
           let advect = makePipeline("fluidAdvect"),
           let psiInit = makePipeline("fluidPsiInit"),
@@ -70,7 +70,7 @@ extension NavierStokesRenderer {
           let macCormackCorrect = makePipeline("fluidMacCormackCorrect") else {
       return nil
     }
-    
+
     return Pipelines(splatBatch: splatBatch, advect: advect,
                      psiInit: psiInit, psiAdvect: psiAdvect,
                      covectorPullback: covectorPullback, copyRG: copyRG,
@@ -81,7 +81,7 @@ extension NavierStokesRenderer {
                      curl: curl, vorticityConfinement: vorticityConfinement,
                      macCormackCorrect: macCormackCorrect)
   }
-  
+
   struct Textures {
     let velocityA: MTLTexture
     let velocityB: MTLTexture
@@ -100,7 +100,7 @@ extension NavierStokesRenderer {
     let psiB: MTLTexture
     let u0: MTLTexture
   }
-  
+
   static func createAllocatorsAndBuffers(device: MTLDevice)
     -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
     var allocators = [any MTL4CommandAllocator]()
@@ -154,7 +154,7 @@ extension NavierStokesRenderer {
       }
       return texture
     }
-    
+
     guard let velocityA = makeTexture(format: .rg16Float, label: "velocityA"),
           let velocityB = makeTexture(format: .rg16Float, label: "velocityB"),
           let pressure = makeTexture(format: .r16Float, label: "pressure"),
@@ -229,16 +229,35 @@ extension NavierStokesRenderer {
     frameNumber = 1
   }
 
+  func drainPendingTAAHistoryReleases() {
+    guard !pendingTAAHistoryReleases.isEmpty else { return }
+    let signaled = sharedEvent.signaledValue
+    var removedAny = false
+    pendingTAAHistoryReleases.removeAll { entry in
+      if signaled >= entry.frame {
+        residencySet.removeAllocation(entry.texture)
+        removedAny = true
+        return true
+      }
+      return false
+    }
+    if removedAny {
+      residencySet.commit()
+    }
+  }
+
   func ensureTAAHistory(width: Int, height: Int) {
+    drainPendingTAAHistoryReleases()
+
     if width == taaHistoryWidth && height == taaHistoryHeight && taaHistoryA != nil { return }
 
+    let fenceFrame = frameNumber
     if let a = taaHistoryA {
-      if frameNumber > 0 {
-        sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
-      }
-      residencySet.removeAllocation(a)
+      pendingTAAHistoryReleases.append((frame: fenceFrame, texture: a))
     }
-    if let b = taaHistoryB { residencySet.removeAllocation(b) }
+    if let b = taaHistoryB {
+      pendingTAAHistoryReleases.append((frame: fenceFrame, texture: b))
+    }
 
     let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
@@ -252,7 +271,6 @@ extension NavierStokesRenderer {
       taaHistoryValid = false
       taaHistoryWidth = 0
       taaHistoryHeight = 0
-      residencySet.commit()
       return
     }
 
