@@ -44,7 +44,10 @@ final class VisualizerRendererCache {
     async let ll: Void = {
       _ = await self.renderer(LiquidLightRenderer.self) { await LiquidLightRenderer.create() }
     }()
-    _ = await (ns, ll)
+    async let gol: Void = {
+      _ = await self.renderer(GameOfLifeRenderer.self) { await GameOfLifeRenderer.create() }
+    }()
+    _ = await (ns, ll, gol)
   }
 
   func resetAll() {
