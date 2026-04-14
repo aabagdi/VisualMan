@@ -52,7 +52,6 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   var needsAudioReseed: Bool = true
 
   static let baseStepInterval: Int = 10
-  static let rampStepFrames: UInt32 = 30
   var stepAccumulator: Int = 0
   var simFrameCount: UInt32 = 0
 

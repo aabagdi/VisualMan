@@ -90,8 +90,7 @@ extension GameOfLifeRenderer {
 
     let stepInterval = max(3, Self.baseStepInterval - Int(smoothedBass * 6.0))
     stepAccumulator += 1
-    let forceStepDuringRamp = renderFrameCount <= Self.rampStepFrames
-    let shouldStep = forceStepDuringRamp || (stepAccumulator >= stepInterval)
+    let shouldStep = stepAccumulator >= stepInterval
 
     let spawnRate: Float = 0.0008 + smoothedBass * 0.006
 
