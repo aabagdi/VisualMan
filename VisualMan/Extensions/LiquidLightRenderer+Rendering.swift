@@ -9,13 +9,9 @@ import Metal
 import QuartzCore
 
 extension LiquidLightRenderer {
-  func processAudio(bass: Float, mid: Float, high: Float) -> SIMD3<Float> {
-    let now = CACurrentMediaTime()
-
-    let gap = lastFrameTime == 0 ? 0 : (now - lastFrameTime)
-    let explicitResume = (lastFrameTime == 0)
+  private func handleResumeState(gap: Double) {
     let gapResume = gap > 0.2
-    let isResume = explicitResume || gapResume
+    let isResume = (lastFrameTime == 0) || gapResume
 
     if isResume {
       dt = 0
@@ -30,33 +26,9 @@ extension LiquidLightRenderer {
     } else {
       dt = Float(max(1.0 / 240.0, min(1.0 / 30.0, gap)))
     }
-    lastFrameTime = now
-    wallClock += dt
+  }
 
-    resumeSuppressionRemaining = max(0, resumeSuppressionRemaining - dt)
-    let inResumeGrace = resumeSuppressionRemaining > 0
-
-    let input = SIMD3<Float>(bass, mid, high)
-
-    let fastAttackTau: Float = 0.012
-    let fastDecayTau: Float = 0.12
-    let fastAttackA = 1 - exp(-dt / fastAttackTau)
-    let fastDecayA  = 1 - exp(-dt / fastDecayTau)
-    var fastRate = SIMD3<Float>(repeating: fastDecayA)
-    fastRate.replace(with: SIMD3<Float>(repeating: fastAttackA), where: input .> envelope)
-    envelope += (input - envelope) * fastRate
-
-    let slowTau: Float = 0.35
-    let slowA = 1 - exp(-dt / slowTau)
-    slowEnvelope += (input - slowEnvelope) * slowA
-
-    let audioEnergy = slowEnvelope.sum() / 3.0
-    let targetSpeed = 0.25 + audioEnergy * 0.6
-    let speedTau: Float = targetSpeed > smoothedSpeed ? 0.18 : 0.25
-    let speedA = 1 - exp(-dt / speedTau)
-    smoothedSpeed += (targetSpeed - smoothedSpeed) * speedA
-    time += dt * smoothedSpeed
-
+  private func detectAndEmitDrop(bass: Float, inResumeGrace: Bool) {
     let bassBaseline: Float = 0.08
     let bassUpTau: Float = 0.06
     let bassDownTau: Float = 0.20
@@ -74,7 +46,37 @@ extension LiquidLightRenderer {
       drops[nextDropSlot] = SIMD4<Float>(x, y, time, dropHueCounter)
       nextDropSlot = (nextDropSlot + 1) % 4
     }
-    
+  }
+
+  func processAudio(bass: Float, mid: Float, high: Float) -> SIMD3<Float> {
+    let now = CACurrentMediaTime()
+    let gap = lastFrameTime == 0 ? 0 : (now - lastFrameTime)
+    handleResumeState(gap: gap)
+    lastFrameTime = now
+    wallClock += dt
+
+    resumeSuppressionRemaining = max(0, resumeSuppressionRemaining - dt)
+    let inResumeGrace = resumeSuppressionRemaining > 0
+
+    let input = SIMD3<Float>(bass, mid, high)
+
+    let fastAttackA = 1 - exp(-dt / 0.012)
+    let fastDecayA  = 1 - exp(-dt / 0.12)
+    var fastRate = SIMD3<Float>(repeating: fastDecayA)
+    fastRate.replace(with: SIMD3<Float>(repeating: fastAttackA), where: input .> envelope)
+    envelope += (input - envelope) * fastRate
+
+    let slowA = 1 - exp(-dt / 0.35)
+    slowEnvelope += (input - slowEnvelope) * slowA
+
+    let audioEnergy = slowEnvelope.sum() / 3.0
+    let targetSpeed = 0.25 + audioEnergy * 0.6
+    let speedA = 1 - exp(-dt / (targetSpeed > smoothedSpeed ? 0.18 : 0.25))
+    smoothedSpeed += (targetSpeed - smoothedSpeed) * speedA
+    time += dt * smoothedSpeed
+
+    detectAndEmitDrop(bass: bass, inResumeGrace: inResumeGrace)
+
     if resumeFadeIn < 1 {
       resumeFadeIn = min(1, resumeFadeIn + dt / Self.resumeFadeDuration)
     }
