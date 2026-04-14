@@ -9,6 +9,47 @@ import Metal
 import os
 
 extension NavierStokesRenderer {
+  func canRenderThisFrame() -> Bool {
+    let nextFrame = frameNumber + 1
+    if nextFrame > Self.maxFramesInFlight {
+      let waitValue = nextFrame - Self.maxFramesInFlight
+      return sharedEvent.signaledValue >= waitValue
+    }
+    return true
+  }
+
+  func writeUniform<T>(_ value: T) -> MTLGPUAddress {
+    let aligned = (uniformOffset + 15) & ~15
+    let end = aligned + MemoryLayout<T>.size
+    guard end <= Self.uniformBufferSize else {
+      Self.logger.error("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+      return currentUniformBuffer.gpuAddress
+    }
+    (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
+    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
+    uniformOffset = end
+    return addr
+  }
+
+  func writeUniformArray<T>(_ values: [T]) -> MTLGPUAddress {
+    let aligned = (uniformOffset + 15) & ~15
+    let size = MemoryLayout<T>.stride * values.count
+    let end = aligned + size
+    guard end <= Self.uniformBufferSize else {
+      Self.logger.error("Uniform array buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+      return currentUniformBuffer.gpuAddress
+    }
+    let ptr = currentUniformBuffer.contents() + aligned
+    values.withUnsafeBufferPointer { buf in
+      if let baseAddress = buf.baseAddress {
+        memcpy(ptr, baseAddress, size)
+      }
+    }
+    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
+    uniformOffset = end
+    return addr
+  }
+
   func advect(encoder: any MTL4ComputeCommandEncoder,
               velocityIn: MTLTexture,
               fieldIn: MTLTexture,
@@ -208,6 +249,73 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder, width: output.width, height: output.height)
   }
   
+  func runSimulationPass(encoder: any MTL4ComputeCommandEncoder,
+                         bass: Float, mid: Float, high: Float,
+                         output: MTLTexture) {
+    let validFlag: UInt32 = taaHistoryValid ? 1 : 0
+    let frameUniforms = FrameUniforms(
+      bass: bass, mid: mid, high: high,
+      time: time, dt: dt,
+      taaBlend: taaBlendFactor,
+      historyValid: validFlag
+    )
+    frameUniformsAddress = writeUniform(frameUniforms)
+
+    let suppress = resumeSuppressionRemaining > 0
+    let injBass  = suppress ? 0 : bass
+    let injMid   = suppress ? 0 : mid
+    let injHigh  = suppress ? 0 : high
+
+    advectPsi(encoder: encoder)
+    swap(&psiA, &psiB)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    covectorPullback(encoder: encoder, dissipation: 0.995)
+    swap(&velocityA, &velocityB)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    injectAudioSplats(encoder: encoder, bass: injBass, mid: injMid, high: injHigh)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    applyVorticityConfinement(encoder: encoder, bass: injBass, mid: injMid)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    project(encoder: encoder, jacobiIterations: jacobiIterations)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    framesSinceReinit += 1
+    if framesSinceReinit >= reinitInterval {
+      reinitFlowMap(encoder: encoder)
+      framesSinceReinit = 0
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    }
+
+    let dynamicDyeDissipation: Float = 0.98 + bass * 0.01 + mid * 0.008
+    advectDyeMacCormack(encoder: encoder, dissipation: dynamicDyeDissipation)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    runBloomPasses(encoder: encoder)
+
+    render(encoder: encoder, output: output, bass: bass, mid: mid)
+  }
+
+  func runBloomPasses(encoder: any MTL4ComputeCommandEncoder) {
+    bloomThresholdBlurH(encoder: encoder, dst: bloomB, size: Self.bloomSize)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    blurBloomV(encoder: encoder, src: bloomB, dst: bloomA, size: Self.bloomSize)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    bloomThresholdBlurH(encoder: encoder, dst: bloomMidB, size: Self.bloomSizeMid)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    blurBloomV(encoder: encoder, src: bloomMidB, dst: bloomMidA, size: Self.bloomSizeMid)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    bloomThresholdBlurH(encoder: encoder, dst: bloomLoB, size: Self.bloomSizeLo)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    blurBloomV(encoder: encoder, src: bloomLoB, dst: bloomLoA, size: Self.bloomSizeLo)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+  }
+
   func dispatchGrid(encoder: any MTL4ComputeCommandEncoder, width: Int? = nil, height: Int? = nil) {
     let w = width ?? gridSize
     let h = height ?? gridSize

@@ -12,54 +12,48 @@ extension NavierStokesRenderer {
     time = 0
     prevBass = 0
     prevMid = 0
-    renderFrameCount = 0
-
-    guard let blitQueue = device.makeCommandQueue(),
-          let cmd = blitQueue.makeCommandBuffer(),
-          let blit = cmd.makeBlitCommandEncoder() else {
+    
+    guard let allocator = device.makeCommandAllocator(),
+          let resetCmd = device.makeCommandBuffer(),
+          let resetEvent = device.makeSharedEvent() else {
       return
     }
 
-    let textures: [MTLTexture] = [
-      velocityA, pressure,
-      divergenceTexture, dyeA, dyeB, dyeC,
-      bloomA, bloomB, bloomMidA, bloomMidB, bloomLoA, bloomLoB,
-      psiA, psiB, u0
+    resetCmd.beginCommandBuffer(allocator: allocator)
+    resetCmd.useResidencySet(residencySet)
+
+    guard let encoder = resetCmd.makeComputeCommandEncoder() else { return }
+    encoder.setArgumentTable(argumentTable)
+
+    encoder.setComputePipelineState(pipelines.clearRG)
+    let rgTextures: [MTLTexture] = [
+      velocityA, velocityB, pressure, divergenceTexture, psiA, psiB, u0
     ]
-
-    for tex in textures {
-      let region = MTLRegionMake2D(0, 0, tex.width, tex.height)
-      let bytesPerPixel = bytesPerPixel(for: tex.pixelFormat)
-      let bytesPerRow = bytesPerPixel * tex.width
-      let zeros = [UInt8](repeating: 0, count: bytesPerRow * tex.height)
-
-      guard let staging = device.makeBuffer(bytes: zeros,
-                                            length: zeros.count,
-                                            options: .storageModeShared) else { continue }
-      blit.copy(from: staging,
-                sourceOffset: 0,
-                sourceBytesPerRow: bytesPerRow,
-                sourceBytesPerImage: bytesPerRow * tex.height,
-                sourceSize: MTLSize(width: tex.width, height: tex.height, depth: 1),
-                to: tex,
-                destinationSlice: 0,
-                destinationLevel: 0,
-                destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
-      _ = region
+    for tex in rgTextures {
+      argumentTable.setTexture(tex.gpuResourceID, index: 0)
+      dispatchGrid(encoder: encoder, width: tex.width, height: tex.height)
     }
 
-    blit.endEncoding()
-    cmd.commit()
-    cmd.waitUntilCompleted()
+    encoder.setComputePipelineState(pipelines.clearRGBA)
+    let rgbaTextures: [MTLTexture] = [
+      dyeA, dyeB, dyeC,
+      bloomA, bloomB,
+      bloomMidA, bloomMidB,
+      bloomLoA, bloomLoB
+    ]
+    for tex in rgbaTextures {
+      argumentTable.setTexture(tex.gpuResourceID, index: 0)
+      dispatchGrid(encoder: encoder, width: tex.width, height: tex.height)
+    }
+
+    encoder.endEncoding()
+    resetCmd.endCommandBuffer()
+
+    commandQueue.commit([resetCmd])
+    commandQueue.signalEvent(resetEvent, value: 1)
+
+    resetEvent.wait(untilSignaledValue: 1, timeoutMS: 1000)
+
     framesSinceReinit = reinitInterval
-  }
-
-  private func bytesPerPixel(for format: MTLPixelFormat) -> Int {
-    switch format {
-    case .r16Float: return 2
-    case .rg16Float: return 4
-    case .rgba16Float: return 8
-    default: return 4
-    }
   }
 }

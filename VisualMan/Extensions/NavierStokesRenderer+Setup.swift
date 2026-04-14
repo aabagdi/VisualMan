@@ -196,6 +196,7 @@ extension NavierStokesRenderer {
     uniformOffset = 0
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
+    commandBuffer.useResidencySet(residencySet)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 

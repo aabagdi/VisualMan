@@ -14,12 +14,14 @@ protocol MetalVisualizerRenderer: AnyObject {
   var commandQueue: any MTL4CommandQueue { get }
   var dt: Float { get set }
 
+  func canRenderThisFrame() -> Bool
   func update(bass: Float, mid: Float, high: Float, drawable: CAMetalDrawable)
   func reset()
   func prepareForResume()
 }
 
 extension MetalVisualizerRenderer {
+  func canRenderThisFrame() -> Bool { true }
   func reset() {}
   func prepareForResume() {}
 }

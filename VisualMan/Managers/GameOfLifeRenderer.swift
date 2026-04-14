@@ -38,15 +38,21 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   var simA: MTLTexture?
   var simB: MTLTexture?
 
+  var displayIntermediate: MTLTexture?
+  var lastDrawableWidth: Int = 0
+  var lastDrawableHeight: Int = 0
+  var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
+
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
   var renderFrameCount: UInt32 = 0
 
   var smoothedBass: Float = 0
   var smoothedMid: Float = 0
-  private var needsAudioReseed: Bool = true
+  var needsAudioReseed: Bool = true
 
   static let baseStepInterval: Int = 10
+  static let rampStepFrames: UInt32 = 30
   var stepAccumulator: Int = 0
   var simFrameCount: UInt32 = 0
 
@@ -78,7 +84,9 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     }.value
 
     guard let (device, pipelines) = prepared else { return nil }
-    return GameOfLifeRenderer(device: device, pipelines: pipelines)
+    guard let renderer = GameOfLifeRenderer(device: device, pipelines: pipelines) else { return nil }
+    renderer.warmUpGPU()
+    return renderer
   }
 
   private init?(device: MTLDevice, pipelines: Pipelines) {
@@ -131,7 +139,49 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     commandQueue.addResidencySet(residencySet)
   }
 
-  private func ensureSimTextures(drawableWidth: Int, drawableHeight: Int) {
+  func warmUpGPU() {
+    guard let textures = makeWarmUpTextures() else { return }
+
+    residencySet.addAllocation(textures.simA)
+    residencySet.addAllocation(textures.simB)
+    residencySet.addAllocation(textures.display)
+    residencySet.commit()
+    defer {
+      residencySet.removeAllocation(textures.simA)
+      residencySet.removeAllocation(textures.simB)
+      residencySet.removeAllocation(textures.display)
+      residencySet.commit()
+    }
+
+    let allocator = commandAllocators[0]
+    currentUniformBuffer = uniformBuffers[0]
+    allocator.reset()
+    uniformOffset = 0
+
+    commandBuffer.beginCommandBuffer(allocator: allocator)
+    commandBuffer.useResidencySet(residencySet)
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+    encoder.setArgumentTable(argumentTable)
+
+    encodeWarmUpPasses(encoder: encoder, textures: textures)
+
+    encoder.endEncoding()
+    commandBuffer.endCommandBuffer()
+    commandQueue.commit([commandBuffer])
+    commandQueue.signalEvent(sharedEvent, value: 1)
+    frameNumber = 1
+  }
+
+  func canRenderThisFrame() -> Bool {
+    let nextFrame = frameNumber + 1
+    if nextFrame > Self.maxFramesInFlight {
+      let waitValue = nextFrame - Self.maxFramesInFlight
+      return sharedEvent.signaledValue >= waitValue
+    }
+    return true
+  }
+
+  func ensureSimTextures(drawableWidth: Int, drawableHeight: Int) {
     guard simA == nil || simB == nil else { return }
 
     let longScreen = max(drawableWidth, drawableHeight)
@@ -156,6 +206,59 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     seedInitialState()
   }
 
+  func drainPendingTextureReleases() {
+    guard !pendingTextureReleases.isEmpty else { return }
+    let signaled = sharedEvent.signaledValue
+    var removedAny = false
+    pendingTextureReleases.removeAll { entry in
+      if signaled >= entry.frame {
+        residencySet.removeAllocation(entry.texture)
+        removedAny = true
+        return true
+      }
+      return false
+    }
+    if removedAny {
+      residencySet.commit()
+    }
+  }
+
+  func ensureDisplayIntermediate(width: Int, height: Int) -> Bool {
+    if width == lastDrawableWidth
+        && height == lastDrawableHeight
+        && displayIntermediate != nil {
+      return true
+    }
+
+    if let old = displayIntermediate {
+      pendingTextureReleases.append((frame: frameNumber, texture: old))
+    }
+
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .bgra8Unorm,
+      width: width,
+      height: height,
+      mipmapped: false
+    )
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+
+    guard let tex = device.makeTexture(descriptor: desc) else {
+      displayIntermediate = nil
+      lastDrawableWidth = 0
+      lastDrawableHeight = 0
+      return false
+    }
+
+    residencySet.addAllocation(tex)
+    residencySet.commit()
+
+    displayIntermediate = tex
+    lastDrawableWidth = width
+    lastDrawableHeight = height
+    return true
+  }
+
   struct Pipelines {
     let step: MTLComputePipelineState
     let render: MTLComputePipelineState
@@ -174,134 +277,4 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     return addr
   }
 
-  func update(bass: Float, mid: Float, high: Float, drawable: CAMetalDrawable) {
-    ensureSimTextures(drawableWidth: drawable.texture.width,
-                      drawableHeight: drawable.texture.height)
-    guard let localSimA = simA, let localSimB = simB else { return }
-
-    let nextFrame = frameNumber + 1
-    let frameIndex = Int(nextFrame % Self.maxFramesInFlight)
-
-    if nextFrame > Self.maxFramesInFlight {
-      let waitValue = nextFrame - Self.maxFramesInFlight
-      guard sharedEvent.signaledValue >= waitValue else { return }
-    }
-
-    frameNumber = nextFrame
-
-    let allocator = commandAllocators[frameIndex]
-    currentUniformBuffer = uniformBuffers[frameIndex]
-    allocator.reset()
-    uniformOffset = 0
-
-    renderFrameCount += 1
-    time += dt
-
-    let (shouldStep, params) = updateAudioAndParams(bass: bass, mid: mid, high: high)
-
-    commandBuffer.beginCommandBuffer(allocator: allocator)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
-    encoder.setArgumentTable(argumentTable)
-
-    if shouldStep {
-      stepAccumulator = 0
-      simFrameCount += 1
-      encodeStep(encoder: encoder, simA: localSimA, simB: localSimB, params: params)
-    }
-
-    let simSource = shouldStep ? localSimB : localSimA
-    encodeRender(encoder: encoder, simSource: simSource, outputTex: drawable.texture, params: params)
-
-    encoder.endEncoding()
-    commandBuffer.endCommandBuffer()
-
-    commandQueue.waitForDrawable(drawable)
-    commandQueue.commit([commandBuffer])
-    commandQueue.signalEvent(sharedEvent, value: frameNumber)
-    commandQueue.signalDrawable(drawable)
-    drawable.present()
-
-    if shouldStep {
-      swap(&simA, &simB)
-    }
-  }
-
-  private func updateAudioAndParams(bass: Float, mid: Float, high: Float) ->
-  (shouldStep: Bool, params: GameOfLifeParams) {
-    if needsAudioReseed {
-      smoothedBass = bass
-      smoothedMid = mid
-      needsAudioReseed = false
-    } else {
-      let bassTau: Float = bass > smoothedBass ? 0.04 : 0.15
-      let midTau: Float = mid > smoothedMid ? 0.05 : 0.18
-      smoothedBass += (bass - smoothedBass) * (1 - exp(-dt / bassTau))
-      smoothedMid += (mid - smoothedMid) * (1 - exp(-dt / midTau))
-    }
-
-    let stepInterval = max(3, Self.baseStepInterval - Int(smoothedBass * 6.0))
-    stepAccumulator += 1
-    let shouldStep = stepAccumulator >= stepInterval
-
-    let spawnRate: Float = 0.0008 + smoothedBass * 0.006
-
-    let params = GameOfLifeParams(
-      bass: bass,
-      mid: mid,
-      high: high,
-      time: time,
-      simWidth: UInt32(simWidth),
-      simHeight: UInt32(simHeight),
-      frameCount: simFrameCount,
-      spawnRate: spawnRate
-    )
-    return (shouldStep, params)
-  }
-
-  func reset() {
-    time = 0
-    renderFrameCount = 0
-    simFrameCount = 0
-    stepAccumulator = 0
-    smoothedBass = 0
-    smoothedMid = 0
-    seedInitialState()
-  }
-
-  private func encodeStep(encoder: some MTL4ComputeCommandEncoder,
-                          simA: MTLTexture,
-                          simB: MTLTexture,
-                          params: GameOfLifeParams) {
-    encoder.setComputePipelineState(stepPipeline)
-    argumentTable.setTexture(simA.gpuResourceID, index: 0)
-    argumentTable.setTexture(simB.gpuResourceID, index: 1)
-    argumentTable.setAddress(writeUniform(params), index: 0)
-
-    let simTG = MTLSize(width: 16, height: 16, depth: 1)
-    let simGroups = MTLSize(
-      width: (simWidth + 15) / 16,
-      height: (simHeight + 15) / 16,
-      depth: 1
-    )
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: simGroups, threadsPerThreadgroup: simTG)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-  }
-
-  private func encodeRender(encoder: some MTL4ComputeCommandEncoder,
-                            simSource: MTLTexture,
-                            outputTex: MTLTexture,
-                            params: GameOfLifeParams) {
-    encoder.setComputePipelineState(renderPipeline)
-    argumentTable.setTexture(simSource.gpuResourceID, index: 0)
-    argumentTable.setTexture(outputTex.gpuResourceID, index: 1)
-    argumentTable.setAddress(writeUniform(params), index: 0)
-
-    let renderTG = MTLSize(width: 16, height: 16, depth: 1)
-    let renderGroups = MTLSize(
-      width: (outputTex.width + 15) / 16,
-      height: (outputTex.height + 15) / 16,
-      depth: 1
-    )
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: renderGroups, threadsPerThreadgroup: renderTG)
-  }
 }

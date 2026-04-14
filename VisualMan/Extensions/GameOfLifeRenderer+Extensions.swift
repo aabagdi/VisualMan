@@ -53,6 +53,64 @@ extension GameOfLifeRenderer {
     return (a, b)
   }
 
+  struct WarmUpTextures {
+    let simA: MTLTexture
+    let simB: MTLTexture
+    let display: MTLTexture
+  }
+
+  func makeWarmUpTextures() -> WarmUpTextures? {
+    let simDesc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .rg8Unorm,
+      width: 64,
+      height: 64,
+      mipmapped: false
+    )
+    simDesc.usage = [.shaderRead, .shaderWrite]
+    simDesc.storageMode = .shared
+
+    let displayDesc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .bgra8Unorm,
+      width: 256,
+      height: 256,
+      mipmapped: false
+    )
+    displayDesc.usage = [.shaderRead, .shaderWrite]
+    displayDesc.storageMode = .private
+
+    guard let dummySimA = device.makeTexture(descriptor: simDesc),
+          let dummySimB = device.makeTexture(descriptor: simDesc),
+          let dummyDisplay = device.makeTexture(descriptor: displayDesc) else {
+      return nil
+    }
+    return WarmUpTextures(simA: dummySimA, simB: dummySimB, display: dummyDisplay)
+  }
+
+  func encodeWarmUpPasses(encoder: some MTL4ComputeCommandEncoder, textures: WarmUpTextures) {
+    let params = GameOfLifeParams(
+      bass: 0, mid: 0, high: 0, time: 0,
+      simWidth: 64, simHeight: 64,
+      frameCount: 0, spawnRate: 0
+    )
+
+    encoder.setComputePipelineState(stepPipeline)
+    argumentTable.setTexture(textures.simA.gpuResourceID, index: 0)
+    argumentTable.setTexture(textures.simB.gpuResourceID, index: 1)
+    argumentTable.setAddress(writeUniform(params), index: 0)
+    let simTG = MTLSize(width: 16, height: 16, depth: 1)
+    let simGroups = MTLSize(width: 4, height: 4, depth: 1)
+    encoder.dispatchThreadgroups(threadgroupsPerGrid: simGroups, threadsPerThreadgroup: simTG)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    encoder.setComputePipelineState(renderPipeline)
+    argumentTable.setTexture(textures.simB.gpuResourceID, index: 0)
+    argumentTable.setTexture(textures.display.gpuResourceID, index: 1)
+    argumentTable.setAddress(writeUniform(params), index: 0)
+    let renderTG = MTLSize(width: 16, height: 16, depth: 1)
+    let renderGroups = MTLSize(width: 16, height: 16, depth: 1)
+    encoder.dispatchThreadgroups(threadgroupsPerGrid: renderGroups, threadsPerThreadgroup: renderTG)
+  }
+
   func seedInitialState() {
     guard let simA else { return }
     let w = simWidth

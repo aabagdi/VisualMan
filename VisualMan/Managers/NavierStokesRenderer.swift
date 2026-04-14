@@ -61,7 +61,12 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var psiA: MTLTexture
   var psiB: MTLTexture
   var u0: MTLTexture
-  
+
+  var displayIntermediate: MTLTexture?
+  private var lastDisplayWidth: Int = 0
+  private var lastDisplayHeight: Int = 0
+  private var pendingDisplayReleases: [(frame: UInt64, texture: MTLTexture)] = []
+
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
   private var lastFrameTime: CFTimeInterval = 0
@@ -70,13 +75,11 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var prevBass: Float = 0
   var prevMid: Float = 0
 
-  private var resumeSuppressionRemaining: Float = 0
+  var resumeSuppressionRemaining: Float = 0
   private let velocityDissipation: Float = 0.985
   private let dyeDissipation: Float = 0.98
-  private let maxJacobiIterations: Int = 16
-  private let rampUpFrames: UInt64 = 180
-  var renderFrameCount: UInt64 = 0
-  
+  let jacobiIterations: Int = 16
+
   static let maxFramesInFlight: UInt64 = 3
   var commandAllocators = [any MTL4CommandAllocator]()
   var commandBuffer: any MTL4CommandBuffer
@@ -164,66 +167,89 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     configureResidencySet()
   }
-  
-  func writeUniform<T>(_ value: T) -> MTLGPUAddress {
-    let aligned = (uniformOffset + 15) & ~15
-    let end = aligned + MemoryLayout<T>.size
-    guard end <= Self.uniformBufferSize else {
-      Self.logger.error("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
-      return currentUniformBuffer.gpuAddress
-    }
-    (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
-    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
-    uniformOffset = end
-    return addr
-  }
 
-  func writeUniformArray<T>(_ values: [T]) -> MTLGPUAddress {
-    let aligned = (uniformOffset + 15) & ~15
-    let size = MemoryLayout<T>.stride * values.count
-    let end = aligned + size
-    guard end <= Self.uniformBufferSize else {
-      Self.logger.error("Uniform array buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
-      return currentUniformBuffer.gpuAddress
-    }
-    let ptr = currentUniformBuffer.contents() + aligned
-    values.withUnsafeBufferPointer { buf in
-      if let baseAddress = buf.baseAddress {
-        memcpy(ptr, baseAddress, size)
-      }
-    }
-    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
-    uniformOffset = end
-    return addr
-  }
-  
   func prepareForResume() {
     lastFrameTime = 0
     resumeSuppressionRemaining = 0.5
+  }
+
+  private func drainPendingDisplayReleases() {
+    guard !pendingDisplayReleases.isEmpty else { return }
+    let signaled = sharedEvent.signaledValue
+    var removedAny = false
+    pendingDisplayReleases.removeAll { entry in
+      if signaled >= entry.frame {
+        residencySet.removeAllocation(entry.texture)
+        removedAny = true
+        return true
+      }
+      return false
+    }
+    if removedAny {
+      residencySet.commit()
+    }
+  }
+
+  private func ensureDisplayIntermediate(width: Int, height: Int) -> Bool {
+    if width == lastDisplayWidth
+        && height == lastDisplayHeight
+        && displayIntermediate != nil {
+      return true
+    }
+
+    if let old = displayIntermediate {
+      pendingDisplayReleases.append((frame: frameNumber, texture: old))
+    }
+
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .bgra8Unorm,
+      width: width,
+      height: height,
+      mipmapped: false
+    )
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+
+    guard let tex = device.makeTexture(descriptor: desc) else {
+      displayIntermediate = nil
+      lastDisplayWidth = 0
+      lastDisplayHeight = 0
+      return false
+    }
+
+    residencySet.addAllocation(tex)
+    residencySet.commit()
+
+    displayIntermediate = tex
+    lastDisplayWidth = width
+    lastDisplayHeight = height
+    return true
   }
 
   func update(bass: Float,
               mid: Float,
               high: Float,
               drawable: CAMetalDrawable) {
+    drainPendingDisplayReleases()
+
     let drawableTexture = drawable.texture
 
-    let nextFrame = frameNumber + 1
-    let frameIndex = Int(nextFrame % Self.maxFramesInFlight)
-
-    if nextFrame > Self.maxFramesInFlight {
-      let waitValue = nextFrame - Self.maxFramesInFlight
-      guard sharedEvent.signaledValue >= waitValue else { return }
+    guard ensureDisplayIntermediate(width: drawableTexture.width,
+                                    height: drawableTexture.height),
+          let displayTex = displayIntermediate else {
+      commandQueue.waitForDrawable(drawable)
+      commandQueue.signalDrawable(drawable)
+      drawable.present()
+      return
     }
 
-    frameNumber = nextFrame
+    frameNumber += 1
+    let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
 
     let allocator = commandAllocators[frameIndex]
     currentUniformBuffer = uniformBuffers[frameIndex]
     allocator.reset()
     uniformOffset = 0
-    
-    renderFrameCount += 1
 
     let now = CACurrentMediaTime()
     if lastFrameTime == 0 {
@@ -243,18 +269,22 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     time += dt * (1.0 + smoothedBass * 0.5 + smoothedMid * 0.3)
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
+    commandBuffer.useResidencySet(residencySet)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
-    ensureTAAHistory(width: drawableTexture.width, height: drawableTexture.height)
+    ensureTAAHistory(width: displayTex.width, height: displayTex.height)
 
     runSimulationPass(encoder: encoder, bass: bass, mid: mid, high: high,
-                      output: drawableTexture)
+                      output: displayTex)
 
     if taaHistoryA != nil && taaHistoryB != nil {
       taaHistoryValid = true
     }
-    
+
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit)
+    encoder.copy(sourceTexture: displayTex, destinationTexture: drawableTexture)
+
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
     
@@ -263,80 +293,5 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     commandQueue.signalEvent(sharedEvent, value: frameNumber)
     commandQueue.signalDrawable(drawable)
     drawable.present()
-  }
-
-}
-
-private extension NavierStokesRenderer {
-  var currentJacobiIterations: Int {
-    let t = min(Float(renderFrameCount) / Float(rampUpFrames), 1.0)
-    return max(Int(Float(maxJacobiIterations) * t), 4)
-  }
-
-  func runSimulationPass(encoder: any MTL4ComputeCommandEncoder,
-                         bass: Float, mid: Float, high: Float,
-                         output: MTLTexture) {
-    let validFlag: UInt32 = taaHistoryValid ? 1 : 0
-    let frameUniforms = FrameUniforms(
-      bass: bass, mid: mid, high: high,
-      time: time, dt: dt,
-      taaBlend: taaBlendFactor,
-      historyValid: validFlag
-    )
-    frameUniformsAddress = writeUniform(frameUniforms)
-
-    let suppress = resumeSuppressionRemaining > 0
-    let injBass  = suppress ? 0 : bass
-    let injMid   = suppress ? 0 : mid
-    let injHigh  = suppress ? 0 : high
-
-    advectPsi(encoder: encoder)
-    swap(&psiA, &psiB)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    covectorPullback(encoder: encoder, dissipation: 0.995)
-    swap(&velocityA, &velocityB)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    injectAudioSplats(encoder: encoder, bass: injBass, mid: injMid, high: injHigh)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    applyVorticityConfinement(encoder: encoder, bass: injBass, mid: injMid)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    project(encoder: encoder, jacobiIterations: currentJacobiIterations)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    framesSinceReinit += 1
-    if framesSinceReinit >= reinitInterval {
-      reinitFlowMap(encoder: encoder)
-      framesSinceReinit = 0
-      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    }
-
-    let dynamicDyeDissipation: Float = 0.98 + bass * 0.01 + mid * 0.008
-    advectDyeMacCormack(encoder: encoder, dissipation: dynamicDyeDissipation)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    runBloomPasses(encoder: encoder)
-
-    render(encoder: encoder, output: output, bass: bass, mid: mid)
-  }
-
-  func runBloomPasses(encoder: any MTL4ComputeCommandEncoder) {
-    bloomThresholdBlurH(encoder: encoder, dst: bloomB, size: Self.bloomSize)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    blurBloomV(encoder: encoder, src: bloomB, dst: bloomA, size: Self.bloomSize)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    bloomThresholdBlurH(encoder: encoder, dst: bloomMidB, size: Self.bloomSizeMid)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    blurBloomV(encoder: encoder, src: bloomMidB, dst: bloomMidA, size: Self.bloomSizeMid)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    bloomThresholdBlurH(encoder: encoder, dst: bloomLoB, size: Self.bloomSizeLo)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    blurBloomV(encoder: encoder, src: bloomLoB, dst: bloomLoA, size: Self.bloomSizeLo)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
   }
 }

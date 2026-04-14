@@ -149,6 +149,12 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     }
     
     func draw(in view: MTKView) {
+      autoreleasepool {
+        drawFrame(in: view)
+      }
+    }
+
+    private func drawFrame(in view: MTKView) {
       if nativeDrawableSize == .zero, let metalLayer = view.layer as? CAMetalLayer {
         nativeDrawableSize = metalLayer.drawableSize
         mtkView = view
@@ -161,7 +167,10 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         applyDrawableScale(to: view)
       }
 
-      guard let drawable = view.currentDrawable else { return }
+      guard renderer.canRenderThisFrame() else { return }
+
+      guard let metalLayer = view.layer as? CAMetalLayer,
+            let drawable = metalLayer.nextDrawable() else { return }
 
       let now = CACurrentMediaTime()
       let isResume: Bool
@@ -171,7 +180,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         renderer.dt = isResume ? 0 : min(delta, 1.0 / 30.0)
       } else {
         isResume = false
-        renderer.dt = 0  // cold start: no advancement until we can measure
+        renderer.dt = 0
       }
       lastFrameTime = now
 

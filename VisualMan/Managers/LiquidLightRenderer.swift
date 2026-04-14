@@ -88,6 +88,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   var currentUniformBuffer: MTLBuffer
 
   private var intermediateTexture: MTLTexture?
+  private var finalTexture: MTLTexture?
   private var lastDrawableWidth: Int = 0
   private var lastDrawableHeight: Int = 0
 
@@ -111,7 +112,9 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     }.value
 
     guard let (device, pipelines) = prepared else { return nil }
-    return LiquidLightRenderer(device: device, pipelines: pipelines)
+    guard let renderer = LiquidLightRenderer(device: device, pipelines: pipelines) else { return nil }
+    renderer.warmUpGPU()
+    return renderer
   }
 
   private init?(device: MTLDevice, pipelines: Pipelines) {
@@ -148,6 +151,54 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     self.residencySet = residencySet
 
     configureResidencySet()
+  }
+
+  func warmUpGPU() {
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .bgra8Unorm,
+      width: 256,
+      height: 256,
+      mipmapped: false
+    )
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+
+    guard let dummy = device.makeTexture(descriptor: desc) else { return }
+    residencySet.addAllocation(dummy)
+    residencySet.commit()
+    defer {
+      residencySet.removeAllocation(dummy)
+      residencySet.commit()
+    }
+
+    let allocator = commandAllocators[0]
+    currentUniformBuffer = uniformBuffers[0]
+    allocator.reset()
+    uniformOffset = 0
+
+    commandBuffer.beginCommandBuffer(allocator: allocator)
+    commandBuffer.useResidencySet(residencySet)
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+    encoder.setArgumentTable(argumentTable)
+
+    renderLiquidLight(encoder: encoder, output: dummy, audio: .zero)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    renderBlur(encoder: encoder, input: dummy, output: dummy, audio: .zero)
+
+    encoder.endEncoding()
+    commandBuffer.endCommandBuffer()
+    commandQueue.commit([commandBuffer])
+    commandQueue.signalEvent(sharedEvent, value: 1)
+    frameNumber = 1
+  }
+
+  func canRenderThisFrame() -> Bool {
+    let nextFrame = frameNumber + 1
+    if nextFrame > Self.maxFramesInFlight {
+      let waitValue = nextFrame - Self.maxFramesInFlight
+      return sharedEvent.signaledValue >= waitValue
+    }
+    return true
   }
 
   func writeUniform<T>(_ value: T) -> MTLGPUAddress {
@@ -191,12 +242,18 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     }
   }
 
-  private func ensureIntermediateTexture(width: Int, height: Int) -> Bool {
-    if width == lastDrawableWidth && height == lastDrawableHeight && intermediateTexture != nil {
+  private func ensureIntermediateTextures(width: Int, height: Int) -> Bool {
+    if width == lastDrawableWidth
+        && height == lastDrawableHeight
+        && intermediateTexture != nil
+        && finalTexture != nil {
       return true
     }
 
     if let old = intermediateTexture {
+      pendingTextureReleases.append((frame: frameNumber, texture: old))
+    }
+    if let old = finalTexture {
       pendingTextureReleases.append((frame: frameNumber, texture: old))
     }
 
@@ -209,20 +266,24 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
 
-    guard let tex = device.makeTexture(descriptor: desc) else {
+    guard let interTex = device.makeTexture(descriptor: desc),
+          let finalTex = device.makeTexture(descriptor: desc) else {
       intermediateTexture = nil
+      finalTexture = nil
       lastDrawableWidth = 0
       lastDrawableHeight = 0
       return false
     }
 
-    residencySet.addAllocation(tex)
+    residencySet.addAllocation(interTex)
+    residencySet.addAllocation(finalTex)
     residencySet.commit()
 
-    intermediateTexture = tex
+    intermediateTexture = interTex
+    finalTexture = finalTex
     lastDrawableWidth = width
     lastDrawableHeight = height
-    return false
+    return true
   }
 
   func update(bass: Float,
@@ -234,18 +295,17 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     let smoothed = processAudio(bass: bass, mid: mid, high: high)
 
     let outputTex = drawable.texture
-    let textureReady = ensureIntermediateTexture(width: outputTex.width, height: outputTex.height)
-    guard textureReady, let intermediateTex = intermediateTexture else { return }
-
-    let nextFrame = frameNumber + 1
-    let frameIndex = Int(nextFrame % Self.maxFramesInFlight)
-
-    if nextFrame > Self.maxFramesInFlight {
-      let waitValue = nextFrame - Self.maxFramesInFlight
-      guard sharedEvent.signaledValue >= waitValue else { return }
+    guard ensureIntermediateTextures(width: outputTex.width, height: outputTex.height),
+          let intermediateTex = intermediateTexture,
+          let finalTex = finalTexture else {
+      commandQueue.waitForDrawable(drawable)
+      commandQueue.signalDrawable(drawable)
+      drawable.present()
+      return
     }
 
-    frameNumber = nextFrame
+    frameNumber += 1
+    let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
 
     let allocator = commandAllocators[frameIndex]
     currentUniformBuffer = uniformBuffers[frameIndex]
@@ -253,12 +313,17 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     uniformOffset = 0
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
+    commandBuffer.useResidencySet(residencySet)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
     renderLiquidLight(encoder: encoder, output: intermediateTex, audio: smoothed)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    renderBlur(encoder: encoder, input: intermediateTex, output: outputTex, audio: smoothed)
+    renderBlur(encoder: encoder, input: intermediateTex, output: finalTex, audio: smoothed)
+
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit)
+    encoder.copy(sourceTexture: finalTex, destinationTexture: outputTex)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
