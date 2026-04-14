@@ -11,13 +11,30 @@ import QuartzCore
 extension LiquidLightRenderer {
   func processAudio(bass: Float, mid: Float, high: Float) -> SIMD3<Float> {
     let now = CACurrentMediaTime()
-    if lastFrameTime == 0 {
-      dt = 1.0 / 60.0
+
+    let gap = lastFrameTime == 0 ? 0 : (now - lastFrameTime)
+    let explicitResume = (lastFrameTime == 0)
+    let gapResume = gap > 0.2
+    let isResume = explicitResume || gapResume
+
+    if isResume {
+      dt = 0
+      if gapResume {
+        resumeSuppressionRemaining = Self.resumeFadeDuration
+        resumeFadeIn = 0
+        envelope = .zero
+        slowEnvelope = .zero
+        smoothedBass = 0
+        smoothedSpeed = 0.25
+      }
     } else {
-      dt = Float(max(1.0 / 240.0, min(1.0 / 30.0, now - lastFrameTime)))
+      dt = Float(max(1.0 / 240.0, min(1.0 / 30.0, gap)))
     }
     lastFrameTime = now
     wallClock += dt
+
+    resumeSuppressionRemaining = max(0, resumeSuppressionRemaining - dt)
+    let inResumeGrace = resumeSuppressionRemaining > 0
 
     let input = SIMD3<Float>(bass, mid, high)
 
@@ -48,7 +65,7 @@ extension LiquidLightRenderer {
 
     let transient = bass > smoothedBass * 1.6 && bass > bassBaseline
     let cooldownOK = (wallClock - lastDropWallTime) > 0.35
-    if transient && cooldownOK {
+    if transient && cooldownOK && !inResumeGrace {
       lastDropWallTime = wallClock
       dropHueCounter = (dropHueCounter + 0.37).truncatingRemainder(dividingBy: 1.0)
       let seed = Float(frameNumber) * 0.6180339
@@ -57,8 +74,13 @@ extension LiquidLightRenderer {
       drops[nextDropSlot] = SIMD4<Float>(x, y, time, dropHueCounter)
       nextDropSlot = (nextDropSlot + 1) % 4
     }
-
-    return envelope
+    
+    if resumeFadeIn < 1 {
+      resumeFadeIn = min(1, resumeFadeIn + dt / Self.resumeFadeDuration)
+    }
+    let u = resumeFadeIn
+    let fade = u * u * (3 - 2 * u)
+    return envelope * fade
   }
 
   func renderLiquidLight(encoder: any MTL4ComputeCommandEncoder,

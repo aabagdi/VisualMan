@@ -8,6 +8,7 @@
 import AVFoundation
 import Synchronization
 import Dependencies
+import Accelerate
 
 @Observable
 @MainActor
@@ -219,29 +220,26 @@ final class AudioEngineManager {
         guard !Task.isCancelled else { break }
         guard let self else { break }
         
-        let decayFactor = Constants.pauseDecayFactor
+        var decayFactor = Constants.pauseDecayFactor
         let threshold = Constants.pauseDecayThreshold
-        var allZero = true
         
-        for i in self.visualizerBars.indices {
-          self.visualizerBars[i] *= decayFactor
-          if self.visualizerBars[i] < threshold {
-            self.visualizerBars[i] = 0
-          } else {
-            allZero = false
-          }
+        var barMax: Float = 0
+        self.visualizerBars.withUnsafeElementPointer { ptr in
+          vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 32)
+          vDSP_maxv(ptr, 1, &barMax, 32)
         }
         
-        for i in self.audioLevels.indices {
-          self.audioLevels[i] *= decayFactor
-          if self.audioLevels[i] < threshold {
-            self.audioLevels[i] = 0
-          } else {
-            allZero = false
-          }
+        var levelMax: Float = 0
+        self.audioLevels.withUnsafeElementPointer { ptr in
+          vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 1024)
+          vDSP_maxv(ptr, 1, &levelMax, 1024)
         }
         
-        if allZero { break }
+        if barMax < threshold && levelMax < threshold {
+          self.visualizerBars = [32 of Float](repeating: 0)
+          self.audioLevels = [1024 of Float](repeating: 0)
+          break
+        }
       }
     }
   }
@@ -284,7 +282,7 @@ final class AudioEngineManager {
     startDisplayLink()
     startVisualizerForwarding()
   }
-
+  
   func stopForTransition() {
     let wasSeeking = playbackState == .seeking
     currentPlaybackID = uuid()

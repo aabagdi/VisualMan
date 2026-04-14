@@ -95,9 +95,9 @@ actor DSPProcessor {
     }
     
     let newBars = createVisualizerBars(from: audioLevels, sampleRate: sampleRate)
-    updateAutomaticGainControl(bars: newBars)
-    
     let dt = sampleRate > 0 ? Float(samples.count) / sampleRate : 1.0 / 60.0
+
+    updateAutomaticGainControl(bars: newBars, dt: dt)
     smoothVisualizerBars(newBars, dt: dt)
     
     return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
@@ -233,19 +233,21 @@ actor DSPProcessor {
     }
   }
   
-  private func updateAutomaticGainControl(bars: [32 of Float]) {
+  private func updateAutomaticGainControl(bars: [32 of Float], dt: Float) {
     var maxBar: Float = 0
     var barsCopy = bars
     barsCopy.withUnsafeElementPointer { ptr in
       vDSP_maxv(ptr, 1, &maxBar, vDSP_Length(Constants.barCount))
     }
-    
+
+    let safeDt = max(dt, 1e-4)
+    let retention = exp(-safeDt / Constants.gainTau)
+
     if maxBar < 0.01 {
-      currentGain = currentGain * Constants.gainSmoothingFactor
-                  + 1.0 * (1.0 - Constants.gainSmoothingFactor)
+      currentGain = 1.0 + (currentGain - 1.0) * retention
       return
     }
-    
+
     if gainHistoryCount < Constants.gainHistorySize {
       gainHistory[gainHistoryCount] = maxBar
       gainHistorySum += maxBar
@@ -263,14 +265,14 @@ actor DSPProcessor {
         gainHistoryEvictionsSinceRebuild = 0
       }
     }
-    
+
     let averagePeak = gainHistorySum / Float(gainHistoryCount)
     var desiredGain: Float = 1.0
     if averagePeak > 0.01 {
       desiredGain = Constants.targetPeak / averagePeak
     }
     desiredGain = max(Constants.minGain, min(Constants.maxGain, desiredGain))
-    currentGain = currentGain * Constants.gainSmoothingFactor
-                + desiredGain * (1.0 - Constants.gainSmoothingFactor)
+
+    currentGain = desiredGain + (currentGain - desiredGain) * retention
   }
 }

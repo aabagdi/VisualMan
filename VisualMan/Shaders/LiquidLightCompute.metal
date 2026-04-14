@@ -284,7 +284,7 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
     float pulse = fast::exp(-e * e);
     float pf = pulse * pre.y;
 
-    coords += dir * pf * 0.12;
+    coords += dir * pf * 0.18;
 
     half washStrength = half(pf);
     dropTint += half3(params.dropColors[i].rgb) * washStrength;
@@ -365,7 +365,10 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
 
   if (dropTintWeight > 0.0h) {
     half3 avgTint = dropTint / max(dropTintWeight, 1.0h);
-    result = mix(result, avgTint, saturate(dropTintWeight * 0.5h));
+    half luma = dot(result, half3(0.2126h, 0.7152h, 0.0722h));
+    half3 tinted = avgTint * max(luma * 1.6h, 0.15h);
+    half blend = saturate(dropTintWeight * 0.35h);
+    result = mix(result, tinted, blend);
   }
 
   {

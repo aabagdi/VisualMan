@@ -44,6 +44,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
 
   var smoothedBass: Float = 0
   var smoothedMid: Float = 0
+  private var needsAudioReseed: Bool = true
 
   static let baseStepInterval: Int = 10
   var stepAccumulator: Int = 0
@@ -227,10 +228,16 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
 
   private func updateAudioAndParams(bass: Float, mid: Float, high: Float) ->
   (shouldStep: Bool, params: GameOfLifeParams) {
-    let bassTau: Float = bass > smoothedBass ? 0.04 : 0.15
-    let midTau: Float = mid > smoothedMid ? 0.05 : 0.18
-    smoothedBass += (bass - smoothedBass) * (1 - exp(-dt / bassTau))
-    smoothedMid += (mid - smoothedMid) * (1 - exp(-dt / midTau))
+    if needsAudioReseed {
+      smoothedBass = bass
+      smoothedMid = mid
+      needsAudioReseed = false
+    } else {
+      let bassTau: Float = bass > smoothedBass ? 0.04 : 0.15
+      let midTau: Float = mid > smoothedMid ? 0.05 : 0.18
+      smoothedBass += (bass - smoothedBass) * (1 - exp(-dt / bassTau))
+      smoothedMid += (mid - smoothedMid) * (1 - exp(-dt / midTau))
+    }
 
     let stepInterval = max(3, Self.baseStepInterval - Int(smoothedBass * 6.0))
     stepAccumulator += 1

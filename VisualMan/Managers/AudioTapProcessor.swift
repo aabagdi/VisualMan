@@ -13,9 +13,8 @@ final class AudioTapProcessor: Sendable {
   nonisolated private static let ringMask = ringCapacity - 1
   
   private let dspProcessor = DSPProcessor()
-  private let isProcessingBuffer = Atomic<Bool>(false)
   private typealias ForwardingState = (
-    continuation: AsyncStream<DSPProcessor.DSPResult>.Continuation?,
+    displayLink: DisplayLinkStream?,
     task: Task<Void, Never>?
   )
   private let forwardingState = Mutex<ForwardingState>((nil, nil))
@@ -26,7 +25,7 @@ final class AudioTapProcessor: Sendable {
   private let writeIndex = Atomic<Int>(0)
   private let readIndex = Atomic<Int>(0)
   private let sampleRateBits = Atomic<UInt32>(0)
-  
+
   nonisolated func processSamples(
     channels: UnsafePointer<UnsafeMutablePointer<Float>>,
     channelCount: Int,
@@ -54,20 +53,20 @@ final class AudioTapProcessor: Sendable {
       processSamples(buf, sampleRate: sampleRate)
     }
   }
-
+  
   nonisolated func processSamples(_ samples: UnsafeBufferPointer<Float>, sampleRate: Float) {
     let n = samples.count
     guard n > 0, let src = samples.baseAddress else { return }
-    
+
     sampleRateBits.store(sampleRate.bitPattern, ordering: .relaxed)
-    
+
     let effective = min(n, Self.ringCapacity)
     let srcStart = src + (n - effective)
-    
+
     let write = writeIndex.load(ordering: .relaxed)
     let writePos = write & Self.ringMask
     let firstChunk = min(effective, Self.ringCapacity - writePos)
-    
+
     ringBuffer.withUnsafeElementPointer { ring in
       (ring + writePos).update(from: srcStart, count: firstChunk)
       let remaining = effective - firstChunk
@@ -75,37 +74,27 @@ final class AudioTapProcessor: Sendable {
         ring.update(from: srcStart + firstChunk, count: remaining)
       }
     }
-    
-    writeIndex.store(write &+ effective, ordering: .releasing)
-    
-    guard isProcessingBuffer.compareExchange(expected: false,
-                                             desired: true,
-                                             ordering: .acquiringAndReleasing).exchanged else { return }
 
-    let dsp = dspProcessor
-    Task { [self] in
-      defer { isProcessingBuffer.store(false, ordering: .releasing) }
-      await drainAndProcess(dsp: dsp)
-    }
+    writeIndex.store(write &+ effective, ordering: .releasing)
   }
-  
-  private func drainAndProcess(dsp: DSPProcessor) async {
+
+  private func drainAndProcess(dsp: DSPProcessor) async -> DSPProcessor.DSPResult? {
     let w = writeIndex.load(ordering: .acquiring)
     var r = readIndex.load(ordering: .relaxed)
     var count = w &- r
-    guard count > 0 else { return }
-    
+    guard count > 0 else { return nil }
+
     if count > Self.ringCapacity {
       r = w &- Self.ringCapacity
       count = Self.ringCapacity
     }
-    
+
     let rate = Float(bitPattern: sampleRateBits.load(ordering: .relaxed))
     guard rate > 0 else {
       readIndex.store(w, ordering: .releasing)
-      return
+      return nil
     }
-    
+
     drainScratch.withUnsafeMutableBufferPointer { dst in
       guard let dstBase = dst.baseAddress else { return }
       let readPos = r & Self.ringMask
@@ -118,39 +107,41 @@ final class AudioTapProcessor: Sendable {
         }
       }
     }
-    
+
     readIndex.store(w, ordering: .releasing)
-    
-    let result = await dsp.processSamples(drainScratch[0..<count], sampleRate: rate)
-    forwardingState.withLock { _ = $0.continuation?.yield(result) }
+    return await dsp.processSamples(drainScratch[0..<count], sampleRate: rate)
   }
-  
+
   @MainActor
   func startForwarding(handler: @escaping @MainActor (DSPProcessor.DSPResult) -> Void) {
     stopForwarding()
-    let (stream, continuation) = AsyncStream<DSPProcessor.DSPResult>.makeStream(bufferingPolicy: .bufferingNewest(1))
-    let task = Task { @MainActor in
-      for await result in stream {
+    let displayLink = DisplayLinkStream()
+    let dsp = dspProcessor
+    let task = Task { @MainActor [weak self] in
+      for await _ in displayLink.frames {
         guard !Task.isCancelled else { break }
-        handler(result)
+        guard let self else { break }
+        if let result = await self.drainAndProcess(dsp: dsp) {
+          handler(result)
+        }
       }
     }
     forwardingState.withLock {
-      $0.continuation = continuation
+      $0.displayLink = displayLink
       $0.task = task
     }
   }
-  
+
   @MainActor
   func stopForwarding() {
     forwardingState.withLock {
-      $0.continuation?.finish()
-      $0.continuation = nil
+      $0.displayLink?.stop()
+      $0.displayLink = nil
       $0.task?.cancel()
       $0.task = nil
     }
   }
-  
+
   func reset() async {
     readIndex.store(writeIndex.load(ordering: .acquiring), ordering: .releasing)
     sampleRateBits.store(0, ordering: .relaxed)

@@ -91,6 +91,11 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   private var lastDrawableWidth: Int = 0
   private var lastDrawableHeight: Int = 0
 
+  var resumeSuppressionRemaining: Float = 0
+
+  var resumeFadeIn: Float = 1.0
+  static let resumeFadeDuration: Float = 0.8
+
   private var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
   static func create() async -> LiquidLightRenderer? {
@@ -156,6 +161,17 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
     uniformOffset = end
     return addr
+  }
+
+  func prepareForResume() {
+    lastFrameTime = 0
+    resumeSuppressionRemaining = Self.resumeFadeDuration
+    resumeFadeIn = 0
+
+    envelope = .zero
+    slowEnvelope = .zero
+    smoothedBass = 0
+    smoothedSpeed = 0.25
   }
 
   private func drainPendingTextureReleases() {

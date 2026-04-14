@@ -16,8 +16,10 @@ protocol MetalVisualizerRenderer: AnyObject {
 
   func update(bass: Float, mid: Float, high: Float, drawable: CAMetalDrawable)
   func reset()
+  func prepareForResume()
 }
 
 extension MetalVisualizerRenderer {
   func reset() {}
+  func prepareForResume() {}
 }

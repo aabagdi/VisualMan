@@ -69,6 +69,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   private var smoothedMid: Float = 0
   var prevBass: Float = 0
   var prevMid: Float = 0
+
+  private var resumeSuppressionRemaining: Float = 0
   private let velocityDissipation: Float = 0.985
   private let dyeDissipation: Float = 0.98
   private let maxJacobiIterations: Int = 16
@@ -195,6 +197,11 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     return addr
   }
   
+  func prepareForResume() {
+    lastFrameTime = 0
+    resumeSuppressionRemaining = 0.5
+  }
+
   func update(bass: Float,
               mid: Float,
               high: Float,
@@ -220,7 +227,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     let now = CACurrentMediaTime()
     if lastFrameTime == 0 {
-      dt = 1.0 / 60.0
+      dt = 0
     } else {
       dt = Float(max(1.0 / 240.0, min(1.0 / 30.0, now - lastFrameTime)))
     }
@@ -230,6 +237,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     let midTau: Float = mid  > smoothedMid  ? 0.05 : 0.18
     smoothedBass += (bass - smoothedBass) * (1 - exp(-dt / bassTau))
     smoothedMid  += (mid  - smoothedMid)  * (1 - exp(-dt / midTau))
+
+    resumeSuppressionRemaining = max(0, resumeSuppressionRemaining - dt)
 
     time += dt * (1.0 + smoothedBass * 0.5 + smoothedMid * 0.3)
 
@@ -276,6 +285,11 @@ private extension NavierStokesRenderer {
     )
     frameUniformsAddress = writeUniform(frameUniforms)
 
+    let suppress = resumeSuppressionRemaining > 0
+    let injBass  = suppress ? 0 : bass
+    let injMid   = suppress ? 0 : mid
+    let injHigh  = suppress ? 0 : high
+
     advectPsi(encoder: encoder)
     swap(&psiA, &psiB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
@@ -284,10 +298,10 @@ private extension NavierStokesRenderer {
     swap(&velocityA, &velocityB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    injectAudioSplats(encoder: encoder, bass: bass, mid: mid, high: high)
+    injectAudioSplats(encoder: encoder, bass: injBass, mid: injMid, high: injHigh)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    applyVorticityConfinement(encoder: encoder, bass: bass, mid: mid)
+    applyVorticityConfinement(encoder: encoder, bass: injBass, mid: injMid)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     project(encoder: encoder, jacobiIterations: currentJacobiIterations)
@@ -325,5 +339,4 @@ private extension NavierStokesRenderer {
     blurBloomV(encoder: encoder, src: bloomLoB, dst: bloomLoA, size: Self.bloomSizeLo)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
   }
-
 }

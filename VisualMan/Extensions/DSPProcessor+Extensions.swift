@@ -34,29 +34,37 @@ extension DSPProcessor {
     static let presenceBoostFactor: Float = 0.4
     static let gainSmoothingFactor: Float = 0.95
     static let gainHistoryRebuildInterval = 1024
+    static let gainTau: Float = 0.3
+    static let logMinFreq: Float = log10(minFrequency)
+    static let logMaxFreq: Float = log10(maxFrequency)
+    static let logBoostCeiling: Float = log10(boostCeilingFrequency)
+    static let logPresenceLow: Float = log10(presenceLowFrequency)
+    static let logPresenceHigh: Float = log10(presenceHighFrequency)
+    static let logPresenceMid: Float = (logPresenceLow + logPresenceHigh) / 2.0
+    static let logPresenceHalfWidth: Float = (logPresenceHigh - logPresenceLow) / 2.0
   }
-
+  
   func rebuildAWeightTable(sampleRate: Float) {
     let binFrequencyWidth = sampleRate / Float(Constants.fftSize)
-
+    
     let c1: Float = 12194.217 * 12194.217
     let c2: Float = 20.598997 * 20.598997
     let c3: Float = 107.65265 * 107.65265
     let c4: Float = 737.86223 * 737.86223
-
+    
     for i in 0..<Constants.spectrumSize {
       let frequency = Float(i) * binFrequencyWidth
       let f2 = frequency * frequency
       let f4 = f2 * f2
       let num = c1 * f4
-
+      
       let term1 = f2 + c2
       let term2 = f2 + c3
       let term3 = f2 + c4
       let term4 = f2 + c1
       let sqrtTerm = sqrt(term2 * term3)
       let den = term1 * sqrtTerm * term4
-
+      
       var aWeight: Float = 0.0
       if den > 0 && frequency > 10 {
         aWeight = 2.0 + 20.0 * log10(num / den)
@@ -66,20 +74,19 @@ extension DSPProcessor {
       aWeightTable[i] = pow(10.0, aWeight / 20.0)
     }
   }
-
+  
   func createVisualizerBars(from fftData: [1024 of Float], sampleRate: Float) -> [32 of Float] {
     var bars = [32 of Float](repeating: 0.0)
     var fftData = fftData
 
-    let logMinFreq = log10(Constants.minFrequency)
-    let logMaxFreq = log10(Constants.maxFrequency)
     let binWidth = sampleRate / Float(Constants.fftSize)
-    let logBoostCeiling = log10(Constants.boostCeilingFrequency)
+    let logRange = Constants.logMaxFreq - Constants.logMinFreq
+    let invBarCount = 1.0 / Float(Constants.barCount)
 
     fftData.withUnsafeElementPointer { fft in
       for i in 0..<Constants.barCount {
-        let logFreqLow = logMinFreq + (logMaxFreq - logMinFreq) * Float(i) / Float(Constants.barCount)
-        let logFreqHigh = logMinFreq + (logMaxFreq - logMinFreq) * Float(i + 1) / Float(Constants.barCount)
+        let logFreqLow = Constants.logMinFreq + logRange * Float(i) * invBarCount
+        let logFreqHigh = Constants.logMinFreq + logRange * Float(i + 1) * invBarCount
 
         let freqLow = pow(10, logFreqLow)
         let freqHigh = pow(10, logFreqHigh)
@@ -108,10 +115,7 @@ extension DSPProcessor {
 
         let rawMag = avgMag * Constants.avgWeight + maxMag * Constants.maxWeight
         let logCenter = (logFreqLow + logFreqHigh) / 2.0
-        bars[i] = applyFrequencyBoosts(rawMag,
-                                       logCenter: logCenter,
-                                       logMinFreq: logMinFreq,
-                                       logBoostCeiling: logBoostCeiling)
+        bars[i] = applyFrequencyBoosts(rawMag, logCenter: logCenter)
 
         bars[i] = tanh(bars[i] * Constants.tanhScale)
         bars[i] = max(0, min(1, bars[i]))
@@ -120,29 +124,23 @@ extension DSPProcessor {
 
     return bars
   }
-
-  private func applyFrequencyBoosts(_ magnitude: Float,
-                                    logCenter: Float,
-                                    logMinFreq: Float,
-                                    logBoostCeiling: Float) -> Float {
+  
+  private func applyFrequencyBoosts(_ magnitude: Float, logCenter: Float) -> Float {
     var result = magnitude
-    
-    if logCenter < logBoostCeiling {
-      let ratio = (logBoostCeiling - logCenter) / (logBoostCeiling - logMinFreq)
+
+    if logCenter < Constants.logBoostCeiling {
+      let ratio = (Constants.logBoostCeiling - logCenter)
+                / (Constants.logBoostCeiling - Constants.logMinFreq)
       let boost = 1.0 + Constants.lowFrequencyBoostFactor * ratio
       result *= boost
     }
-    
-    let logPresenceLow = log10(Constants.presenceLowFrequency)
-    let logPresenceHigh = log10(Constants.presenceHighFrequency)
-    if logCenter >= logPresenceLow && logCenter <= logPresenceHigh {
-      let mid = (logPresenceLow + logPresenceHigh) / 2.0
-      let halfWidth = (logPresenceHigh - logPresenceLow) / 2.0
-      let distance = abs(logCenter - mid) / halfWidth
+
+    if logCenter >= Constants.logPresenceLow && logCenter <= Constants.logPresenceHigh {
+      let distance = abs(logCenter - Constants.logPresenceMid) / Constants.logPresenceHalfWidth
       let boost = 1.0 + Constants.presenceBoostFactor * (1.0 - distance * distance)
       result *= boost
     }
-    
+
     return result
   }
 }
