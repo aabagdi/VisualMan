@@ -206,11 +206,13 @@ extension NavierStokesRenderer {
   
   func bloomThresholdBlurH(encoder: any MTL4ComputeCommandEncoder,
                            dst: MTLTexture,
-                           size: Int) {
+                           size: Int,
+                           bass: Float,
+                           mid: Float) {
     encoder.setComputePipelineState(pipelines.bloomThresholdBlurH)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(dst.gpuResourceID, index: 1)
-    let threshold: Float = 0.8
+    let threshold: Float = max(0.35, 0.85 - bass * 0.40 - mid * 0.15)
     argumentTable.setAddress(writeUniform(threshold), index: 0)
     dispatchGrid(encoder: encoder, width: size, height: size)
   }
@@ -253,10 +255,12 @@ extension NavierStokesRenderer {
                          bass: Float, mid: Float, high: Float,
                          output: MTLTexture) {
     let validFlag: UInt32 = taaHistoryValid ? 1 : 0
+    let audioEnergy = min(1.0, (bass + mid + high) / 3.0)
+    let dynamicTAABlend = max(0.55, taaBlendFactor - audioEnergy * 0.30)
     let frameUniforms = FrameUniforms(
       bass: bass, mid: mid, high: high,
       time: time, dt: dt,
-      taaBlend: taaBlendFactor,
+      taaBlend: dynamicTAABlend,
       historyValid: validFlag
     )
     frameUniformsAddress = writeUniform(frameUniforms)
@@ -294,23 +298,28 @@ extension NavierStokesRenderer {
     advectDyeMacCormack(encoder: encoder, dissipation: dynamicDyeDissipation)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    runBloomPasses(encoder: encoder)
+    runBloomPasses(encoder: encoder, bass: bass, mid: mid)
 
     render(encoder: encoder, output: output, bass: bass, mid: mid)
   }
 
-  func runBloomPasses(encoder: any MTL4ComputeCommandEncoder) {
-    bloomThresholdBlurH(encoder: encoder, dst: bloomB, size: Self.bloomSize)
+  func runBloomPasses(encoder: any MTL4ComputeCommandEncoder,
+                      bass: Float,
+                      mid: Float) {
+    bloomThresholdBlurH(encoder: encoder, dst: bloomB, size: Self.bloomSize,
+                        bass: bass, mid: mid)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     blurBloomV(encoder: encoder, src: bloomB, dst: bloomA, size: Self.bloomSize)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    bloomThresholdBlurH(encoder: encoder, dst: bloomMidB, size: Self.bloomSizeMid)
+    bloomThresholdBlurH(encoder: encoder, dst: bloomMidB, size: Self.bloomSizeMid,
+                        bass: bass, mid: mid)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     blurBloomV(encoder: encoder, src: bloomMidB, dst: bloomMidA, size: Self.bloomSizeMid)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    bloomThresholdBlurH(encoder: encoder, dst: bloomLoB, size: Self.bloomSizeLo)
+    bloomThresholdBlurH(encoder: encoder, dst: bloomLoB, size: Self.bloomSizeLo,
+                        bass: bass, mid: mid)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     blurBloomV(encoder: encoder, src: bloomLoB, dst: bloomLoA, size: Self.bloomSizeLo)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)

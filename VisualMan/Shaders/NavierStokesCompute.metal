@@ -337,12 +337,29 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   color += dye.sample(bilinear, sampleCenter + float2( 0.25,  0.75) * texel);
   color *= 0.25;
 
-  float3 c = max(color.rgb, float3(0.0));
+  float3 cRGB = max(color.rgb, float3(0.0));
+
+  float2 fromCenter = center - 0.5;
+  float radialLen = length(fromCenter);
+  if (radialLen > 1e-4) {
+    float2 radialDir = fromCenter / radialLen;
+    float caStrength = (frame.bass * 0.006 + frame.high * 0.002) * radialLen;
+    if (caStrength > 1e-5) {
+      float rCh = dye.sample(bilinear, sampleCenter + radialDir * caStrength).r;
+      float bCh = dye.sample(bilinear, sampleCenter - radialDir * caStrength).b;
+      cRGB.r = rCh;
+      cRGB.b = bCh;
+    }
+  }
+  float3 c = cRGB;
 
   float3 bHi  = bloomHi.sample(bilinear, sampleCenter).rgb;
   float3 bMid = bloomMid.sample(bilinear, sampleCenter).rgb;
   float3 bLo  = bloomLo.sample(bilinear, sampleCenter).rgb;
-  c += bHi * 0.40 + bMid * 0.35 + bLo * 0.30;
+  float hiW  = 0.25 + frame.high * 0.55;
+  float midW = 0.25 + frame.mid  * 0.55;
+  float loW  = 0.20 + frame.bass * 0.90;
+  c += bHi * hiW + bMid * midW + bLo * loW;
 
   c *= 1.0 + bass * 0.4 + mid * 0.25;
 
@@ -356,6 +373,11 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float scaledLum = (lum * (1.0 + lum / (whitePoint * whitePoint))) / (1.0 + lum);
   c = c * (scaledLum / max(lum, 1e-4));
   c = clamp(c, 0.0, 1.0);
+
+  float vDist = length(center - 0.5) * 1.414;
+  float vAmount = 0.35 - frame.bass * 0.25;
+  c *= 1.0 - vDist * vDist * vAmount;
+  c = max(c, float3(0.0));
 
   c = float3(srgbEncode(c.r), srgbEncode(c.g), srgbEncode(c.b));
 
