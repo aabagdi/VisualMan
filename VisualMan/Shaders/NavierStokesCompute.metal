@@ -43,7 +43,7 @@ kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture
     float2 diff = pos - splats[i].position;
     float dist2 = dot(diff, diff);
     float r2 = splats[i].radius * splats[i].radius;
-    float falloff = exp(-dist2 / r2);
+    float falloff = fast::exp(-dist2 / r2);
     current.xyz += splats[i].value * falloff;
   }
   current.xyz = min(current.xyz, float3(1.5));
@@ -322,14 +322,14 @@ kernel void fluidBloomDownsample(texture2d<half, access::sample> src [[texture(0
 }
 
 inline float2 curlNoiseOffset(float2 uv, float t) {
-  float a = sin(uv.x * 13.0 + t * 0.7)  + cos(uv.y *  9.0 - t * 0.55);
-  float b = cos(uv.x *  7.0 - t * 0.6)  + sin(uv.y * 11.0 + t * 0.45);
+  float a = fast::sin(uv.x * 13.0 + t * 0.7)  + fast::cos(uv.y *  9.0 - t * 0.55);
+  float b = fast::cos(uv.x *  7.0 - t * 0.6)  + fast::sin(uv.y * 11.0 + t * 0.45);
   return float2(a, b);
 }
 
 inline float srgbEncode(float c) {
   c = max(c, 0.0);
-  return c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+  return c <= 0.0031308 ? 12.92 * c : 1.055 * fast::pow(c, 1.0 / 2.4) - 0.055;
 }
 
 struct FrameUniforms {
@@ -378,7 +378,7 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float3 cRGB = max(color.rgb, float3(0.0));
 
   float2 fromCenter = center - 0.5;
-  float radialLen = length(fromCenter);
+  float radialLen = fast::length(fromCenter);
   if (radialLen > 1e-4) {
     float2 radialDir = fromCenter / radialLen;
     float caStrength = (frame.bass * 0.006 + frame.high * 0.002) * radialLen;
@@ -394,7 +394,7 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float3 bHi  = bloomHi.sample(bilinear, sampleCenter).rgb;
   float3 bMid = bloomMid.sample(bilinear, sampleCenter).rgb;
   float3 bLo  = bloomLo.sample(bilinear, sampleCenter).rgb;
-
+  
   float hiW  = 0.08 + frame.high * 0.40;
   float midW = 0.08 + frame.mid  * 0.40;
   float loW  = 0.08 + frame.bass * 0.55;
@@ -413,7 +413,7 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   c = c * (scaledLum / max(lum, 1e-4));
   c = clamp(c, 0.0, 1.0);
 
-  float vDist = length(center - 0.5) * 1.414;
+  float vDist = fast::length(center - 0.5) * 1.414;
   float vAmount = 0.35 - frame.bass * 0.25;
   c *= 1.0 - vDist * vDist * vAmount;
   c = max(c, float3(0.0));
@@ -520,7 +520,7 @@ kernel void fluidCovectorPullback(texture2d<float, access::read>   psi  [[textur
   {
     float2 dev_x = dpsi_dx - float2(1, 0);
     float2 dev_y = dpsi_dy - float2(0, 1);
-    float devNorm = max(length(dev_x), length(dev_y));
+    float devNorm = max(fast::length(dev_x), fast::length(dev_y));
     if (devNorm > 0.5) {
       float scale = 0.5 / devNorm;
       dpsi_dx = float2(1, 0) + dev_x * scale;
@@ -539,7 +539,7 @@ kernel void fluidCovectorPullback(texture2d<float, access::read>   psi  [[textur
   u *= dissipation;
 
   if (any(isnan(u)) || any(isinf(u))) u = float2(0);
-  float sp = length(u);
+  float sp = fast::length(u);
   if (sp > 500.0) u *= 500.0 / sp;
 
   uOut.write(float4(u, 0, 0), gid);
@@ -592,7 +592,7 @@ kernel void fluidVorticityConfinement(texture2d<float, access::read> curl [[text
   float cC = curl.read(gid).x;
 
   float2 grad = float2(0.5 * (cR - cL), 0.5 * (cU - cD));
-  float len = length(grad) + 1e-5;
+  float len = fast::length(grad) + 1e-5;
   float2 N = grad / len;
   float2 force = epsilon * float2(N.y, -N.x) * cC;
 
