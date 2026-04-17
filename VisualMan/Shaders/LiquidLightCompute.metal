@@ -28,6 +28,12 @@ struct BlurParams {
   float mid;
 };
 
+struct VoronoiResult {
+  float dist1;
+  float edgeDist;
+  float cellID;
+};
+
 inline float2 hash22(float2 p) {
   float3 p3 = fract(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
   p3 += dot(p3, p3.yzx + 33.33);
@@ -178,12 +184,6 @@ inline float2 liquidWarp(float2 p, float time, float intensity) {
 
   return p + r * intensity;
 }
-
-struct VoronoiResult {
-  float dist1;
-  float edgeDist;
-  float cellID;
-};
 
 inline VoronoiResult voronoi(float2 p) {
   float2 n = floor(p);

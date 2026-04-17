@@ -16,6 +16,17 @@ struct SplatParams {
   float _pad2;
 };
 
+struct FrameUniforms {
+  float bass;
+  float mid;
+  float high;
+  float time;
+  float dt;
+  float taaBlend;
+  uint  historyValid;
+  uint  _pad;
+};
+
 kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture(0)]],
                             constant SplatParams *splats [[buffer(0)]],
                             constant uint &splatCount [[buffer(1)]],
@@ -331,17 +342,6 @@ inline float srgbEncode(float c) {
   c = max(c, 0.0);
   return c <= 0.0031308 ? 12.92 * c : 1.055 * fast::pow(c, 1.0 / 2.4) - 0.055;
 }
-
-struct FrameUniforms {
-  float bass;
-  float mid;
-  float high;
-  float time;
-  float dt;
-  float taaBlend;
-  uint  historyValid;
-  uint  _pad;
-};
 
 kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::write> output [[texture(1)]],

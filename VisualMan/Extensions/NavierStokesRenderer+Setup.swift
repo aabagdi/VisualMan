@@ -32,6 +32,24 @@ extension NavierStokesRenderer {
     let macCormackCorrect: MTLComputePipelineState
     let dyeDiffuse: MTLComputePipelineState
   }
+  
+  struct Textures {
+    let velocityA: MTLTexture
+    let velocityB: MTLTexture
+    let pressure: MTLTexture
+    let divergence: MTLTexture
+    let dyeA: MTLTexture
+    let dyeB: MTLTexture
+    let dyeC: MTLTexture
+    let bloomA: MTLTexture
+    let bloomB: MTLTexture
+    let bloomMidA: MTLTexture
+    let bloomLoA: MTLTexture
+    let psiA: MTLTexture
+    let psiB: MTLTexture
+    let psiC: MTLTexture
+    let u0: MTLTexture
+  }
 
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
     guard let library = device.makeDefaultLibrary() else {
@@ -89,24 +107,6 @@ extension NavierStokesRenderer {
                      curl: curl, vorticityConfinement: vorticityConfinement,
                      macCormackCorrect: macCormackCorrect,
                      dyeDiffuse: dyeDiffuse)
-  }
-
-  struct Textures {
-    let velocityA: MTLTexture
-    let velocityB: MTLTexture
-    let pressure: MTLTexture
-    let divergence: MTLTexture
-    let dyeA: MTLTexture
-    let dyeB: MTLTexture
-    let dyeC: MTLTexture
-    let bloomA: MTLTexture
-    let bloomB: MTLTexture
-    let bloomMidA: MTLTexture
-    let bloomLoA: MTLTexture
-    let psiA: MTLTexture
-    let psiB: MTLTexture
-    let psiC: MTLTexture
-    let u0: MTLTexture
   }
 
   static func createAllocatorsAndBuffers(device: MTLDevice)
