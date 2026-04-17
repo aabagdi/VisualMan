@@ -19,9 +19,15 @@ struct SplatParams {
 kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture(0)]],
                             constant SplatParams *splats [[buffer(0)]],
                             constant uint &splatCount [[buffer(1)]],
-                            uint2 gid [[thread_position_in_grid]]) {
+                            constant uint2 &regionOrigin [[buffer(2)]],
+                            uint2 tid [[thread_position_in_grid]]) {
+  uint2 gid = tid + regionOrigin;
+  uint w = field.get_width();
+  uint h = field.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+
   float2 pos = float2(gid) + 0.5;
-  
+
   bool anyNearby = false;
   for (uint i = 0; i < splatCount; i++) {
     float2 diff = pos - splats[i].position;
@@ -31,7 +37,7 @@ kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture
     }
   }
   if (!anyNearby) return;
-  
+
   float4 current = field.read(gid);
   for (uint i = 0; i < splatCount; i++) {
     float2 diff = pos - splats[i].position;
@@ -52,25 +58,14 @@ kernel void fluidAdvect(texture2d<float, access::read> velocityIn [[texture(0)]]
                         uint2 gid [[thread_position_in_grid]]) {
   uint w = fieldOut.get_width();
   uint h = fieldOut.get_height();
-  
+
   constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
-  
+
   float2 pos = float2(gid) + 0.5;
-  float4 vel = velocityIn.read(gid);
-  
-  if (any(isnan(vel.xy)) || any(isinf(vel.xy))) {
-    vel = float4(0);
-  }
-  float speed = length(vel.xy);
-  if (speed > 500.0) {
-    vel.xy *= 500.0 / speed;
-  }
-  float2 backPos = pos - dt * vel.xy;
-  
+  float2 vel = velocityIn.read(gid).xy;
+  float2 backPos = pos - dt * vel;
   float2 uv = backPos / float2(w, h);
-  float4 result = fieldIn.sample(linearSampler, uv);
-  result *= dissipation;
-  
+  float4 result = fieldIn.sample(linearSampler, uv) * dissipation;
   fieldOut.write(result, gid);
 }
 
@@ -79,42 +74,77 @@ kernel void fluidDivergence(texture2d<float, access::read> velocity [[texture(0)
                             uint2 gid [[thread_position_in_grid]]) {
   uint w = velocity.get_width();
   uint h = velocity.get_height();
-  
+
   uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
   uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
   uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
   uint2 up    = uint2(gid.x, min(gid.y + 1, h - 1));
-  
+
   float vR = velocity.read(right).x;
   float vL = velocity.read(left).x;
   float vT = velocity.read(up).y;
   float vB = velocity.read(down).y;
-  
+
   float div = 0.5 * (vR - vL + vT - vB);
   divergenceOut.write(float4(-div, 0, 0, 0), gid);
 }
 
-kernel void fluidJacobiRedBlack(texture2d<float, access::read_write> pressure [[texture(0)]],
-                                texture2d<float, access::read> divergence [[texture(1)]],
-                                constant uint &parity [[buffer(0)]],
-                                uint2 gid [[thread_position_in_grid]]) {
+kernel void fluidJacobiMerged(texture2d<float, access::read_write> pressure [[texture(0)]],
+                              texture2d<float, access::read> divergence [[texture(1)]],
+                              uint2 gid [[thread_position_in_grid]],
+                              uint2 tid [[thread_position_in_threadgroup]],
+                              uint2 tgid [[threadgroup_position_in_grid]]) {
+  constexpr uint TILE = 18;
+  threadgroup float p_tile[TILE * TILE];
+
   uint w = pressure.get_width();
   uint h = pressure.get_height();
-  if (gid.x >= w || gid.y >= h) return;
-  if (((gid.x + gid.y) & 1u) != parity) return;
 
-  uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
-  uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
-  uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
-  uint2 up    = uint2(gid.x, min(gid.y + 1, h - 1));
+  int tileOriginX = int(tgid.x * 16) - 1;
+  int tileOriginY = int(tgid.y * 16) - 1;
 
-  float pL = pressure.read(left).x;
-  float pR = pressure.read(right).x;
-  float pB = pressure.read(down).x;
-  float pT = pressure.read(up).x;
-  float div = divergence.read(gid).x;
+  uint localIdx = tid.y * 16 + tid.x;
+  for (uint idx = localIdx; idx < TILE * TILE; idx += 256) {
+    uint tx = idx % TILE;
+    uint ty = idx / TILE;
+    int gx = clamp(tileOriginX + int(tx), 0, int(w) - 1);
+    int gy = clamp(tileOriginY + int(ty), 0, int(h) - 1);
+    p_tile[idx] = pressure.read(uint2(gx, gy)).x;
+  }
 
-  pressure.write(float4((pL + pR + pB + pT + div) * 0.25, 0, 0, 0), gid);
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+
+  uint localX = tid.x + 1;
+  uint localY = tid.y + 1;
+  uint myIdx = localY * TILE + localX;
+
+  uint2 gidClamped = uint2(min(gid.x, w - 1), min(gid.y, h - 1));
+  float d = divergence.read(gidClamped).x;
+  bool isRed = ((gid.x + gid.y) & 1u) == 0u;
+
+  if (isRed) {
+    float pL = p_tile[myIdx - 1];
+    float pR = p_tile[myIdx + 1];
+    float pD = p_tile[myIdx - TILE];
+    float pU = p_tile[myIdx + TILE];
+    p_tile[myIdx] = (pL + pR + pD + pU + d) * 0.25;
+  }
+
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+
+  if (!isRed) {
+    float pL = p_tile[myIdx - 1];
+    float pR = p_tile[myIdx + 1];
+    float pD = p_tile[myIdx - TILE];
+    float pU = p_tile[myIdx + TILE];
+    p_tile[myIdx] = (pL + pR + pD + pU + d) * 0.25;
+  }
+
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+
+  if (gid.x < w && gid.y < h) {
+    pressure.write(float4(p_tile[myIdx], 0, 0, 0), gid);
+  }
 }
 
 kernel void fluidGradientSubtract(texture2d<float, access::read> pressure [[texture(0)]],
@@ -122,49 +152,43 @@ kernel void fluidGradientSubtract(texture2d<float, access::read> pressure [[text
                                   uint2 gid [[thread_position_in_grid]]) {
   uint w = pressure.get_width();
   uint h = pressure.get_height();
-  
+
   uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
   uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
   uint2 down  = uint2(gid.x, max(int(gid.y) - 1, 0));
   uint2 up    = uint2(gid.x, min(gid.y + 1, h - 1));
-  
+
   float pL = pressure.read(left).x;
   float pR = pressure.read(right).x;
   float pB = pressure.read(down).x;
   float pT = pressure.read(up).x;
-  
+
   float4 vel = velocity.read(gid);
   vel.x -= 0.5 * (pR - pL);
   vel.y -= 0.5 * (pT - pB);
+
+  if (gid.x == 0u || gid.x == w - 1u) vel.x = 0;
+  if (gid.y == 0u || gid.y == h - 1u) vel.y = 0;
+
   velocity.write(vel, gid);
 }
 
-inline float computeCurl(texture2d<float, access::read_write> velocity,
-                         uint2 pos, uint w, uint h) {
-  uint2 left  = uint2(max(int(pos.x) - 1, 0), pos.y);
-  uint2 right = uint2(min(pos.x + 1, w - 1), pos.y);
-  uint2 down  = uint2(pos.x, max(int(pos.y) - 1, 0));
-  uint2 up    = uint2(pos.x, min(pos.y + 1, h - 1));
-  return 0.5 * (velocity.read(right).y - velocity.read(left).y
-                - velocity.read(up).x    + velocity.read(down).x);
-}
+constant half blurWeights[9] = { 0.026h, 0.066h, 0.121h, 0.176h, 0.222h, 0.176h, 0.121h, 0.066h, 0.026h };
 
-constant float blurWeights[9] = { 0.026, 0.066, 0.121, 0.176, 0.222, 0.176, 0.121, 0.066, 0.026 };
-
-kernel void fluidBlurH(texture2d<float, access::read> fieldIn [[texture(0)]],
-                       texture2d<float, access::write> fieldOut [[texture(1)]],
+kernel void fluidBlurH(texture2d<half, access::read> fieldIn [[texture(0)]],
+                       texture2d<half, access::write> fieldOut [[texture(1)]],
                        uint2 gid [[thread_position_in_grid]],
                        uint2 tid [[thread_position_in_threadgroup]],
                        uint2 tgid [[threadgroup_position_in_grid]]) {
   uint w = fieldIn.get_width();
   uint h = fieldIn.get_height();
-  
+
   constexpr uint TILE_W = 24;
-  threadgroup float4 tile[TILE_W * 16];
-  
+  threadgroup half4 tile[TILE_W * 16];
+
   int tileOriginX = int(tgid.x * 16) - 4;
   int tileOriginY = int(tgid.y * 16);
-  
+
   uint localIdx = tid.y * 16 + tid.x;
   if (localIdx < TILE_W * 16) {
     uint tileX = localIdx % TILE_W;
@@ -181,12 +205,12 @@ kernel void fluidBlurH(texture2d<float, access::read> fieldIn [[texture(0)]],
     int gy = clamp(tileOriginY + int(tileY), 0, int(h - 1));
     tile[secondIdx] = fieldIn.read(uint2(gx, gy));
   }
-  
+
   threadgroup_barrier(mem_flags::mem_threadgroup);
-  
+
   if (gid.x >= w || gid.y >= h) return;
-  
-  float4 sum = float4(0.0);
+
+  half4 sum = half4(0.0h);
   for (int i = -4; i <= 4; i++) {
     uint tileCol = uint(int(tid.x) + 4 + i);
     sum += tile[tid.y * TILE_W + tileCol] * blurWeights[i + 4];
@@ -194,20 +218,20 @@ kernel void fluidBlurH(texture2d<float, access::read> fieldIn [[texture(0)]],
   fieldOut.write(sum, gid);
 }
 
-kernel void fluidBlurV(texture2d<float, access::read> fieldIn [[texture(0)]],
-                       texture2d<float, access::write> fieldOut [[texture(1)]],
+kernel void fluidBlurV(texture2d<half, access::read> fieldIn [[texture(0)]],
+                       texture2d<half, access::write> fieldOut [[texture(1)]],
                        uint2 gid [[thread_position_in_grid]],
                        uint2 tid [[thread_position_in_threadgroup]],
                        uint2 tgid [[threadgroup_position_in_grid]]) {
   uint w = fieldIn.get_width();
   uint h = fieldIn.get_height();
-  
+
   constexpr uint TILE_H = 24;
-  threadgroup float4 tile[16 * TILE_H];
-  
+  threadgroup half4 tile[16 * TILE_H];
+
   int tileOriginX = int(tgid.x * 16);
   int tileOriginY = int(tgid.y * 16) - 4;
-  
+
   uint localIdx = tid.y * 16 + tid.x;
   if (localIdx < 16 * TILE_H) {
     uint tileX = localIdx % 16;
@@ -224,12 +248,12 @@ kernel void fluidBlurV(texture2d<float, access::read> fieldIn [[texture(0)]],
     int gy = clamp(tileOriginY + int(tileY), 0, int(h - 1));
     tile[secondIdx] = fieldIn.read(uint2(gx, gy));
   }
-  
+
   threadgroup_barrier(mem_flags::mem_threadgroup);
-  
+
   if (gid.x >= w || gid.y >= h) return;
-  
-  float4 sum = float4(0.0);
+
+  half4 sum = half4(0.0h);
   for (int i = -4; i <= 4; i++) {
     uint tileRow = uint(int(tid.y) + 4 + i);
     sum += tile[tileRow * 16 + tid.x] * blurWeights[i + 4];
@@ -237,16 +261,16 @@ kernel void fluidBlurV(texture2d<float, access::read> fieldIn [[texture(0)]],
   fieldOut.write(sum, gid);
 }
 
-inline float3 bloomThresholdSample(float4 color, float threshold) {
-  float brightness = dot(color.rgb, float3(0.299, 0.587, 0.114));
-  float contrib = max(brightness - threshold, 0.0);
-  float factor = contrib / max(brightness, 1e-4);
+inline half3 bloomThresholdSample(half4 color, half threshold) {
+  half brightness = dot(color.rgb, half3(0.299h, 0.587h, 0.114h));
+  half contrib = max(brightness - threshold, 0.0h);
+  half factor = contrib / max(brightness, 1e-4h);
   return color.rgb * factor;
 }
 
-kernel void fluidBloomThresholdBlurH(texture2d<float, access::sample> dye [[texture(0)]],
-                                     texture2d<float, access::write> bloomOut [[texture(1)]],
-                                     constant float &threshold [[buffer(0)]],
+kernel void fluidBloomThresholdBlurH(texture2d<half, access::sample> dye [[texture(0)]],
+                                     texture2d<half, access::write> bloomOut [[texture(1)]],
+                                     constant float &thresholdF [[buffer(0)]],
                                      uint2 gid [[thread_position_in_grid]],
                                      uint2 tid [[thread_position_in_threadgroup]],
                                      uint2 tgid [[threadgroup_position_in_grid]]) {
@@ -254,13 +278,14 @@ kernel void fluidBloomThresholdBlurH(texture2d<float, access::sample> dye [[text
   uint bh = bloomOut.get_height();
 
   constexpr uint TILE_W = 24;
-  threadgroup float4 tile[TILE_W * 16];
+  threadgroup half4 tile[TILE_W * 16];
 
   int tileOriginX = int(tgid.x * 16) - 4;
   int tileOriginY = int(tgid.y * 16);
 
   constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
   float2 invBloom = 1.0 / float2(bw, bh);
+  half threshold = half(thresholdF);
 
   uint localIdx = tid.y * 16 + tid.x;
   for (uint idx = localIdx; idx < TILE_W * 16; idx += 256) {
@@ -268,19 +293,32 @@ kernel void fluidBloomThresholdBlurH(texture2d<float, access::sample> dye [[text
     uint tileY = idx / TILE_W;
     float2 uv = (float2(float(tileOriginX + int(tileX)) + 0.5,
                         float(tileOriginY + int(tileY)) + 0.5)) * invBloom;
-    float4 c = dye.sample(bilinear, uv);
-    tile[idx] = float4(bloomThresholdSample(c, threshold), 0.0);
+    half4 c = dye.sample(bilinear, uv);
+    tile[idx] = half4(bloomThresholdSample(c, threshold), 0.0h);
   }
 
   threadgroup_barrier(mem_flags::mem_threadgroup);
   if (gid.x >= bw || gid.y >= bh) return;
 
-  float4 sum = float4(0.0);
+  half4 sum = half4(0.0h);
   for (int i = -4; i <= 4; i++) {
     uint tileCol = uint(int(tid.x) + 4 + i);
     sum += tile[tid.y * TILE_W + tileCol] * blurWeights[i + 4];
   }
   bloomOut.write(sum, gid);
+}
+
+kernel void fluidBloomDownsample(texture2d<half, access::sample> src [[texture(0)]],
+                                 texture2d<half, access::write> dst [[texture(1)]],
+                                 uint2 gid [[thread_position_in_grid]]) {
+  uint w = dst.get_width();
+  uint h = dst.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+
+  constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
+  float2 uv = (float2(gid) + 0.5) / float2(w, h);
+  half4 c = src.sample(bilinear, uv);
+  dst.write(c, gid);
 }
 
 inline float2 curlNoiseOffset(float2 uv, float t) {
@@ -310,7 +348,7 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::sample> bloomHi [[texture(2)]],
                         texture2d<float, access::sample> bloomMid [[texture(3)]],
                         texture2d<float, access::sample> bloomLo [[texture(4)]],
-                        texture2d<float, access::sample> historyIn [[texture(5)]],
+                        texture2d<float, access::read> historyIn [[texture(5)]],
                         texture2d<float, access::write> historyOut [[texture(6)]],
                         constant FrameUniforms &frame [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]]) {
@@ -356,9 +394,10 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float3 bHi  = bloomHi.sample(bilinear, sampleCenter).rgb;
   float3 bMid = bloomMid.sample(bilinear, sampleCenter).rgb;
   float3 bLo  = bloomLo.sample(bilinear, sampleCenter).rgb;
-  float hiW  = 0.25 + frame.high * 0.55;
-  float midW = 0.25 + frame.mid  * 0.55;
-  float loW  = 0.20 + frame.bass * 0.90;
+
+  float hiW  = 0.08 + frame.high * 0.40;
+  float midW = 0.08 + frame.mid  * 0.40;
+  float loW  = 0.08 + frame.bass * 0.55;
   c += bHi * hiW + bMid * midW + bLo * loW;
 
   c *= 1.0 + bass * 0.4 + mid * 0.25;
@@ -383,7 +422,7 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
 
   float3 finalColor = c;
   if (historyValid != 0u) {
-    float3 prev = historyIn.sample(bilinear, center).rgb;
+    float3 prev = historyIn.read(gid).rgb;
     finalColor = mix(c, prev, taaBlend);
   }
 
@@ -406,61 +445,78 @@ kernel void fluidCopyRG(texture2d<float, access::read>  src [[texture(0)]],
 }
 
 kernel void fluidPsiAdvect(texture2d<float, access::read>  velocity [[texture(0)]],
-                           texture2d<float, access::read>  psiIn    [[texture(1)]],
+                           texture2d<float, access::sample> psiIn   [[texture(1)]],
                            texture2d<float, access::write> psiOut   [[texture(2)]],
                            constant float &dt [[buffer(0)]],
                            uint2 gid [[thread_position_in_grid]]) {
-  int w = int(psiIn.get_width());
-  int h = int(psiIn.get_height());
-  if (int(gid.x) >= w || int(gid.y) >= h) return;
-  
+  uint w = psiIn.get_width();
+  uint h = psiIn.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+
+  constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
+
   float2 pos = float2(gid) + 0.5;
   float2 u   = velocity.read(gid).xy;
-  
-  if (any(isnan(u)) || any(isinf(u))) u = float2(0);
-  float sp = length(u);
-  if (sp > 500.0) u *= 500.0 / sp;
-  
+
   float2 backPos = pos - dt * u;
-  float2 bp = backPos - 0.5;
-  int2 base = int2(floor(bp));
-  float2 f = bp - float2(base);
-  int2 c00 = clamp(base,               int2(0), int2(w - 1, h - 1));
-  int2 c10 = clamp(base + int2(1, 0),  int2(0), int2(w - 1, h - 1));
-  int2 c01 = clamp(base + int2(0, 1),  int2(0), int2(w - 1, h - 1));
-  int2 c11 = clamp(base + int2(1, 1),  int2(0), int2(w - 1, h - 1));
-  float2 p00 = psiIn.read(uint2(c00)).xy;
-  float2 p10 = psiIn.read(uint2(c10)).xy;
-  float2 p01 = psiIn.read(uint2(c01)).xy;
-  float2 p11 = psiIn.read(uint2(c11)).xy;
-  float2 psiBack = mix(mix(p00, p10, f.x), mix(p01, p11, f.x), f.y);
-  
+  float2 uv = backPos / float2(w, h);
+  float2 psiBack = psiIn.sample(linearSampler, uv).xy;
+
   psiOut.write(float4(psiBack, 0, 0), gid);
 }
 
-kernel void fluidCovectorPullback(texture2d<float, access::read>  psi  [[texture(0)]],
-                                  texture2d<float, access::read>  u0   [[texture(1)]],
-                                  texture2d<float, access::write> uOut [[texture(2)]],
+kernel void fluidPsiMacCormackCorrect(texture2d<float, access::sample> psiN     [[texture(0)]],
+                                      texture2d<float, access::sample> psiHat1  [[texture(1)]],
+                                      texture2d<float, access::sample> psiHat0  [[texture(2)]],
+                                      texture2d<float, access::read>   velocity [[texture(3)]],
+                                      texture2d<float, access::write>  psiOut   [[texture(4)]],
+                                      constant float &dt [[buffer(0)]],
+                                      uint2 gid [[thread_position_in_grid]]) {
+  uint w = psiOut.get_width();
+  uint h = psiOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+
+  constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
+
+  float2 pos = float2(gid) + 0.5;
+  float2 vel = velocity.read(gid).xy;
+  float2 backPos = pos - dt * vel;
+  float2 invSize = 1.0 / float2(w, h);
+
+  float2 forward  = psiHat1.sample(linearSampler, backPos * invSize).xy;
+  float2 backward = psiHat0.sample(linearSampler, pos * invSize).xy;
+  float2 source   = psiN.sample(linearSampler, backPos * invSize).xy;
+
+  float2 corrected = forward + 0.5 * (source - backward);
+
+  psiOut.write(float4(corrected, 0, 0), gid);
+}
+
+kernel void fluidCovectorPullback(texture2d<float, access::read>   psi  [[texture(0)]],
+                                  texture2d<float, access::sample> u0   [[texture(1)]],
+                                  texture2d<float, access::write>  uOut [[texture(2)]],
                                   constant float &dissipation [[buffer(0)]],
                                   uint2 gid [[thread_position_in_grid]]) {
   int w = int(psi.get_width());
   int h = int(psi.get_height());
   if (int(gid.x) >= w || int(gid.y) >= h) return;
-  
-  uint2 L = uint2(max(int(gid.x) - 1, 0),     gid.y);
-  uint2 R = uint2(min(int(gid.x) + 1, w - 1), gid.y);
-  uint2 D = uint2(gid.x, max(int(gid.y) - 1, 0));
-  uint2 U = uint2(gid.x, min(int(gid.y) + 1, h - 1));
-  
-  float2 psiL = psi.read(L).xy;
-  float2 psiR = psi.read(R).xy;
-  float2 psiD = psi.read(D).xy;
-  float2 psiU = psi.read(U).xy;
+
+  int xL = max(int(gid.x) - 1, 0);
+  int xR = min(int(gid.x) + 1, w - 1);
+  int yD = max(int(gid.y) - 1, 0);
+  int yU = min(int(gid.y) + 1, h - 1);
+
+  float2 psiL = psi.read(uint2(uint(xL), gid.y)).xy;
+  float2 psiR = psi.read(uint2(uint(xR), gid.y)).xy;
+  float2 psiD = psi.read(uint2(gid.x, uint(yD))).xy;
+  float2 psiU = psi.read(uint2(gid.x, uint(yU))).xy;
   float2 psiC = psi.read(gid).xy;
-  
-  float2 dpsi_dx = 0.5 * (psiR - psiL);
-  float2 dpsi_dy = 0.5 * (psiU - psiD);
-  
+
+  float invDx = 1.0 / float(xR - xL);
+  float invDy = 1.0 / float(yU - yD);
+  float2 dpsi_dx = invDx * (psiR - psiL);
+  float2 dpsi_dy = invDy * (psiU - psiD);
+
   {
     float2 dev_x = dpsi_dx - float2(1, 0);
     float2 dev_y = dpsi_dy - float2(0, 1);
@@ -471,30 +527,21 @@ kernel void fluidCovectorPullback(texture2d<float, access::read>  psi  [[texture
       dpsi_dy = float2(0, 1) + dev_y * scale;
     }
   }
-  
-  float2 bp = psiC - 0.5;
-  int2 base = int2(floor(bp));
-  float2 f = bp - float2(base);
-  int2 c00 = clamp(base,               int2(0), int2(w - 1, h - 1));
-  int2 c10 = clamp(base + int2(1, 0),  int2(0), int2(w - 1, h - 1));
-  int2 c01 = clamp(base + int2(0, 1),  int2(0), int2(w - 1, h - 1));
-  int2 c11 = clamp(base + int2(1, 1),  int2(0), int2(w - 1, h - 1));
-  float2 u00 = u0.read(uint2(c00)).xy;
-  float2 u10 = u0.read(uint2(c10)).xy;
-  float2 u01 = u0.read(uint2(c01)).xy;
-  float2 u11 = u0.read(uint2(c11)).xy;
-  float2 u0val = mix(mix(u00, u10, f.x), mix(u01, u11, f.x), f.y);
-  
+
+  constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
+  float2 uv = psiC / float2(float(w), float(h));
+  float2 u0val = u0.sample(linearSampler, uv).xy;
+
   float2 u;
   u.x = dpsi_dx.x * u0val.x + dpsi_dx.y * u0val.y;
   u.y = dpsi_dy.x * u0val.x + dpsi_dy.y * u0val.y;
-  
+
   u *= dissipation;
-  
+
   if (any(isnan(u)) || any(isinf(u))) u = float2(0);
   float sp = length(u);
   if (sp > 500.0) u *= 500.0 / sp;
-  
+
   uOut.write(float4(u, 0, 0), gid);
 }
 
@@ -570,10 +617,6 @@ kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[t
 
   float2 pos = float2(gid) + 0.5;
   float2 vel = velocity.read(gid).xy;
-  if (any(isnan(vel)) || any(isinf(vel))) vel = float2(0);
-  float sp = length(vel);
-  if (sp > 500.0) vel *= 500.0 / sp;
-
   float2 backPos = pos - dt * vel;
   float2 invSize = 1.0 / float2(w, h);
 
@@ -598,4 +641,36 @@ kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[t
   corrected = clamp(corrected, lo, hi);
   corrected *= dissipation;
   phiOut.write(corrected, gid);
+}
+
+kernel void fluidDyeDiffuse(texture2d<half, access::read>  dyeIn  [[texture(0)]],
+                            texture2d<half, access::write> dyeOut [[texture(1)]],
+                            constant float &baseStrengthF [[buffer(0)]],
+                            constant float &edgeBoostF    [[buffer(1)]],
+                            uint2 gid [[thread_position_in_grid]]) {
+  uint w = dyeIn.get_width();
+  uint h = dyeIn.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+
+  uint2 L = uint2(max(int(gid.x) - 1, 0), gid.y);
+  uint2 R = uint2(min(gid.x + 1, w - 1),  gid.y);
+  uint2 D = uint2(gid.x, max(int(gid.y) - 1, 0));
+  uint2 U = uint2(gid.x, min(gid.y + 1, h - 1));
+
+  half4 c  = dyeIn.read(gid);
+  half4 cL = dyeIn.read(L);
+  half4 cR = dyeIn.read(R);
+  half4 cD = dyeIn.read(D);
+  half4 cU = dyeIn.read(U);
+  half4 neighbours = (cL + cR + cD + cU) * 0.25h;
+
+  half3 gradVec = neighbours.xyz - c.xyz;
+  half gradMag = length(gradVec);
+
+  half edgeT = min(gradMag * 3.0h, 1.0h);
+
+  half s = half(baseStrengthF) + half(edgeBoostF) * edgeT;
+  s = min(s, 0.35h);
+
+  dyeOut.write(mix(c, neighbours, s), gid);
 }

@@ -55,11 +55,10 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var bloomA: MTLTexture
   var bloomB: MTLTexture
   var bloomMidA: MTLTexture
-  var bloomMidB: MTLTexture
   var bloomLoA: MTLTexture
-  var bloomLoB: MTLTexture
   var psiA: MTLTexture
   var psiB: MTLTexture
+  var psiC: MTLTexture
   var u0: MTLTexture
 
   var displayIntermediate: MTLTexture?
@@ -157,11 +156,10 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.bloomA = textures.bloomA
     self.bloomB = textures.bloomB
     self.bloomMidA = textures.bloomMidA
-    self.bloomMidB = textures.bloomMidB
     self.bloomLoA = textures.bloomLoA
-    self.bloomLoB = textures.bloomLoB
     self.psiA = textures.psiA
     self.psiB = textures.psiB
+    self.psiC = textures.psiC
     self.u0 = textures.u0
     self.residencySet = residencySet
 

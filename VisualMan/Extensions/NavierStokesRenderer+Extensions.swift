@@ -80,7 +80,7 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 0)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
     let dtVal: Float = dt * 40.0
-    let epsilon: Float = 0.30 + bass * 0.45 + mid * 0.15
+    let epsilon: Float = 0.05 + bass * 0.50 + mid * 0.18
     argumentTable.setAddress(writeUniform(dtVal), index: 0)
     argumentTable.setAddress(writeUniform(epsilon), index: 1)
     dispatchGrid(encoder: encoder)
@@ -117,15 +117,50 @@ extension NavierStokesRenderer {
 
     swap(&dyeA, &dyeC)
   }
-  
-  func advectPsi(encoder: any MTL4ComputeCommandEncoder) {
+
+  func diffuseDye(encoder: any MTL4ComputeCommandEncoder,
+                  bass: Float,
+                  mid: Float) {
+    encoder.setComputePipelineState(pipelines.dyeDiffuse)
+    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
+    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
+    let base: Float = 0.025 + bass * 0.012 + mid * 0.008
+    let edgeBoost: Float = 0.150 + bass * 0.050 + mid * 0.020
+    argumentTable.setAddress(writeUniform(base), index: 0)
+    argumentTable.setAddress(writeUniform(edgeBoost), index: 1)
+    dispatchGrid(encoder: encoder)
+    swap(&dyeA, &dyeB)
+  }
+
+  func advectPsiMacCormack(encoder: any MTL4ComputeCommandEncoder) {
+    let dtVal: Float = dt * 40.0
+
     encoder.setComputePipelineState(pipelines.psiAdvect)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
     argumentTable.setTexture(psiA.gpuResourceID, index: 1)
     argumentTable.setTexture(psiB.gpuResourceID, index: 2)
-    let dtVal = dt * 40.0
     argumentTable.setAddress(writeUniform(dtVal), index: 0)
     dispatchGrid(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
+    argumentTable.setTexture(psiB.gpuResourceID, index: 1)
+    argumentTable.setTexture(psiC.gpuResourceID, index: 2)
+    let negDt: Float = -dtVal
+    argumentTable.setAddress(writeUniform(negDt), index: 0)
+    dispatchGrid(encoder: encoder)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    encoder.setComputePipelineState(pipelines.psiMacCormackCorrect)
+    argumentTable.setTexture(psiA.gpuResourceID, index: 0)
+    argumentTable.setTexture(psiB.gpuResourceID, index: 1)
+    argumentTable.setTexture(psiC.gpuResourceID, index: 2)
+    argumentTable.setTexture(velocityA.gpuResourceID, index: 3)
+    argumentTable.setTexture(psiC.gpuResourceID, index: 4)
+    argumentTable.setAddress(writeUniform(dtVal), index: 0)
+    dispatchGrid(encoder: encoder)
+
+    swap(&psiA, &psiC)
   }
 
   func covectorPullback(encoder: any MTL4ComputeCommandEncoder,
@@ -149,22 +184,17 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(psiA.gpuResourceID, index: 0)
     dispatchGrid(encoder: encoder)
   }
-  
+
   func project(encoder: any MTL4ComputeCommandEncoder, jacobiIterations: Int) {
     computeDivergence(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    encoder.setComputePipelineState(pipelines.jacobiRedBlack)
+    encoder.setComputePipelineState(pipelines.jacobiMerged)
     argumentTable.setTexture(pressure.gpuResourceID, index: 0)
     argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
 
-    let halfIterations = max(jacobiIterations / 2, 2)
-    for _ in 0..<halfIterations {
-      argumentTable.setAddress(writeUniform(UInt32(0)), index: 0)
-      dispatchGrid(encoder: encoder)
-      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-      argumentTable.setAddress(writeUniform(UInt32(1)), index: 0)
+    let mergedIterations = max(jacobiIterations / 2, 2)
+    for _ in 0..<mergedIterations {
       dispatchGrid(encoder: encoder)
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
@@ -203,7 +233,7 @@ extension NavierStokesRenderer {
     
     dispatchGrid(encoder: encoder)
   }
-  
+
   func bloomThresholdBlurH(encoder: any MTL4ComputeCommandEncoder,
                            dst: MTLTexture,
                            size: Int,
@@ -226,7 +256,17 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(dst.gpuResourceID, index: 1)
     dispatchGrid(encoder: encoder, width: size, height: size)
   }
-  
+
+  func bloomDownsample(encoder: any MTL4ComputeCommandEncoder,
+                       src: MTLTexture,
+                       dst: MTLTexture,
+                       dstSize: Int) {
+    encoder.setComputePipelineState(pipelines.bloomDownsample)
+    argumentTable.setTexture(src.gpuResourceID, index: 0)
+    argumentTable.setTexture(dst.gpuResourceID, index: 1)
+    dispatchGrid(encoder: encoder, width: dstSize, height: dstSize)
+  }
+
   func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture, bass: Float, mid: Float) {
     encoder.setComputePipelineState(pipelines.render)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
@@ -270,11 +310,10 @@ extension NavierStokesRenderer {
     let injMid   = suppress ? 0 : mid
     let injHigh  = suppress ? 0 : high
 
-    advectPsi(encoder: encoder)
-    swap(&psiA, &psiB)
+    advectPsiMacCormack(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    covectorPullback(encoder: encoder, dissipation: 0.995)
+    covectorPullback(encoder: encoder, dissipation: 1.0)
     swap(&velocityA, &velocityB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
@@ -297,6 +336,9 @@ extension NavierStokesRenderer {
     let dynamicDyeDissipation: Float = 0.98 + bass * 0.01 + mid * 0.008
     advectDyeMacCormack(encoder: encoder, dissipation: dynamicDyeDissipation)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    
+    diffuseDye(encoder: encoder, bass: bass, mid: mid)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     runBloomPasses(encoder: encoder, bass: bass, mid: mid)
 
@@ -312,16 +354,9 @@ extension NavierStokesRenderer {
     blurBloomV(encoder: encoder, src: bloomB, dst: bloomA, size: Self.bloomSize)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    bloomThresholdBlurH(encoder: encoder, dst: bloomMidB, size: Self.bloomSizeMid,
-                        bass: bass, mid: mid)
+    bloomDownsample(encoder: encoder, src: bloomA, dst: bloomMidA, dstSize: Self.bloomSizeMid)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    blurBloomV(encoder: encoder, src: bloomMidB, dst: bloomMidA, size: Self.bloomSizeMid)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    bloomThresholdBlurH(encoder: encoder, dst: bloomLoB, size: Self.bloomSizeLo,
-                        bass: bass, mid: mid)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    blurBloomV(encoder: encoder, src: bloomLoB, dst: bloomLoA, size: Self.bloomSizeLo)
+    bloomDownsample(encoder: encoder, src: bloomMidA, dst: bloomLoA, dstSize: Self.bloomSizeLo)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
   }
 

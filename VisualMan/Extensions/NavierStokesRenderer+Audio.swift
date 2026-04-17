@@ -64,12 +64,35 @@ extension NavierStokesRenderer {
   private func dispatchBatchedSplats(encoder: any MTL4ComputeCommandEncoder,
                                      texture: MTLTexture,
                                      splats: [SplatParams]) {
+    let gsF = Float(gridSize)
+    var minX: Float = gsF
+    var minY: Float = gsF
+    var maxX: Float = 0
+    var maxY: Float = 0
+    let rMult: Float = sqrt(6.0)
+    for sp in splats {
+      let r = sp.radius * rMult
+      minX = min(minX, sp.position.x - r)
+      minY = min(minY, sp.position.y - r)
+      maxX = max(maxX, sp.position.x + r)
+      maxY = max(maxY, sp.position.y + r)
+    }
+    let ox = max(0, Int(floor(minX)))
+    let oy = max(0, Int(floor(minY)))
+    let ex = min(gridSize, Int(ceil(maxX)))
+    let ey = min(gridSize, Int(ceil(maxY)))
+    let regionW = ex - ox
+    let regionH = ey - oy
+    if regionW <= 0 || regionH <= 0 { return }
+
     encoder.setComputePipelineState(pipelines.splatBatch)
     argumentTable.setTexture(texture.gpuResourceID, index: 0)
     argumentTable.setAddress(writeUniformArray(splats), index: 0)
     let count = UInt32(splats.count)
     argumentTable.setAddress(writeUniform(count), index: 1)
-    dispatchGrid(encoder: encoder)
+    let origin = SIMD2<UInt32>(UInt32(ox), UInt32(oy))
+    argumentTable.setAddress(writeUniform(origin), index: 2)
+    dispatchGrid(encoder: encoder, width: regionW, height: regionH)
   }
 
   private func collectBassSplats(bass: Float,

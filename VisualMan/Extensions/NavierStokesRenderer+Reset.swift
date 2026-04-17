@@ -27,7 +27,8 @@ extension NavierStokesRenderer {
 
     encoder.setComputePipelineState(pipelines.clearRG)
     let rgTextures: [MTLTexture] = [
-      velocityA, velocityB, pressure, divergenceTexture, psiA, psiB, u0
+      velocityA, velocityB, pressure, divergenceTexture,
+      psiA, psiB, psiC, u0
     ]
     for tex in rgTextures {
       argumentTable.setTexture(tex.gpuResourceID, index: 0)
@@ -38,8 +39,7 @@ extension NavierStokesRenderer {
     let rgbaTextures: [MTLTexture] = [
       dyeA, dyeB, dyeC,
       bloomA, bloomB,
-      bloomMidA, bloomMidB,
-      bloomLoA, bloomLoB
+      bloomMidA, bloomLoA
     ]
     for tex in rgbaTextures {
       argumentTable.setTexture(tex.gpuResourceID, index: 0)

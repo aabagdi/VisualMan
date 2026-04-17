@@ -14,20 +14,23 @@ extension NavierStokesRenderer {
     let advect: MTLComputePipelineState
     let psiInit: MTLComputePipelineState
     let psiAdvect: MTLComputePipelineState
+    let psiMacCormackCorrect: MTLComputePipelineState
     let covectorPullback: MTLComputePipelineState
     let copyRG: MTLComputePipelineState
     let divergence: MTLComputePipelineState
-    let jacobiRedBlack: MTLComputePipelineState
+    let jacobiMerged: MTLComputePipelineState
     let gradientSubtract: MTLComputePipelineState
     let blurH: MTLComputePipelineState
     let blurV: MTLComputePipelineState
     let bloomThresholdBlurH: MTLComputePipelineState
+    let bloomDownsample: MTLComputePipelineState
     let render: MTLComputePipelineState
     let clearRG: MTLComputePipelineState
     let clearRGBA: MTLComputePipelineState
     let curl: MTLComputePipelineState
     let vorticityConfinement: MTLComputePipelineState
     let macCormackCorrect: MTLComputePipelineState
+    let dyeDiffuse: MTLComputePipelineState
   }
 
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
@@ -54,32 +57,38 @@ extension NavierStokesRenderer {
           let advect = makePipeline("fluidAdvect"),
           let psiInit = makePipeline("fluidPsiInit"),
           let psiAdvect = makePipeline("fluidPsiAdvect"),
+          let psiMacCormackCorrect = makePipeline("fluidPsiMacCormackCorrect"),
           let covectorPullback = makePipeline("fluidCovectorPullback"),
           let copyRG = makePipeline("fluidCopyRG"),
           let divergence = makePipeline("fluidDivergence"),
-          let jacobiRedBlack = makePipeline("fluidJacobiRedBlack"),
+          let jacobiMerged = makePipeline("fluidJacobiMerged"),
           let gradientSubtract = makePipeline("fluidGradientSubtract"),
           let blurH = makePipeline("fluidBlurH"),
           let blurV = makePipeline("fluidBlurV"),
           let bloomThresholdBlurH = makePipeline("fluidBloomThresholdBlurH"),
+          let bloomDownsample = makePipeline("fluidBloomDownsample"),
           let render = makePipeline("fluidRender"),
           let clearRG = makePipeline("fluidClearRG"),
           let clearRGBA = makePipeline("fluidClearRGBA"),
           let curl = makePipeline("fluidCurl"),
           let vorticityConfinement = makePipeline("fluidVorticityConfinement"),
-          let macCormackCorrect = makePipeline("fluidMacCormackCorrect") else {
+          let macCormackCorrect = makePipeline("fluidMacCormackCorrect"),
+          let dyeDiffuse = makePipeline("fluidDyeDiffuse") else {
       return nil
     }
 
     return Pipelines(splatBatch: splatBatch, advect: advect,
                      psiInit: psiInit, psiAdvect: psiAdvect,
+                     psiMacCormackCorrect: psiMacCormackCorrect,
                      covectorPullback: covectorPullback, copyRG: copyRG,
-                     divergence: divergence, jacobiRedBlack: jacobiRedBlack,
+                     divergence: divergence, jacobiMerged: jacobiMerged,
                      gradientSubtract: gradientSubtract, blurH: blurH,
                      blurV: blurV, bloomThresholdBlurH: bloomThresholdBlurH,
+                     bloomDownsample: bloomDownsample,
                      render: render, clearRG: clearRG, clearRGBA: clearRGBA,
                      curl: curl, vorticityConfinement: vorticityConfinement,
-                     macCormackCorrect: macCormackCorrect)
+                     macCormackCorrect: macCormackCorrect,
+                     dyeDiffuse: dyeDiffuse)
   }
 
   struct Textures {
@@ -93,11 +102,10 @@ extension NavierStokesRenderer {
     let bloomA: MTLTexture
     let bloomB: MTLTexture
     let bloomMidA: MTLTexture
-    let bloomMidB: MTLTexture
     let bloomLoA: MTLTexture
-    let bloomLoB: MTLTexture
     let psiA: MTLTexture
     let psiB: MTLTexture
+    let psiC: MTLTexture
     let u0: MTLTexture
   }
 
@@ -130,7 +138,7 @@ extension NavierStokesRenderer {
 
   static func createResidencySet(device: MTLDevice) -> MTLResidencySet? {
     let desc = MTLResidencySetDescriptor()
-    desc.initialCapacity = 16
+    desc.initialCapacity = 20
     return try? device.makeResidencySet(descriptor: desc)
   }
 
@@ -168,14 +176,11 @@ extension NavierStokesRenderer {
                                    width: bloomSize, height: bloomSize),
           let bloomMidA = makeTexture(format: .rgba16Float, label: "bloomMidA",
                                       width: bloomSizeMid, height: bloomSizeMid),
-          let bloomMidB = makeTexture(format: .rgba16Float, label: "bloomMidB",
-                                      width: bloomSizeMid, height: bloomSizeMid),
           let bloomLoA = makeTexture(format: .rgba16Float, label: "bloomLoA",
-                                     width: bloomSizeLo, height: bloomSizeLo),
-          let bloomLoB = makeTexture(format: .rgba16Float, label: "bloomLoB",
                                      width: bloomSizeLo, height: bloomSizeLo),
           let psiA = makeTexture(format: .rg16Float, label: "psiA"),
           let psiB = makeTexture(format: .rg16Float, label: "psiB"),
+          let psiC = makeTexture(format: .rg16Float, label: "psiC"),
           let u0 = makeTexture(format: .rg16Float, label: "u0") else {
       return nil
     }
@@ -184,9 +189,8 @@ extension NavierStokesRenderer {
                     pressure: pressure,
                     divergence: divergence, dyeA: dyeA, dyeB: dyeB, dyeC: dyeC,
                     bloomA: bloomA, bloomB: bloomB,
-                    bloomMidA: bloomMidA, bloomMidB: bloomMidB,
-                    bloomLoA: bloomLoA, bloomLoB: bloomLoB,
-                    psiA: psiA, psiB: psiB, u0: u0)
+                    bloomMidA: bloomMidA, bloomLoA: bloomLoA,
+                    psiA: psiA, psiB: psiB, psiC: psiC, u0: u0)
   }
 
   func warmUpGPU() {
@@ -212,7 +216,7 @@ extension NavierStokesRenderer {
     }
 
     encoder.setComputePipelineState(pipelines.clearRGBA)
-    for tex in [dyeA, dyeB, dyeC, bloomA, bloomB, bloomMidA, bloomMidB, bloomLoA, bloomLoB] {
+    for tex in [dyeA, dyeB, dyeC, bloomA, bloomB, bloomMidA, bloomLoA] {
       argumentTable.setTexture(tex.gpuResourceID, index: 0)
       dispatchGrid(encoder: encoder)
     }
@@ -297,11 +301,10 @@ extension NavierStokesRenderer {
     residencySet.addAllocation(bloomA)
     residencySet.addAllocation(bloomB)
     residencySet.addAllocation(bloomMidA)
-    residencySet.addAllocation(bloomMidB)
     residencySet.addAllocation(bloomLoA)
-    residencySet.addAllocation(bloomLoB)
     residencySet.addAllocation(psiA)
     residencySet.addAllocation(psiB)
+    residencySet.addAllocation(psiC)
     residencySet.addAllocation(u0)
 
     for buf in uniformBuffers { residencySet.addAllocation(buf) }
