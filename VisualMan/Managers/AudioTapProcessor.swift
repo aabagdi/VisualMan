@@ -13,15 +13,11 @@ final class AudioTapProcessor: Sendable {
   nonisolated private static let ringMask = ringCapacity - 1
   
   private let dspProcessor = DSPProcessor()
-  private typealias ForwardingState = (
-    displayLink: DisplayLinkStream?,
-    task: Task<Void, Never>?
-  )
-  private let forwardingState = Mutex<ForwardingState>((nil, nil))
-
+  
   nonisolated(unsafe) private var ringBuffer: [8192 of Float] = .init(repeating: 0.0)
   nonisolated(unsafe) private var monoScratch: [8192 of Float] = .init(repeating: 0.0)
   nonisolated(unsafe) private var drainScratch: [Float] = Array(repeating: 0, count: ringCapacity)
+
   private let writeIndex = Atomic<Int>(0)
   private let readIndex = Atomic<Int>(0)
   private let sampleRateBits = Atomic<UInt32>(0)
@@ -113,33 +109,10 @@ final class AudioTapProcessor: Sendable {
   }
 
   @MainActor
-  func startForwarding(handler: @escaping @MainActor (DSPProcessor.DSPResult) -> Void) {
-    stopForwarding()
-    let displayLink = DisplayLinkStream()
-    let dsp = dspProcessor
-    let task = Task { @MainActor [weak self] in
-      for await _ in displayLink.frames {
-        guard !Task.isCancelled else { break }
-        guard let self else { break }
-        if let result = await self.drainAndProcess(dsp: dsp) {
-          handler(result)
-        }
-      }
-    }
-    forwardingState.withLock {
-      $0.displayLink = displayLink
-      $0.task = task
-    }
-  }
-
-  @MainActor
-  func stopForwarding() {
-    forwardingState.withLock {
-      $0.displayLink?.stop()
-      $0.displayLink = nil
-      $0.task?.cancel()
-      $0.task = nil
-    }
+  func tick(handler: (DSPProcessor.DSPResult) -> Void) async {
+    guard let result = await drainAndProcess(dsp: dspProcessor) else { return }
+    guard !Task.isCancelled else { return }
+    handler(result)
   }
 
   func reset() async {

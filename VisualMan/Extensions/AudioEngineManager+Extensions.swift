@@ -31,8 +31,12 @@ extension AudioEngineManager {
     displayLinkStream = stream
     displayLinkTask = Task { [weak self] in
       for await _ in stream.frames {
-        guard !Task.isCancelled else { break }
-        self?.updateTime()
+        guard !Task.isCancelled, let self else { break }
+        self.updateTime()
+        await self.audioTapProcessor.tick { result in
+          self.audioLevels = result.audioLevels
+          self.visualizerBars = result.visualizerBars
+        }
       }
     }
   }
@@ -52,7 +56,7 @@ extension AudioEngineManager {
     if let nodeTime = player.lastRenderTime,
        let playerTime = player.playerTime(forNodeTime: nodeTime) {
       let sampleTime = playerTime.sampleTime
-      
+
       guard sampleTime >= 0 else { return }
       
       let playerSeconds = Double(sampleTime) / playerTime.sampleRate
@@ -95,7 +99,6 @@ extension AudioEngineManager {
         player?.pause()
         playbackState = .paused
         stopDisplayLink()
-        audioTapProcessor.stopForwarding()
         startPauseDecay()
       }
     case .ended:
@@ -105,7 +108,6 @@ extension AudioEngineManager {
         player?.play()
         playbackState = .playing
         startDisplayLink()
-        startVisualizerForwarding()
       }
     @unknown default:
       break

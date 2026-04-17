@@ -13,7 +13,7 @@ actor DSPProcessor {
     let visualizerBars: [32 of Float]
   }
 
-  private let dftSetup: OpaquePointer?
+  private let dftSetup: OpaquePointer
   private var audioLevels: [1024 of Float] = .init(repeating: 0.0)
   private var visualizerBars: [32 of Float] = .init(repeating: 0.0)
   private var gainHistory: [30 of Float] = .init(repeating: 0.0)
@@ -43,18 +43,19 @@ actor DSPProcessor {
   init() {
     precondition(Constants.fftSize > 0 && Constants.fftSize.nonzeroBitCount == 1,
                  "fftSize must be a power of two (ringMask relies on this)")
-    dftSetup = vDSP_DFT_zrop_CreateSetup(nil,
-                                         vDSP_Length(Constants.fftSize),
-                                         vDSP_DFT_Direction.FORWARD)
+    guard let setup = vDSP_DFT_zrop_CreateSetup(nil,
+                                                vDSP_Length(Constants.fftSize),
+                                                vDSP_DFT_Direction.FORWARD) else {
+      fatalError("vDSP_DFT_zrop_CreateSetup failed for fftSize=\(Constants.fftSize)")
+    }
+    dftSetup = setup
     hannWindow.withUnsafeElementPointer { hann in
       vDSP_hann_window(hann, vDSP_Length(Constants.fftSize), Int32(vDSP_HANN_NORM))
     }
   }
 
   isolated deinit {
-    if let dftSetup {
-      vDSP_DFT_DestroySetup(dftSetup)
-    }
+    vDSP_DFT_DestroySetup(dftSetup)
   }
 
   func reset() {
@@ -81,9 +82,7 @@ actor DSPProcessor {
   func processSamples(_ samples: ArraySlice<Float>, sampleRate: Float) -> DSPResult {
     writeToRing(samples)
     
-    guard computeFFTMagnitudes() else {
-      return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
-    }
+    computeFFTMagnitudes()
     
     normalizeToLogScale(sampleRate: sampleRate)
     
@@ -128,9 +127,7 @@ actor DSPProcessor {
     ringWriteIndex = (ringWriteIndex + effective) & Constants.ringMask
   }
   
-  private func computeFFTMagnitudes() -> Bool {
-    guard let dftSetup else { return false }
-    
+  private func computeFFTMagnitudes() {
     let splitPoint = ringWriteIndex
     ringBuffer.withUnsafeElementPointer { ring in
       windowBuffer.withUnsafeElementPointer { wb in
@@ -182,8 +179,6 @@ actor DSPProcessor {
     magnitudes.withUnsafeElementPointer { mag in
       vDSP_vsmul(mag, 1, &scaleFactor, mag, 1, vDSP_Length(Constants.spectrumSize))
     }
-    
-    return true
   }
   
   private func normalizeToLogScale(sampleRate: Float) {

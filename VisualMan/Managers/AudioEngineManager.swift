@@ -112,7 +112,7 @@ final class AudioEngineManager {
     
     player?.stop()
     
-    audioTapProcessor.stopForwarding()
+    stopDisplayLink()
     engine?.mainMixerNode.removeTap(onBus: 0)
     
     audioLevels = [1024 of Float](repeating: 0.0)
@@ -200,15 +200,6 @@ final class AudioEngineManager {
         sampleRate: sampleRate
       )
     }
-    
-    startVisualizerForwarding()
-  }
-  
-  func startVisualizerForwarding() {
-    audioTapProcessor.startForwarding { [weak self] result in
-      self?.audioLevels = result.audioLevels
-      self?.visualizerBars = result.visualizerBars
-    }
   }
   
   func startPauseDecay() {
@@ -271,7 +262,6 @@ final class AudioEngineManager {
     player?.pause()
     playbackState = .paused
     stopDisplayLink()
-    audioTapProcessor.stopForwarding()
     startPauseDecay()
   }
   
@@ -280,7 +270,6 @@ final class AudioEngineManager {
     player?.play()
     playbackState = .playing
     startDisplayLink()
-    startVisualizerForwarding()
   }
   
   func stopForTransition() {
@@ -288,7 +277,6 @@ final class AudioEngineManager {
     currentPlaybackID = uuid()
     player?.stop()
     stopPauseDecay()
-    audioTapProcessor.stopForwarding()
     engine?.mainMixerNode.removeTap(onBus: 0)
     playbackState = .idle
     currentTime = 0
