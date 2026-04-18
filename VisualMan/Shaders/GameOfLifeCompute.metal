@@ -46,13 +46,19 @@ kernel void gameOfLifeStep(texture2d<half, access::read>  input   [[texture(0)]]
   bool alive = cell.r > 0.5h;
   float age = float(cell.g);
 
+  uint xm1 = select(gid.x - 1u, w - 1u, gid.x == 0u);
+  uint xp1 = select(gid.x + 1u, 0u,     gid.x == w - 1u);
+  uint ym1 = select(gid.y - 1u, h - 1u, gid.y == 0u);
+  uint yp1 = select(gid.y + 1u, 0u,     gid.y == h - 1u);
+
+  uint xs[3] = { xm1, gid.x, xp1 };
+  uint ys[3] = { ym1, gid.y, yp1 };
+
   int neighbors = 0;
-  for (int dy = -1; dy <= 1; dy++) {
-    for (int dx = -1; dx <= 1; dx++) {
-      if (dx == 0 && dy == 0) continue;
-      uint nx = (gid.x + uint(dx + int(w))) % w;
-      uint ny = (gid.y + uint(dy + int(h))) % h;
-      half4 n = input.read(uint2(nx, ny));
+  for (uint dy = 0u; dy < 3u; dy++) {
+    for (uint dx = 0u; dx < 3u; dx++) {
+      if (dx == 1u && dy == 1u) continue;
+      half4 n = input.read(uint2(xs[dx], ys[dy]));
       if (n.r > 0.5h) neighbors++;
     }
   }

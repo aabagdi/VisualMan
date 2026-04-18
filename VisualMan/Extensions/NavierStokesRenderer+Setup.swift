@@ -51,6 +51,22 @@ extension NavierStokesRenderer {
     let u0: MTLTexture
   }
 
+  private nonisolated static func makePipeline(
+    _ name: String, library: MTLLibrary, compiler: any MTL4Compiler
+  ) -> MTLComputePipelineState? {
+    let functionDesc = MTL4LibraryFunctionDescriptor()
+    functionDesc.name = name
+    functionDesc.library = library
+    let pipelineDesc = MTL4ComputePipelineDescriptor()
+    pipelineDesc.computeFunctionDescriptor = functionDesc
+    do {
+      return try compiler.makeComputePipelineState(descriptor: pipelineDesc)
+    } catch {
+      logger.error("Failed to create pipeline '\(name)': \(error.localizedDescription)")
+      return nil
+    }
+  }
+
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
     guard let library = device.makeDefaultLibrary() else {
       logger.error("Failed to create default Metal library")
@@ -58,17 +74,7 @@ extension NavierStokesRenderer {
     }
 
     func makePipeline(_ name: String) -> MTLComputePipelineState? {
-      let functionDesc = MTL4LibraryFunctionDescriptor()
-      functionDesc.name = name
-      functionDesc.library = library
-      let pipelineDesc = MTL4ComputePipelineDescriptor()
-      pipelineDesc.computeFunctionDescriptor = functionDesc
-      do {
-        return try compiler.makeComputePipelineState(descriptor: pipelineDesc)
-      } catch {
-        logger.error("Failed to create pipeline '\(name)': \(error.localizedDescription)")
-        return nil
-      }
+      Self.makePipeline(name, library: library, compiler: compiler)
     }
 
     guard let splatBatch = makePipeline("fluidSplatBatch"),
