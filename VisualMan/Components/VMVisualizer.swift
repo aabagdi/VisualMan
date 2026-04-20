@@ -21,7 +21,7 @@ enum VMVisualizer: String, CaseIterable {
   case interference = "Interference Pattern"
   case voronoi = "Voronoi Diagram"
   case aurora = "Aurora Borealis"
-  case oscilloscope = "Oscilloscope"
+  case oscilloscope = "CRT Oscilloscope"
   case sphereMesh = "Sphere"
   case plasma = "Plasma"
   case metaball = "Lava Lamp"
