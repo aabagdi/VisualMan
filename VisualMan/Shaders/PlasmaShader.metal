@@ -6,13 +6,8 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
-
-half3 hsv2rgb(float h, float s, float v) {
-  float3 p = abs(fract(float3(h, h + 2.0/3.0, h + 1.0/3.0)) * 6.0 - 3.0);
-  float3 rgb = v * mix(float3(1.0), clamp(p - 1.0, 0.0, 1.0), s);
-  return half3(rgb);
-}
 
 [[ stitchable ]] half4 plasma(float2 position,
                                half4 inputColor,

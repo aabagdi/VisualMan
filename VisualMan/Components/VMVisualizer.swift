@@ -28,5 +28,5 @@ enum VMVisualizer: String, CaseIterable {
   case ink = "Ink"
   case navierStokes = "Navier-Stokes"
   case liquidLight = "'60s Liquid Light"
-  case gameOfLife = "Game of Life"
+  case gameOfLife = "LCD Game of Life"
 }

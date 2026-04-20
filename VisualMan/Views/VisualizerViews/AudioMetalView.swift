@@ -173,20 +173,13 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
             let drawable = metalLayer.nextDrawable() else { return }
 
       let now = CACurrentMediaTime()
-      let isResume: Bool
       if lastFrameTime > 0 {
-        let delta = Float(now - lastFrameTime)
-        isResume = delta > 0.1
-        renderer.dt = isResume ? 0 : min(delta, 1.0 / 30.0)
-      } else {
-        isResume = false
-        renderer.dt = 0
+        let delta = now - lastFrameTime
+        if delta > 0.1 {
+          renderer.prepareForResume()
+        }
       }
       lastFrameTime = now
-
-      if isResume {
-        renderer.prepareForResume()
-      }
 
       let bass = audioLevels.bassLevel
       let mid = audioLevels.midLevel

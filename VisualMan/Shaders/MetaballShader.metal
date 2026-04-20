@@ -6,6 +6,7 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
 
 #define NUM_BLOBS 7
@@ -50,8 +51,7 @@ float2 blobPosition(int index, float time, float bass, float mid) {
     
     float hue = fract(hues[i] + time * 0.02 + audioEnergy * 0.1);
     float sat = 0.7 + trebleLevel * 0.3;
-    float3 p = abs(fract(float3(hue, hue + 2.0/3.0, hue + 1.0/3.0)) * 6.0 - 3.0);
-    float3 blobColor = mix(float3(1.0), clamp(p - 1.0, 0.0, 1.0), sat);
+    float3 blobColor = float3(hsv2rgb(hue, sat, 1.0));
     
     float w = contribution * contribution;
     weightedColor += blobColor * w;

@@ -163,11 +163,14 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
 
-    guard let dummy = device.makeTexture(descriptor: desc) else { return }
-    residencySet.addAllocation(dummy)
+    guard let dummyA = device.makeTexture(descriptor: desc),
+          let dummyB = device.makeTexture(descriptor: desc) else { return }
+    residencySet.addAllocation(dummyA)
+    residencySet.addAllocation(dummyB)
     residencySet.commit()
     defer {
-      residencySet.removeAllocation(dummy)
+      residencySet.removeAllocation(dummyA)
+      residencySet.removeAllocation(dummyB)
       residencySet.commit()
     }
 
@@ -181,9 +184,9 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
-    renderLiquidLight(encoder: encoder, output: dummy, audio: .zero)
+    renderLiquidLight(encoder: encoder, output: dummyA, audio: .zero)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    renderBlur(encoder: encoder, input: dummy, output: dummy, audio: .zero)
+    renderBlur(encoder: encoder, input: dummyA, output: dummyB, audio: .zero)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()

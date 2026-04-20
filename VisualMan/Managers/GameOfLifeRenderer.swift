@@ -30,8 +30,8 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   var stepPipeline: MTLComputePipelineState
   var renderPipeline: MTLComputePipelineState
 
-  static let longAxisCells: Int = 87
-  static let minShortAxisCells: Int = 20
+  static let longAxisCells: Int = 48
+  static let minShortAxisCells: Int = 12
   var simWidth: Int = 0
   var simHeight: Int = 0
 

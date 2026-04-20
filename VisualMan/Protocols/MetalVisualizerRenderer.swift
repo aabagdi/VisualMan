@@ -12,7 +12,6 @@ import QuartzCore
 protocol MetalVisualizerRenderer: AnyObject {
   var device: MTLDevice { get }
   var commandQueue: any MTL4CommandQueue { get }
-  var dt: Float { get set }
 
   func canRenderThisFrame() -> Bool
   func encodeFrame(bass: Float, mid: Float, high: Float, drawableTexture: MTLTexture) -> MTLTexture?

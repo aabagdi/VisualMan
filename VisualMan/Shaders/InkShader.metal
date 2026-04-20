@@ -6,24 +6,8 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
-
-float inkHash(float2 p) {
-  return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
-}
-
-float inkNoise(float2 p) {
-  float2 i = floor(p);
-  float2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  
-  float a = inkHash(i);
-  float b = inkHash(i + float2(1.0, 0.0));
-  float c = inkHash(i + float2(0.0, 1.0));
-  float d = inkHash(i + float2(1.0, 1.0));
-  
-  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
 
 float inkFBM(float2 p, int octaves) {
   float value = 0.0;
@@ -32,7 +16,7 @@ float inkFBM(float2 p, int octaves) {
   float2x2 rot = float2x2(0.8, -0.6, 0.6, 0.8);
   
   for (int i = 0; i < octaves; i++) {
-    value += amplitude * inkNoise(pos);
+    value += amplitude * shaderNoise(pos);
     pos = rot * pos * 2.0 + float2(3.7, 1.3);
     amplitude *= 0.5;
   }

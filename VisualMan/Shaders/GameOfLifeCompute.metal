@@ -25,13 +25,9 @@ inline float hash(uint2 p, uint seed) {
   return float(h & 0x00FFFFFFu) / float(0x00FFFFFFu);
 }
 
-inline float3 ageColor(float age) {
-  float t = saturate(age * 8.0);
-  float3 light = float3(0.608, 0.737, 0.059);
-  float3 midC  = float3(0.545, 0.675, 0.059);
-  float3 dark  = float3(0.188, 0.384, 0.188);
-  return (t < 0.5) ? mix(light, midC, t * 2.0)
-                   : mix(midC,  dark, (t - 0.5) * 2.0);
+inline float lcdDarkness(float age) {
+  float t = saturate(age * 6.0);
+  return mix(0.55, 0.92, t);
 }
 
 kernel void gameOfLifeStep(texture2d<half, access::read>  input   [[texture(0)]],
@@ -87,6 +83,11 @@ kernel void gameOfLifeStep(texture2d<half, access::read>  input   [[texture(0)]]
   output.write(half4(half(newAlive ? 1.0 : 0.0), half(newAge), 0.0h, 1.0h), gid);
 }
 
+inline float roundedBoxSDF(float2 p, float2 halfSize, float radius) {
+  float2 d = abs(p) - halfSize + float2(radius);
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - radius;
+}
+
 kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)]],
                              texture2d<float, access::write> output  [[texture(1)]],
                              constant GameOfLifeParams &params       [[buffer(0)]],
@@ -105,11 +106,19 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
   uint offX = (outW - gridW) / 2u;
   uint offY = (outH - gridH) / 2u;
 
-  float scanline = 1.0 - 0.08 * float(gid.y % 2u);
-  float3 bgColor = float3(0.059, 0.220, 0.059) * scanline;
+  const float3 backlight   = float3(0.605, 0.680, 0.295);
+  const float3 pixelDark   = float3(0.180, 0.210, 0.110);
+  const float3 gridLine    = float3(0.480, 0.540, 0.240);
+  const float3 shadowTint  = float3(0.380, 0.430, 0.190);
+  const float3 bezelColor  = float3(0.350, 0.400, 0.180);
+
+  float2 screenUV = float2(float(gid.x), float(gid.y)) / float2(float(outW), float(outH));
+  float2 vD = screenUV - float2(0.48, 0.45);
+  float vignette = 1.0 - 0.35 * dot(vD, vD) * 4.0;
+  vignette = saturate(vignette);
 
   if (gid.x < offX || gid.y < offY || gid.x >= offX + gridW || gid.y >= offY + gridH) {
-    output.write(float4(bgColor, 1.0), gid);
+    output.write(float4(bezelColor * vignette * 0.8, 1.0), gid);
     return;
   }
 
@@ -122,37 +131,85 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
   sx = min(sx, params.simWidth  - 1u);
   sy = min(sy, params.simHeight - 1u);
 
-  float2 local = float2(float(lx % cellPx), float(ly % cellPx)) / float(cellPx);
+  uint lpx = lx % cellPx;
+  uint lpy = ly % cellPx;
+  float cellPxF = float(cellPx);
+
+  bool onGridLine = (lpx == 0u) || (lpy == 0u);
 
   half4 cell = sim.read(uint2(sx, sy));
   bool alive = cell.r > 0.5h;
   float age = float(cell.g);
 
-  const float inset = 0.12;
-  bool insideCell = all(local > float2(inset)) && all(local < float2(1.0 - inset));
+  if (onGridLine) {
+    output.write(float4(gridLine * vignette, 1.0), gid);
+    return;
+  }
 
-  float3 color = bgColor;
+  const uint shadowPx = max(1u, cellPx / 5u);
+  float shadowStrength = 0.0;
 
-  if (alive && insideCell) {
-    float3 c = ageColor(age);
-
-    float3 light = float3(0.608, 0.737, 0.059);
-    c = mix(c, light, saturate(params.bass * 0.4));
-    float t = saturate(age * 8.0);
-    c *= 1.0 + params.high * (1.0 - t) * 0.2;
-
-    color = saturate(c) * scanline;
-  } else if (!insideCell) {
-    if (alive) {
-      float youth = 1.0 - saturate(age * 24.0);
-      if (youth > 0.0) {
-        float d = max(abs(local.x - 0.5), abs(local.y - 0.5));
-        float gutterT = saturate((d - (0.5 - inset)) / inset);
-        float coronaStrength = youth * (1.0 - gutterT) * 0.55;
-        color = bgColor + ageColor(age) * coronaStrength * scanline;
-      }
+  if (lpx < shadowPx) {
+    uint nsx = landscape ? sy : (cx > 0u ? cx - 1u : mapW - 1u);
+    uint nsy = landscape ? (cx > 0u ? cx - 1u : mapW - 1u) : sy;
+    if (landscape) { nsx = sy; nsy = (cx > 0u) ? cx - 1u : mapW - 1u; }
+    else { nsx = (cx > 0u) ? cx - 1u : mapW - 1u; nsy = sy; }
+    nsx = min(nsx, params.simWidth - 1u);
+    nsy = min(nsy, params.simHeight - 1u);
+    half4 leftCell = sim.read(uint2(nsx, nsy));
+    if (leftCell.r > 0.5h) {
+      float fade = 1.0 - float(lpx) / float(shadowPx);
+      shadowStrength = max(shadowStrength, fade * 0.35);
     }
   }
-  
-  output.write(float4(color, 1.0), gid);
+  if (lpy < shadowPx) {
+    uint nsx, nsy;
+    if (landscape) { nsx = (cy > 0u) ? cy - 1u : mapH - 1u; nsy = sx; }
+    else { nsx = sx; nsy = (cy > 0u) ? cy - 1u : mapH - 1u; }
+    nsx = min(nsx, params.simWidth - 1u);
+    nsy = min(nsy, params.simHeight - 1u);
+    half4 aboveCell = sim.read(uint2(nsx, nsy));
+    if (aboveCell.r > 0.5h) {
+      float fade = 1.0 - float(lpy) / float(shadowPx);
+      shadowStrength = max(shadowStrength, fade * 0.35);
+    }
+  }
+  if (lpx < shadowPx && lpy < shadowPx) {
+    uint ncx = (cx > 0u) ? cx - 1u : mapW - 1u;
+    uint ncy = (cy > 0u) ? cy - 1u : mapH - 1u;
+    uint nsx = landscape ? ncy : ncx;
+    uint nsy = landscape ? ncx : ncy;
+    nsx = min(nsx, params.simWidth - 1u);
+    nsy = min(nsy, params.simHeight - 1u);
+    half4 diagCell = sim.read(uint2(nsx, nsy));
+    if (diagCell.r > 0.5h) {
+      float fadeX = 1.0 - float(lpx) / float(shadowPx);
+      float fadeY = 1.0 - float(lpy) / float(shadowPx);
+      shadowStrength = max(shadowStrength, min(fadeX, fadeY) * 0.25);
+    }
+  }
+
+  float3 color;
+
+  if (alive) {
+    float darkness = lcdDarkness(age);
+    darkness = min(darkness + params.bass * 0.08, 0.95);
+    float3 segColor = mix(backlight, pixelDark, darkness);
+
+    float2 inner = float2(float(lpx), float(lpy)) / cellPxF;
+    float depthShade = 1.0 - saturate((inner.x + inner.y - 1.0) * 0.6) * 0.10;
+    float depthLight = saturate((1.0 - inner.x - inner.y) * 0.5) * 0.04;
+    segColor *= depthShade;
+    segColor += depthLight;
+
+    color = segColor * vignette;
+  } else {
+    float3 baseColor = backlight * (1.0 - 0.025) * vignette;
+    color = mix(baseColor, shadowTint * vignette, shadowStrength);
+  }
+
+  float rowLine = 1.0 - 0.012 * float(gid.y % 2u);
+  color *= rowLine;
+
+  output.write(float4(saturate(color), 1.0), gid);
 }

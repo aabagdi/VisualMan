@@ -106,8 +106,8 @@ float3 sphereNormal(float3 p, float time, float bass, float mid, float treble) {
     color = half3(0.01, 0.01, 0.03) + half3(0.08, 0.12, 0.25) * bgGlow * (1.0 + audioEnergy);
     
     float2 gridUV = fract(uv * 20.0) - 0.5;
-    float dot = smoothstep(0.02, 0.0, length(gridUV));
-    color += half3(0.05, 0.08, 0.15) * dot * audioEnergy * 0.3;
+    float dotBrightness = smoothstep(0.02, 0.0, length(gridUV));
+    color += half3(0.05, 0.08, 0.15) * dotBrightness * audioEnergy * 0.3;
   }
   
   color = tanh(color * 1.1);

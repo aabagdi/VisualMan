@@ -6,24 +6,8 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
-
-float auroraHash(float2 p) {
-  return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
-}
-
-float auroraNoise(float2 p) {
-  float2 i = floor(p);
-  float2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  
-  float a = auroraHash(i);
-  float b = auroraHash(i + float2(1.0, 0.0));
-  float c = auroraHash(i + float2(0.0, 1.0));
-  float d = auroraHash(i + float2(1.0, 1.0));
-  
-  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
 
 float auroraFBM(float2 p) {
   float value = 0.0;
@@ -31,7 +15,7 @@ float auroraFBM(float2 p) {
   float2 pos = p;
   
   for (int i = 0; i < 4; i++) {
-    value += amplitude * auroraNoise(pos);
+    value += amplitude * shaderNoise(pos);
     pos *= 2.0;
     amplitude *= 0.5;
   }
@@ -47,9 +31,10 @@ half3 auroraColor(float t, float time, float bass, float treble) {
   half3 magenta = half3(0.7, 0.2, 0.8);
   half3 violet = half3(0.4, 0.1, 0.7);
   
-  float s = fract(phase);
-  int segment = int(fract(phase * 0.25) * 4.0);
-  
+  float wrapped = fract(phase * 0.25) * 4.0;
+  int segment = int(wrapped);
+  float s = fract(wrapped);
+
   if (segment == 0) return mix(green, cyan, s);
   if (segment == 1) return mix(cyan, magenta, s);
   if (segment == 2) return mix(magenta, violet, s);
@@ -70,7 +55,7 @@ half3 auroraColor(float t, float time, float bass, float treble) {
   half3 skyBottom = half3(0.0, 0.0, 0.02);
   half3 skyColor = mix(skyBottom, skyTop, uv.y);
   
-  float starNoise = auroraHash(floor(uv * 300.0));
+  float starNoise = shaderHash(floor(uv * 300.0));
   float starBrightness = step(0.995, starNoise) * (0.3 + 0.7 * fract(starNoise * 100.0));
   skyColor += half3(starBrightness * 0.4);
   
