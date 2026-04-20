@@ -9,26 +9,19 @@ import Metal
 import QuartzCore
 
 extension GameOfLifeRenderer {
-  func update(bass: Float, mid: Float, high: Float, drawable: CAMetalDrawable) {
+  func encodeFrame(bass: Float, mid: Float, high: Float, drawableTexture: MTLTexture) -> MTLTexture? {
     drainPendingTextureReleases()
 
-    let drawableTexture = drawable.texture
     ensureSimTextures(drawableWidth: drawableTexture.width,
                       drawableHeight: drawableTexture.height)
     guard let localSimA = simA, let localSimB = simB else {
-      commandQueue.waitForDrawable(drawable)
-      commandQueue.signalDrawable(drawable)
-      drawable.present()
-      return
+      return nil
     }
 
     guard ensureDisplayIntermediate(width: drawableTexture.width,
                                     height: drawableTexture.height),
           let displayTex = displayIntermediate else {
-      commandQueue.waitForDrawable(drawable)
-      commandQueue.signalDrawable(drawable)
-      drawable.present()
-      return
+      return nil
     }
 
     frameNumber += 1
@@ -46,7 +39,7 @@ extension GameOfLifeRenderer {
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
     commandBuffer.useResidencySet(residencySet)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
     encoder.setArgumentTable(argumentTable)
 
     if shouldStep {
@@ -64,14 +57,20 @@ extension GameOfLifeRenderer {
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
 
+    pendingShouldStep = shouldStep
+    return displayTex
+  }
+
+  func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable) {
     commandQueue.waitForDrawable(drawable)
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: frameNumber)
     commandQueue.signalDrawable(drawable)
     drawable.present()
 
-    if shouldStep {
+    if pendingShouldStep {
       swap(&simA, &simB)
+      pendingShouldStep = false
     }
   }
 

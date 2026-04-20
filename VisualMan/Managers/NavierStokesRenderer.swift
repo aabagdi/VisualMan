@@ -224,21 +224,16 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     return true
   }
 
-  func update(bass: Float,
-              mid: Float,
-              high: Float,
-              drawable: CAMetalDrawable) {
+  func encodeFrame(bass: Float,
+                   mid: Float,
+                   high: Float,
+                   drawableTexture: MTLTexture) -> MTLTexture? {
     drainPendingDisplayReleases()
-
-    let drawableTexture = drawable.texture
 
     guard ensureDisplayIntermediate(width: drawableTexture.width,
                                     height: drawableTexture.height),
           let displayTex = displayIntermediate else {
-      commandQueue.waitForDrawable(drawable)
-      commandQueue.signalDrawable(drawable)
-      drawable.present()
-      return
+      return nil
     }
 
     frameNumber += 1
@@ -268,7 +263,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
     commandBuffer.useResidencySet(residencySet)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
     encoder.setArgumentTable(argumentTable)
 
     ensureTAAHistory(width: displayTex.width, height: displayTex.height)
@@ -285,7 +280,11 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
-    
+
+    return displayTex
+  }
+
+  func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable) {
     commandQueue.waitForDrawable(drawable)
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: frameNumber)

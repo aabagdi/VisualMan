@@ -23,7 +23,7 @@ extension InlineArray<1024, Float> {
   private enum FrequencyBands {
     static let bassRange = 1..<10
     static let midRange = 10..<50
-    static let highRange = 50..<150
+    static let highRange = 50..<350
   }
   
   var bassLevel: Float {

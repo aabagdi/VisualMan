@@ -11,6 +11,7 @@ struct VisualizerContainerView: View {
   let currentVisualizer: VMVisualizer
   let visualizerBars: [32 of Float]
   let audioLevels: [1024 of Float]
+  let waveform: [1024 of Float]
   let albumArt: UIImage?
   
   var body: some View {
@@ -32,7 +33,7 @@ struct VisualizerContainerView: View {
     case .aurora:
       AuroraBorealisVisualizerView(audioLevels: audioLevels)
     case .oscilloscope:
-      OscilloscopeVisualizerView(audioLevels: audioLevels)
+      OscilloscopeVisualizerView(audioLevels: audioLevels, waveform: waveform)
     case .sphereMesh:
       SphereMeshVisualizerView(audioLevels: audioLevels)
     case .plasma:

@@ -286,22 +286,18 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     return true
   }
 
-  func update(bass: Float,
-              mid: Float,
-              high: Float,
-              drawable: CAMetalDrawable) {
+  func encodeFrame(bass: Float,
+                   mid: Float,
+                   high: Float,
+                   drawableTexture: MTLTexture) -> MTLTexture? {
     drainPendingTextureReleases()
 
     let smoothed = processAudio(bass: bass, mid: mid, high: high)
 
-    let outputTex = drawable.texture
-    guard ensureIntermediateTextures(width: outputTex.width, height: outputTex.height),
+    guard ensureIntermediateTextures(width: drawableTexture.width, height: drawableTexture.height),
           let intermediateTex = intermediateTexture,
           let finalTex = finalTexture else {
-      commandQueue.waitForDrawable(drawable)
-      commandQueue.signalDrawable(drawable)
-      drawable.present()
-      return
+      return nil
     }
 
     frameNumber += 1
@@ -314,7 +310,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
 
     commandBuffer.beginCommandBuffer(allocator: allocator)
     commandBuffer.useResidencySet(residencySet)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
     encoder.setArgumentTable(argumentTable)
 
     renderLiquidLight(encoder: encoder, output: intermediateTex, audio: smoothed)
@@ -323,11 +319,15 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     renderBlur(encoder: encoder, input: intermediateTex, output: finalTex, audio: smoothed)
 
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit)
-    encoder.copy(sourceTexture: finalTex, destinationTexture: outputTex)
+    encoder.copy(sourceTexture: finalTex, destinationTexture: drawableTexture)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
 
+    return finalTex
+  }
+
+  func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable) {
     commandQueue.waitForDrawable(drawable)
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: frameNumber)

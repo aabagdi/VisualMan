@@ -28,6 +28,7 @@ final class AudioEngineManager {
   
   var audioLevels: [1024 of Float] = .init(repeating: 0.0)
   var visualizerBars: [32 of Float] = .init(repeating: 0.0)
+  var waveform: [1024 of Float] = .init(repeating: 0.0)
   var playbackState: PlaybackState = .idle
   var currentTime: TimeInterval = 0
   var duration: TimeInterval = 0
@@ -117,6 +118,7 @@ final class AudioEngineManager {
     
     audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
+    waveform = [1024 of Float](repeating: 0.0)
     await audioTapProcessor.reset()
     lastSeekFrame = 0
     
@@ -219,16 +221,23 @@ final class AudioEngineManager {
           vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 32)
           vDSP_maxv(ptr, 1, &barMax, 32)
         }
-        
+
         var levelMax: Float = 0
         self.audioLevels.withUnsafeElementPointer { ptr in
           vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 1024)
           vDSP_maxv(ptr, 1, &levelMax, 1024)
         }
-        
-        if barMax < threshold && levelMax < threshold {
+
+        var waveMax: Float = 0
+        self.waveform.withUnsafeElementPointer { ptr in
+          vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 1024)
+          vDSP_maxmgv(ptr, 1, &waveMax, 1024)
+        }
+
+        if barMax < threshold && levelMax < threshold && waveMax < threshold {
           self.visualizerBars = [32 of Float](repeating: 0)
           self.audioLevels = [1024 of Float](repeating: 0)
+          self.waveform = [1024 of Float](repeating: 0)
           break
         }
       }

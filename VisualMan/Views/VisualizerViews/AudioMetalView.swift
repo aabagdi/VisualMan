@@ -18,7 +18,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   let renderer: R
   let audioLevels: [1024 of Float]
   var config: MetalViewConfig = MetalViewConfig()
-  
+
   func makeUIView(context: Context) -> MTKView {
     let mtkView = MTKView()
     mtkView.device = renderer.device
@@ -32,14 +32,14 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     if let bg = config.backgroundColor {
       mtkView.backgroundColor = bg
     }
-    
+
     if let metalLayer = mtkView.layer as? CAMetalLayer {
       renderer.commandQueue.addResidencySet(metalLayer.residencySet)
     }
-    
+
     return mtkView
   }
-  
+
   func updateUIView(_ uiView: MTKView, context: Context) {
     context.coordinator.audioLevels = audioLevels
   }
@@ -49,11 +49,11 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       coordinator.renderer.commandQueue.removeResidencySet(metalLayer.residencySet)
     }
   }
-  
+
   func makeCoordinator() -> Coordinator {
     Coordinator(renderer: renderer)
   }
-  
+
   @MainActor
   class Coordinator: NSObject, MTKViewDelegate {
     let renderer: R
@@ -63,7 +63,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var smoothedHigh: Float = 0
     private var needsSeedSmoothing = true
     private var lastFrameTime: CFTimeInterval = 0
-    
+
     nonisolated(unsafe) private var thermalObserver: (any NSObjectProtocol)?
     private var currentThermalState: ProcessInfo.ThermalState = .nominal
     private var drawableScaleFactor: CGFloat = 1.0
@@ -74,7 +74,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var framesRendered: Int = 0
     private var gpuRampedUp = false
     private let rampUpFrameThreshold = 30
-    
+
     init(renderer: R) {
       self.renderer = renderer
       super.init()
@@ -90,20 +90,20 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         }
       }
     }
-    
+
     deinit {
       if let observer = thermalObserver {
         NotificationCenter.default.removeObserver(observer)
       }
     }
-    
+
     private func thermalStateChanged() {
       let newState = ProcessInfo.processInfo.thermalState
       guard newState != currentThermalState else { return }
       currentThermalState = newState
       applyThermalPolicy()
     }
-    
+
     private func applyThermalPolicy() {
       switch currentThermalState {
       case .nominal:
@@ -126,7 +126,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         applyDrawableScale(to: view)
       }
     }
-    
+
     private func applyDrawableScale(to view: MTKView) {
       view.preferredFramesPerSecond = targetFPS
       guard nativeDrawableSize != .zero else { return }
@@ -140,14 +140,14 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         isApplyingScale = false
       }
     }
-    
+
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
       guard !isApplyingScale else { return }
       mtkView = view
       nativeDrawableSize = size
       applyDrawableScale(to: view)
     }
-    
+
     func draw(in view: MTKView) {
       autoreleasepool {
         drawFrame(in: view)
@@ -187,11 +187,26 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       if isResume {
         renderer.prepareForResume()
       }
-      
+
       let bass = audioLevels.bassLevel
       let mid = audioLevels.midLevel
       let high = audioLevels.highLevel
 
+      smoothAudioLevels(bass: bass, mid: mid, high: high)
+
+      guard let intermediateTex = renderer.encodeFrame(
+        bass: smoothedBass,
+        mid: smoothedMid,
+        high: smoothedHigh,
+        drawableTexture: drawable.texture
+      ) else {
+        return
+      }
+
+      renderer.commitFrame(intermediateTexture: intermediateTex, drawable: drawable)
+    }
+
+    private func smoothAudioLevels(bass: Float, mid: Float, high: Float) {
       if needsSeedSmoothing {
         smoothedBass = bass
         smoothedMid = mid
@@ -207,11 +222,6 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         let hSmooth: Float = high > smoothedHigh ? 0.15 : 0.75
         smoothedHigh = smoothedHigh * hSmooth + high * (1.0 - hSmooth)
       }
-      
-      renderer.update(bass: smoothedBass,
-                      mid: smoothedMid,
-                      high: smoothedHigh,
-                      drawable: drawable)
     }
   }
 }

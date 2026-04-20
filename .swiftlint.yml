@@ -4,6 +4,7 @@ disabled_rules:
  - function_parameter_count
  - trailing_comma
  - cyclomatic_complexity
+ - closure_parameter_position
 
 excluded:
  - .git

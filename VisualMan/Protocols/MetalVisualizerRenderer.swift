@@ -15,7 +15,8 @@ protocol MetalVisualizerRenderer: AnyObject {
   var dt: Float { get set }
 
   func canRenderThisFrame() -> Bool
-  func update(bass: Float, mid: Float, high: Float, drawable: CAMetalDrawable)
+  func encodeFrame(bass: Float, mid: Float, high: Float, drawableTexture: MTLTexture) -> MTLTexture?
+  func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable)
   func reset()
   func prepareForResume()
 }

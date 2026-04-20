@@ -36,6 +36,7 @@ extension AudioEngineManager {
         await self.audioTapProcessor.tick { result in
           self.audioLevels = result.audioLevels
           self.visualizerBars = result.visualizerBars
+          self.waveform = result.waveform
         }
       }
     }

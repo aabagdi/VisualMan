@@ -51,6 +51,7 @@ struct MusicPlayerView: View {
       VisualizerContainerView(currentVisualizer: visualizerSelection.current,
                     visualizerBars: audioManager.visualizerBars,
                     audioLevels: audioManager.audioLevels,
+                    waveform: audioManager.waveform,
                     albumArt: currentAudioSource?.albumArt)
       .ignoresSafeArea()
       .onTapGesture {

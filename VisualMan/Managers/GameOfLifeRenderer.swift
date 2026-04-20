@@ -50,6 +50,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   var smoothedBass: Float = 0
   var smoothedMid: Float = 0
   var needsAudioReseed: Bool = true
+  var pendingShouldStep: Bool = false
 
   static let baseStepInterval: Int = 10
   var stepAccumulator: Int = 0

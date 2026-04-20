@@ -11,6 +11,7 @@ actor DSPProcessor {
   struct DSPResult: Sendable {
     let audioLevels: [1024 of Float]
     let visualizerBars: [32 of Float]
+    let waveform: [1024 of Float]
   }
 
   private let dftSetup: OpaquePointer
@@ -39,6 +40,7 @@ actor DSPProcessor {
   private var magnitudes: [1024 of Float] = .init(repeating: 0.0)
   private var weightedMagnitudes: [1024 of Float] = .init(repeating: 0.0)
   private var normalizedSpectrum: [1024 of Float] = .init(repeating: 0.0)
+  private var waveformBuffer: [1024 of Float] = .init(repeating: 0.0)
 
   init() {
     precondition(Constants.fftSize > 0 && Constants.fftSize.nonzeroBitCount == 1,
@@ -71,6 +73,7 @@ actor DSPProcessor {
     magnitudes = [1024 of Float](repeating: 0.0)
     weightedMagnitudes = [1024 of Float](repeating: 0.0)
     normalizedSpectrum = [1024 of Float](repeating: 0.0)
+    waveformBuffer = [1024 of Float](repeating: 0.0)
     gainHistory = [30 of Float](repeating: 0.0)
     gainHistoryWriteIndex = 0
     gainHistoryCount = 0
@@ -81,7 +84,8 @@ actor DSPProcessor {
 
   func processSamples(_ samples: ArraySlice<Float>, sampleRate: Float) -> DSPResult {
     writeToRing(samples)
-    
+
+    captureWaveform()
     computeFFTMagnitudes()
     
     normalizeToLogScale(sampleRate: sampleRate)
@@ -99,7 +103,7 @@ actor DSPProcessor {
     updateAutomaticGainControl(bars: newBars, dt: dt)
     smoothVisualizerBars(newBars, dt: dt)
     
-    return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars)
+    return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars, waveform: waveformBuffer)
   }
   
   private func writeToRing(_ samples: ArraySlice<Float>) {
@@ -127,6 +131,21 @@ actor DSPProcessor {
     ringWriteIndex = (ringWriteIndex + effective) & Constants.ringMask
   }
   
+  private func captureWaveform() {
+    let halfFFT = Constants.fftSize / 2
+    let start = (ringWriteIndex + Constants.fftSize - halfFFT) & Constants.ringMask
+    ringBuffer.withUnsafeElementPointer { ring in
+      waveformBuffer.withUnsafeElementPointer { wf in
+        let tailCount = min(halfFFT, Constants.fftSize - start)
+        wf.update(from: ring + start, count: tailCount)
+        let remaining = halfFFT - tailCount
+        if remaining > 0 {
+          (wf + tailCount).update(from: ring, count: remaining)
+        }
+      }
+    }
+  }
+
   private func computeFFTMagnitudes() {
     let splitPoint = ringWriteIndex
     ringBuffer.withUnsafeElementPointer { ring in
