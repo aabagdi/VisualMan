@@ -150,10 +150,9 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
   float shadowStrength = 0.0;
 
   if (lpx < shadowPx) {
-    uint nsx = landscape ? sy : (cx > 0u ? cx - 1u : mapW - 1u);
-    uint nsy = landscape ? (cx > 0u ? cx - 1u : mapW - 1u) : sy;
-    if (landscape) { nsx = sy; nsy = (cx > 0u) ? cx - 1u : mapW - 1u; }
-    else { nsx = (cx > 0u) ? cx - 1u : mapW - 1u; nsy = sy; }
+    uint ncx = (cx > 0u) ? cx - 1u : mapW - 1u;
+    uint nsx = landscape ? cy : ncx;
+    uint nsy = landscape ? ncx : cy;
     nsx = min(nsx, params.simWidth - 1u);
     nsy = min(nsy, params.simHeight - 1u);
     half4 leftCell = sim.read(uint2(nsx, nsy));
@@ -162,10 +161,11 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
       shadowStrength = max(shadowStrength, fade * 0.55);
     }
   }
+
   if (lpy < shadowPx) {
-    uint nsx, nsy;
-    if (landscape) { nsx = (cy > 0u) ? cy - 1u : mapH - 1u; nsy = sx; }
-    else { nsx = sx; nsy = (cy > 0u) ? cy - 1u : mapH - 1u; }
+    uint ncy = (cy > 0u) ? cy - 1u : mapH - 1u;
+    uint nsx = landscape ? ncy : cx;
+    uint nsy = landscape ? cx : ncy;
     nsx = min(nsx, params.simWidth - 1u);
     nsy = min(nsy, params.simHeight - 1u);
     half4 aboveCell = sim.read(uint2(nsx, nsy));
@@ -174,6 +174,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
       shadowStrength = max(shadowStrength, fade * 0.55);
     }
   }
+
   if (lpx < shadowPx && lpy < shadowPx) {
     uint ncx = (cx > 0u) ? cx - 1u : mapW - 1u;
     uint ncy = (cy > 0u) ? cy - 1u : mapH - 1u;
