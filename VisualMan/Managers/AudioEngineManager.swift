@@ -41,7 +41,7 @@ final class AudioEngineManager {
   
   @ObservationIgnored @Dependency(\.uuid) var uuid
   
-  @ObservationIgnored private var engine: AVAudioEngine?
+  @ObservationIgnored private(set) var engine: AVAudioEngine?
   @ObservationIgnored private var securityScopedURL: URL?
   @ObservationIgnored private var playbackContinuation: AsyncStream<Void>.Continuation?
   @ObservationIgnored private var pauseDecayTask: Task<Void, Never>?
@@ -276,6 +276,10 @@ final class AudioEngineManager {
   
   func resume() {
     stopPauseDecay()
+    try? AVAudioSession.sharedInstance().setActive(true)
+    if let engine, !engine.isRunning {
+      try? engine.start()
+    }
     player?.play()
     playbackState = .playing
     startDisplayLink()

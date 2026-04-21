@@ -103,9 +103,12 @@ extension AudioEngineManager {
         startPauseDecay()
       }
     case .ended:
+      try? AVAudioSession.sharedInstance().setActive(true)
+      if let engine, !engine.isRunning {
+        try? engine.start()
+      }
       if let options, options.contains(.shouldResume) {
         stopPauseDecay()
-        try? AVAudioSession.sharedInstance().setActive(true)
         player?.play()
         playbackState = .playing
         startDisplayLink()
