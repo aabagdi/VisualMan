@@ -146,7 +146,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
     return;
   }
 
-  const uint shadowPx = max(1u, cellPx / 5u);
+  const uint shadowPx = max(2u, cellPx / 3u);
   float shadowStrength = 0.0;
 
   if (lpx < shadowPx) {
@@ -159,7 +159,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
     half4 leftCell = sim.read(uint2(nsx, nsy));
     if (leftCell.r > 0.5h) {
       float fade = 1.0 - float(lpx) / float(shadowPx);
-      shadowStrength = max(shadowStrength, fade * 0.35);
+      shadowStrength = max(shadowStrength, fade * 0.55);
     }
   }
   if (lpy < shadowPx) {
@@ -171,7 +171,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
     half4 aboveCell = sim.read(uint2(nsx, nsy));
     if (aboveCell.r > 0.5h) {
       float fade = 1.0 - float(lpy) / float(shadowPx);
-      shadowStrength = max(shadowStrength, fade * 0.35);
+      shadowStrength = max(shadowStrength, fade * 0.55);
     }
   }
   if (lpx < shadowPx && lpy < shadowPx) {
@@ -185,7 +185,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
     if (diagCell.r > 0.5h) {
       float fadeX = 1.0 - float(lpx) / float(shadowPx);
       float fadeY = 1.0 - float(lpy) / float(shadowPx);
-      shadowStrength = max(shadowStrength, min(fadeX, fadeY) * 0.25);
+      shadowStrength = max(shadowStrength, min(fadeX, fadeY) * 0.45);
     }
   }
 
@@ -197,8 +197,8 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
     float3 segColor = mix(backlight, pixelDark, darkness);
 
     float2 inner = float2(float(lpx), float(lpy)) / cellPxF;
-    float depthShade = 1.0 - saturate((inner.x + inner.y - 1.0) * 0.6) * 0.10;
-    float depthLight = saturate((1.0 - inner.x - inner.y) * 0.5) * 0.04;
+    float depthShade = 1.0 - saturate((inner.x + inner.y - 1.0) * 0.8) * 0.20;
+    float depthLight = saturate((1.0 - inner.x - inner.y) * 0.6) * 0.08;
     segColor *= depthShade;
     segColor += depthLight;
 
