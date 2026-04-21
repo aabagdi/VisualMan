@@ -24,23 +24,12 @@ extension GameOfLifeRenderer {
       return nil
     }
 
-    frameNumber += 1
-    let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
-
-    let allocator = commandAllocators[frameIndex]
-    currentUniformBuffer = uniformBuffers[frameIndex]
-    allocator.reset()
-    uniformOffset = 0
-
     renderFrameCount += 1
     time += dt
 
     let (shouldStep, params) = updateAudioAndParams(bass: bass, mid: mid, high: high)
 
-    commandBuffer.beginCommandBuffer(allocator: allocator)
-    commandBuffer.useResidencySet(residencySet)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
-    encoder.setArgumentTable(argumentTable)
+    guard let encoder = beginFrame() else { return nil }
 
     if shouldStep {
       stepAccumulator = 0
@@ -51,17 +40,22 @@ extension GameOfLifeRenderer {
     let simSource = shouldStep ? localSimB : localSimA
     encodeRender(encoder: encoder, simSource: simSource, outputTex: displayTex, params: params)
 
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit)
-    encoder.copy(sourceTexture: displayTex, destinationTexture: drawableTexture)
-
     encoder.endEncoding()
-    commandBuffer.endCommandBuffer()
 
     pendingShouldStep = shouldStep
     return displayTex
   }
 
   func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable) {
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+      commandBuffer.endCommandBuffer()
+      return
+    }
+    encoder.barrier(afterQueueStages: .dispatch, beforeStages: .blit)
+    encoder.copy(sourceTexture: intermediateTexture, destinationTexture: drawable.texture)
+    encoder.endEncoding()
+    commandBuffer.endCommandBuffer()
+
     commandQueue.waitForDrawable(drawable)
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: frameNumber)

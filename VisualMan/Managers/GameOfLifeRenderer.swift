@@ -172,15 +172,6 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     frameNumber = 1
   }
 
-  func canRenderThisFrame() -> Bool {
-    let nextFrame = frameNumber + 1
-    if nextFrame > Self.maxFramesInFlight {
-      let waitValue = nextFrame - Self.maxFramesInFlight
-      return sharedEvent.signaledValue >= waitValue
-    }
-    return true
-  }
-
   func ensureSimTextures(drawableWidth: Int, drawableHeight: Int) {
     guard simA == nil || simB == nil else { return }
 
@@ -263,18 +254,4 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     let step: MTLComputePipelineState
     let render: MTLComputePipelineState
   }
-
-  func writeUniform<T>(_ value: T) -> MTLGPUAddress {
-    let aligned = (uniformOffset + 15) & ~15
-    let end = aligned + MemoryLayout<T>.size
-    guard end <= Self.uniformBufferSize else {
-      Self.logger.error("Uniform buffer overflow")
-      return currentUniformBuffer.gpuAddress
-    }
-    (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
-    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
-    uniformOffset = end
-    return addr
-  }
-
 }

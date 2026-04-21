@@ -236,14 +236,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
       return nil
     }
 
-    frameNumber += 1
-    let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
-
-    let allocator = commandAllocators[frameIndex]
-    currentUniformBuffer = uniformBuffers[frameIndex]
-    allocator.reset()
-    uniformOffset = 0
-
     let now = CACurrentMediaTime()
     if lastFrameTime == 0 {
       dt = 0
@@ -261,10 +253,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     time += dt * (1.0 + smoothedBass * 0.5 + smoothedMid * 0.3)
 
-    commandBuffer.beginCommandBuffer(allocator: allocator)
-    commandBuffer.useResidencySet(residencySet)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
-    encoder.setArgumentTable(argumentTable)
+    guard let encoder = beginFrame() else { return nil }
 
     ensureTAAHistory(width: displayTex.width, height: displayTex.height)
 
@@ -275,20 +264,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
       taaHistoryValid = true
     }
 
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit)
-    encoder.copy(sourceTexture: displayTex, destinationTexture: drawableTexture)
-
     encoder.endEncoding()
-    commandBuffer.endCommandBuffer()
 
     return displayTex
-  }
-
-  func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable) {
-    commandQueue.waitForDrawable(drawable)
-    commandQueue.commit([commandBuffer])
-    commandQueue.signalEvent(sharedEvent, value: frameNumber)
-    commandQueue.signalDrawable(drawable)
-    drawable.present()
   }
 }

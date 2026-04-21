@@ -9,47 +9,6 @@ import Metal
 import os
 
 extension NavierStokesRenderer {
-  func canRenderThisFrame() -> Bool {
-    let nextFrame = frameNumber + 1
-    if nextFrame > Self.maxFramesInFlight {
-      let waitValue = nextFrame - Self.maxFramesInFlight
-      return sharedEvent.signaledValue >= waitValue
-    }
-    return true
-  }
-
-  func writeUniform<T>(_ value: T) -> MTLGPUAddress {
-    let aligned = (uniformOffset + 15) & ~15
-    let end = aligned + MemoryLayout<T>.size
-    guard end <= Self.uniformBufferSize else {
-      Self.logger.error("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
-      return currentUniformBuffer.gpuAddress
-    }
-    (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
-    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
-    uniformOffset = end
-    return addr
-  }
-
-  func writeUniformArray<T>(_ values: [T]) -> MTLGPUAddress {
-    let aligned = (uniformOffset + 15) & ~15
-    let size = MemoryLayout<T>.stride * values.count
-    let end = aligned + size
-    guard end <= Self.uniformBufferSize else {
-      Self.logger.error("Uniform array buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
-      return currentUniformBuffer.gpuAddress
-    }
-    let ptr = currentUniformBuffer.contents() + aligned
-    values.withUnsafeBufferPointer { buf in
-      if let baseAddress = buf.baseAddress {
-        memcpy(ptr, baseAddress, size)
-      }
-    }
-    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
-    uniformOffset = end
-    return addr
-  }
-
   func advect(encoder: any MTL4ComputeCommandEncoder,
               velocityIn: MTLTexture,
               fieldIn: MTLTexture,

@@ -195,28 +195,6 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     frameNumber = 1
   }
 
-  func canRenderThisFrame() -> Bool {
-    let nextFrame = frameNumber + 1
-    if nextFrame > Self.maxFramesInFlight {
-      let waitValue = nextFrame - Self.maxFramesInFlight
-      return sharedEvent.signaledValue >= waitValue
-    }
-    return true
-  }
-
-  func writeUniform<T>(_ value: T) -> MTLGPUAddress {
-    let aligned = (uniformOffset + 15) & ~15
-    let end = aligned + MemoryLayout<T>.size
-    guard end <= Self.uniformBufferSize else {
-      Self.logger.error("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
-      return currentUniformBuffer.gpuAddress
-    }
-    (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
-    let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
-    uniformOffset = end
-    return addr
-  }
-
   func prepareForResume() {
     lastFrameTime = 0
     resumeSuppressionRemaining = Self.resumeFadeDuration
@@ -303,38 +281,15 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
       return nil
     }
 
-    frameNumber += 1
-    let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
-
-    let allocator = commandAllocators[frameIndex]
-    currentUniformBuffer = uniformBuffers[frameIndex]
-    allocator.reset()
-    uniformOffset = 0
-
-    commandBuffer.beginCommandBuffer(allocator: allocator)
-    commandBuffer.useResidencySet(residencySet)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
-    encoder.setArgumentTable(argumentTable)
+    guard let encoder = beginFrame() else { return nil }
 
     renderLiquidLight(encoder: encoder, output: intermediateTex, audio: smoothed)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     renderBlur(encoder: encoder, input: intermediateTex, output: finalTex, audio: smoothed)
 
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .blit)
-    encoder.copy(sourceTexture: finalTex, destinationTexture: drawableTexture)
-
     encoder.endEncoding()
-    commandBuffer.endCommandBuffer()
 
     return finalTex
-  }
-
-  func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable) {
-    commandQueue.waitForDrawable(drawable)
-    commandQueue.commit([commandBuffer])
-    commandQueue.signalEvent(sharedEvent, value: frameNumber)
-    commandQueue.signalDrawable(drawable)
-    drawable.present()
   }
 }
