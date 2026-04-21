@@ -28,7 +28,7 @@ protocol MetalVisualizerRenderer: AnyObject {
   static var maxFramesInFlight: UInt64 { get }
   static var uniformBufferSize: Int { get }
 
-  func encodeFrame(bass: Float, mid: Float, high: Float, drawableTexture: MTLTexture) -> MTLTexture?
+  func encodeFrame(bass: Float, mid: Float, high: Float, drawableWidth: Int, drawableHeight: Int) -> MTLTexture?
   func commitFrame(drawable: CAMetalDrawable)
   func reset()
   func prepareForResume()

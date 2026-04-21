@@ -270,12 +270,13 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   func encodeFrame(bass: Float,
                    mid: Float,
                    high: Float,
-                   drawableTexture: MTLTexture) -> MTLTexture? {
+                   drawableWidth: Int,
+                   drawableHeight: Int) -> MTLTexture? {
     drainPendingTextureReleases()
 
     let smoothed = processAudio(bass: bass, mid: mid, high: high)
 
-    guard ensureIntermediateTextures(width: drawableTexture.width, height: drawableTexture.height),
+    guard ensureIntermediateTextures(width: drawableWidth, height: drawableHeight),
           let intermediateTex = intermediateTexture,
           let finalTex = finalTexture else {
       return nil

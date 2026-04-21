@@ -9,17 +9,17 @@ import Metal
 import QuartzCore
 
 extension GameOfLifeRenderer {
-  func encodeFrame(bass: Float, mid: Float, high: Float, drawableTexture: MTLTexture) -> MTLTexture? {
+  func encodeFrame(bass: Float, mid: Float, high: Float, drawableWidth: Int, drawableHeight: Int) -> MTLTexture? {
     drainPendingTextureReleases()
 
-    ensureSimTextures(drawableWidth: drawableTexture.width,
-                      drawableHeight: drawableTexture.height)
+    ensureSimTextures(drawableWidth: drawableWidth,
+                      drawableHeight: drawableHeight)
     guard let localSimA = simA, let localSimB = simB else {
       return nil
     }
 
-    guard ensureDisplayIntermediate(width: drawableTexture.width,
-                                    height: drawableTexture.height),
+    guard ensureDisplayIntermediate(width: drawableWidth,
+                                    height: drawableHeight),
           let displayTex = displayIntermediate else {
       return nil
     }

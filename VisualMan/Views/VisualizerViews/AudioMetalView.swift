@@ -200,10 +200,8 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
       guard renderer.canRenderThisFrame() else { return }
 
-      guard let renderPassDesc = view.currentMTL4RenderPassDescriptor,
-            let drawable = view.currentDrawable else { return }
-
-      renderPassDesc.colorAttachments[0].loadAction = .dontCare
+      let drawableSize = view.drawableSize
+      guard drawableSize.width > 0, drawableSize.height > 0 else { return }
 
       let now = CACurrentMediaTime()
       if lastFrameTime > 0 {
@@ -224,10 +222,16 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         bass: smoothedBass,
         mid: smoothedMid,
         high: smoothedHigh,
-        drawableTexture: drawable.texture
+        drawableWidth: Int(drawableSize.width),
+        drawableHeight: Int(drawableSize.height)
       ) else {
         return
       }
+
+      // Acquire drawable as late as possible, right before the render pass
+      guard let renderPassDesc = view.currentMTL4RenderPassDescriptor,
+            let drawable = view.currentDrawable else { return }
+      renderPassDesc.colorAttachments[0].loadAction = .dontCare
 
       guard let blitPipeline,
             let blitTable = blitArgumentTable,

@@ -227,11 +227,12 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   func encodeFrame(bass: Float,
                    mid: Float,
                    high: Float,
-                   drawableTexture: MTLTexture) -> MTLTexture? {
+                   drawableWidth: Int,
+                   drawableHeight: Int) -> MTLTexture? {
     drainPendingDisplayReleases()
 
-    guard ensureDisplayIntermediate(width: drawableTexture.width,
-                                    height: drawableTexture.height),
+    guard ensureDisplayIntermediate(width: drawableWidth,
+                                    height: drawableHeight),
           let displayTex = displayIntermediate else {
       return nil
     }
