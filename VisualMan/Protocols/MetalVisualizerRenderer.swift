@@ -29,7 +29,7 @@ protocol MetalVisualizerRenderer: AnyObject {
   static var uniformBufferSize: Int { get }
 
   func encodeFrame(bass: Float, mid: Float, high: Float, drawableTexture: MTLTexture) -> MTLTexture?
-  func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable)
+  func commitFrame(drawable: CAMetalDrawable)
   func reset()
   func prepareForResume()
 }
@@ -94,16 +94,8 @@ extension MetalVisualizerRenderer {
     return encoder
   }
 
-  func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
-      commandBuffer.endCommandBuffer()
-      return
-    }
-    encoder.barrier(afterQueueStages: .dispatch, beforeStages: .blit)
-    encoder.copy(sourceTexture: intermediateTexture, destinationTexture: drawable.texture)
-    encoder.endEncoding()
+  func commitFrame(drawable: CAMetalDrawable) {
     commandBuffer.endCommandBuffer()
-
     commandQueue.waitForDrawable(drawable)
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: frameNumber)

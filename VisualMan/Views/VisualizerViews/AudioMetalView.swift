@@ -25,7 +25,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     mtkView.delegate = context.coordinator
     mtkView.preferredFramesPerSecond = 120
     mtkView.colorPixelFormat = .bgra8Unorm
-    mtkView.framebufferOnly = false
+    mtkView.framebufferOnly = true
     mtkView.isPaused = false
     mtkView.enableSetNeedsDisplay = false
     mtkView.clearColor = config.clearColor
@@ -64,6 +64,9 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var needsSeedSmoothing = true
     private var lastFrameTime: CFTimeInterval = 0
 
+    private let blitPipeline: MTLRenderPipelineState?
+    private let blitArgumentTable: (any MTL4ArgumentTable)?
+
     nonisolated(unsafe) private var thermalObserver: (any NSObjectProtocol)?
     private var currentThermalState: ProcessInfo.ThermalState = .nominal
     private var drawableScaleFactor: CGFloat = 1.0
@@ -77,6 +80,34 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
     init(renderer: R) {
       self.renderer = renderer
+
+      // Create blit render pipeline
+      var pipeline: MTLRenderPipelineState?
+      var table: (any MTL4ArgumentTable)?
+      if let compiler = try? renderer.device.makeCompiler(descriptor: MTL4CompilerDescriptor()),
+         let library = renderer.device.makeDefaultLibrary() {
+        let vertexDesc = MTL4LibraryFunctionDescriptor()
+        vertexDesc.name = "blitVertex"
+        vertexDesc.library = library
+
+        let fragmentDesc = MTL4LibraryFunctionDescriptor()
+        fragmentDesc.name = "blitFragment"
+        fragmentDesc.library = library
+
+        let pipelineDesc = MTL4RenderPipelineDescriptor()
+        pipelineDesc.vertexFunctionDescriptor = vertexDesc
+        pipelineDesc.fragmentFunctionDescriptor = fragmentDesc
+        pipelineDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
+
+        pipeline = try? compiler.makeRenderPipelineState(descriptor: pipelineDesc)
+
+        let tableDesc = MTL4ArgumentTableDescriptor()
+        tableDesc.maxTextureBindCount = 1
+        table = try? renderer.device.makeArgumentTable(descriptor: tableDesc)
+      }
+      self.blitPipeline = pipeline
+      self.blitArgumentTable = table
+
       super.init()
       currentThermalState = ProcessInfo.processInfo.thermalState
       applyThermalPolicy()
@@ -169,8 +200,10 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
       guard renderer.canRenderThisFrame() else { return }
 
-      guard let metalLayer = view.layer as? CAMetalLayer,
-            let drawable = metalLayer.nextDrawable() else { return }
+      guard let renderPassDesc = view.currentMTL4RenderPassDescriptor,
+            let drawable = view.currentDrawable else { return }
+
+      renderPassDesc.colorAttachments[0].loadAction = .dontCare
 
       let now = CACurrentMediaTime()
       if lastFrameTime > 0 {
@@ -196,7 +229,20 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         return
       }
 
-      renderer.commitFrame(intermediateTexture: intermediateTex, drawable: drawable)
+      guard let blitPipeline,
+            let blitTable = blitArgumentTable,
+            let renderEncoder = renderer.commandBuffer.makeRenderCommandEncoder(
+              descriptor: renderPassDesc) else {
+        return
+      }
+      renderEncoder.barrier(afterQueueStages: .dispatch, beforeStages: .fragment)
+      renderEncoder.setRenderPipelineState(blitPipeline)
+      blitTable.setTexture(intermediateTex.gpuResourceID, index: 0)
+      renderEncoder.setArgumentTable(blitTable, stages: .fragment)
+      renderEncoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 3)
+      renderEncoder.endEncoding()
+
+      renderer.commitFrame(drawable: drawable)
     }
 
     private func smoothAudioLevels(bass: Float, mid: Float, high: Float) {

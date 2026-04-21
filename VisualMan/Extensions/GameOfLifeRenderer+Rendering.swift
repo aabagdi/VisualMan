@@ -46,16 +46,8 @@ extension GameOfLifeRenderer {
     return displayTex
   }
 
-  func commitFrame(intermediateTexture: MTLTexture, drawable: CAMetalDrawable) {
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
-      commandBuffer.endCommandBuffer()
-      return
-    }
-    encoder.barrier(afterQueueStages: .dispatch, beforeStages: .blit)
-    encoder.copy(sourceTexture: intermediateTexture, destinationTexture: drawable.texture)
-    encoder.endEncoding()
+  func commitFrame(drawable: CAMetalDrawable) {
     commandBuffer.endCommandBuffer()
-
     commandQueue.waitForDrawable(drawable)
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: frameNumber)
