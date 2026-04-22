@@ -9,11 +9,11 @@ import SwiftUI
 
 struct AlbumArtWaveVisualizerView: View {
   @State private var audio = SmoothedAudio()
-  
+
   let audioLevels: [1024 of Float]
   let albumArt: UIImage?
   let placeholder = UIImage(resource: .artPlaceholder)
-  
+
   var body: some View {
     GeometryReader { g in
       TimelineView(.animation) { timeline in

@@ -27,7 +27,9 @@ actor DSPProcessor {
   private var cachedSampleRate: Float = 0.0
   
   var aWeightTable: [1024 of Float] = .init(repeating: 0.0)
-  var cachedBarBinRanges: [32 of BarBinRange] = .init(repeating: BarBinRange(startBin: 0, endBin: 1, fracBinLow: 0, fracBinHigh: 0, logCenter: 0))
+  var cachedBarBinRanges: [32 of BarBinRange] = .init(
+    repeating: BarBinRange(startBin: 0, endBin: 1, fracBinLow: 0, fracBinHigh: 0, logCenter: 0)
+  )
   
   private var ringBuffer: [2048 of Float] = .init(repeating: 0.0)
   private var ringWriteIndex: Int = 0

@@ -70,7 +70,11 @@ extension MusicPlayerView {
       } else if audioManager.currentTime > 0 && audioManager.currentTime < audioManager.duration {
         audioManager.resume()
       } else {
+        setupLockScreenControls()
         playCurrentSong()
+        audioManager.startNowPlayingTimer { [weak self] in
+          self?.updateNowPlayingInfo()
+        }
       }
       updateNowPlayingInfo()
     }

@@ -11,7 +11,7 @@ struct JuliaVisualizerView: View {
   let audioLevels: [1024 of Float]
 
   var body: some View {
-    ShaderVisualizerView(audioLevels: audioLevels, animation: .easeInOut) { audio in
+    ShaderVisualizerView(audioLevels: audioLevels) { audio in
       Rectangle()
         .juliaShader(time: audio.time,
                      smoothedBass: audio.bass,

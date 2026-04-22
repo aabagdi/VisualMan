@@ -27,7 +27,9 @@ struct ShaderVisualizerView<Content: View>: View {
       content(audio)
         .onChange(of: timeline.date) { oldValue, newValue in
           let dt = min(Float(newValue.timeIntervalSince(oldValue)), 1.0 / 30.0)
-          audio.update(from: audioLevels, dt: dt)
+          withAnimation(animation) {
+            audio.update(from: audioLevels, dt: dt)
+          }
         }
         .ignoresSafeArea()
     }

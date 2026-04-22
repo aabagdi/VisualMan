@@ -34,26 +34,26 @@ final class AudioTapProcessor: Sendable {
 
     if channelCount == 1 {
       let buf = UnsafeBufferPointer(start: channels[0], count: frameCount)
-      ringLock.lock()
-      writeToRing(buf, sampleRate: sampleRate)
-      ringLock.unlock()
+      ringLock.withLockUnchecked {
+        writeToRing(buf, sampleRate: sampleRate)
+      }
       return
     }
 
     let n = min(frameCount, Self.ringCapacity)
     let skip = frameCount - n
 
-    ringLock.lock()
-    monoScratch.withUnsafeElementPointer { dst in
-      var scale: Float = 1.0 / Float(channelCount)
-      vDSP_vsmul(channels[0] + skip, 1, &scale, dst, 1, vDSP_Length(n))
-      for c in 1..<channelCount {
-        vDSP_vsma(channels[c] + skip, 1, &scale, dst, 1, dst, 1, vDSP_Length(n))
+    ringLock.withLockUnchecked {
+      monoScratch.withUnsafeElementPointer { dst in
+        var scale: Float = 1.0 / Float(channelCount)
+        vDSP_vsmul(channels[0] + skip, 1, &scale, dst, 1, vDSP_Length(n))
+        for c in 1..<channelCount {
+          vDSP_vsma(channels[c] + skip, 1, &scale, dst, 1, dst, 1, vDSP_Length(n))
+        }
+        let buf = UnsafeBufferPointer(start: dst, count: n)
+        writeToRing(buf, sampleRate: sampleRate)
       }
-      let buf = UnsafeBufferPointer(start: dst, count: n)
-      writeToRing(buf, sampleRate: sampleRate)
     }
-    ringLock.unlock()
   }
   
   nonisolated private func writeToRing(_ samples: UnsafeBufferPointer<Float>, sampleRate: Float) {

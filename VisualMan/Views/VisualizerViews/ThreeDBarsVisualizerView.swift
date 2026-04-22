@@ -53,7 +53,7 @@ struct ThreeDBarsVisualizerView: View {
         }
         barEntities = entities
         content.add(root)
-      } update: { content in
+      } update: { _ in
         for (index, smoothedValue) in model.smoothedValues.enumerated() {
           guard index < barEntities.count else { continue }
           barEntities[index].scale = [1.0, smoothedValue, 1.0]

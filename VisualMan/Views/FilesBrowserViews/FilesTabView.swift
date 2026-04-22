@@ -22,19 +22,19 @@ struct FilesTabView: View {
     DocumentBrowserRepresentable(
       onDocumentPicked: { url in
       Task { @MainActor in
+        let isSecurityScoped = url.startAccessingSecurityScopedResource()
         do {
-          let isSecurityScoped = url.startAccessingSecurityScopedResource()
-
           selectedAudioSource = try await FileAudioSource.from(
             url: url,
             isSecurityScoped: isSecurityScoped
           )
           showingPlayer = true
-
         } catch let error as VMError {
+          if isSecurityScoped { url.stopAccessingSecurityScopedResource() }
           fileError = error
           fileLoadingFailed = true
         } catch {
+          if isSecurityScoped { url.stopAccessingSecurityScopedResource() }
           fileError = VMError.failedToCreateFile
           fileLoadingFailed = true
         }

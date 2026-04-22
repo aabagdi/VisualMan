@@ -66,7 +66,7 @@ using namespace metal;
         sampleColor = half3(0.0, interior * 0.1, interior * 0.2 + bassLevel * 0.3);
       } else {
         float dist = length(z);
-        float smoothIter = float(iterations) - log2(log2(dist));
+        float smoothIter = float(iterations) - log2(max(log2(max(dist, 1.0)), 1e-6));
         smoothIter = max(0.0, smoothIter);
         
         float t = smoothIter / float(maxIterations);

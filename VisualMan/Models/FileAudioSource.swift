@@ -8,6 +8,12 @@
 import MediaPlayer
 import AVFoundation
 
+private struct ITunesMetadataResult {
+  var title: String?
+  var artist: String?
+  var albumArt: UIImage?
+}
+
 struct FileAudioSource: AudioSource {
   let url: URL
   let title: String?
@@ -51,40 +57,16 @@ struct FileAudioSource: AudioSource {
       filteredByIdentifier: .commonIdentifierArtist
     ).first?.load(.stringValue)
 
-    var albumArt: UIImage?
-    if let artworkItem = AVMetadataItem.metadataItems(
-      from: metadata,
-      filteredByIdentifier: .commonIdentifierArtwork
-    ).first {
-      if let imageData = try? await artworkItem.load(.dataValue) {
-        albumArt = UIImage(data: imageData)
-      }
-    }
+    var albumArt = await loadArtwork(from: metadata, identifier: .commonIdentifierArtwork)
 
     if title == nil || artist == nil || albumArt == nil {
       if let iTunesMetadata = try? await asset.loadMetadata(for: .iTunesMetadata) {
-        if title == nil {
-          title = try? await AVMetadataItem.metadataItems(
-            from: iTunesMetadata,
-            filteredByIdentifier: .iTunesMetadataSongName
-          ).first?.load(.stringValue)
-        }
-        if artist == nil {
-          artist = try? await AVMetadataItem.metadataItems(
-            from: iTunesMetadata,
-            filteredByIdentifier: .iTunesMetadataArtist
-          ).first?.load(.stringValue)
-        }
-        if albumArt == nil {
-          if let artworkItem = AVMetadataItem.metadataItems(
-            from: iTunesMetadata,
-            filteredByIdentifier: .iTunesMetadataCoverArt
-          ).first {
-            if let imageData = try? await artworkItem.load(.dataValue) {
-              albumArt = UIImage(data: imageData)
-            }
-          }
-        }
+        let result = await filliTunesMetadata(
+          from: iTunesMetadata, title: title, artist: artist, albumArt: albumArt
+        )
+        title = result.title
+        artist = result.artist
+        albumArt = result.albumArt
       }
     }
 
@@ -95,5 +77,38 @@ struct FileAudioSource: AudioSource {
       albumArt: albumArt,
       isSecurityScoped: isSecurityScoped
     )
+  }
+
+  private static func loadArtwork(
+    from metadata: [AVMetadataItem], identifier: AVMetadataIdentifier
+  ) async -> UIImage? {
+    guard let artworkItem = AVMetadataItem.metadataItems(
+      from: metadata, filteredByIdentifier: identifier
+    ).first,
+      let imageData = try? await artworkItem.load(.dataValue) else { return nil }
+    return UIImage(data: imageData)
+  }
+
+  private static func filliTunesMetadata(
+    from iTunesMetadata: [AVMetadataItem],
+    title: String?, artist: String?, albumArt: UIImage?
+  ) async -> ITunesMetadataResult {
+    var result = ITunesMetadataResult(title: title, artist: artist, albumArt: albumArt)
+    if result.title == nil {
+      result.title = try? await AVMetadataItem.metadataItems(
+        from: iTunesMetadata,
+        filteredByIdentifier: .iTunesMetadataSongName
+      ).first?.load(.stringValue)
+    }
+    if result.artist == nil {
+      result.artist = try? await AVMetadataItem.metadataItems(
+        from: iTunesMetadata,
+        filteredByIdentifier: .iTunesMetadataArtist
+      ).first?.load(.stringValue)
+    }
+    if result.albumArt == nil {
+      result.albumArt = await loadArtwork(from: iTunesMetadata, identifier: .iTunesMetadataCoverArt)
+    }
+    return result
   }
 }

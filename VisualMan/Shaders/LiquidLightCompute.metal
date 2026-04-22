@@ -6,6 +6,7 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
 
 struct LiquidLightParams {
@@ -34,26 +35,14 @@ struct VoronoiResult {
   float cellID;
 };
 
-inline float2 hash22(float2 p) {
-  float3 p3 = fract(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.xx + p3.yz) * p3.zy);
-}
-
-inline float hash21(float2 p) {
-  float3 p3 = fract(float3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
-
 inline float vnoise(float2 p) {
   float2 i = floor(p);
   float2 f = fract(p);
   float2 u = f * f * (3.0 - 2.0 * f);
-  float a = hash21(i);
-  float b = hash21(i + float2(1.0, 0.0));
-  float c = hash21(i + float2(0.0, 1.0));
-  float d = hash21(i + float2(1.0, 1.0));
+  float a = shaderHash21(i);
+  float b = shaderHash21(i + float2(1.0, 0.0));
+  float c = shaderHash21(i + float2(0.0, 1.0));
+  float d = shaderHash21(i + float2(1.0, 1.0));
   float n = mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
   return n * 2.0 - 1.0;
 }
@@ -198,7 +187,7 @@ inline VoronoiResult voronoi(float2 p) {
   for (int j = -1; j <= 1; j++) {
     for (int i = -1; i <= 1; i++) {
       float2 g = float2(float(i), float(j));
-      float2 o = hash22(n + g);
+      float2 o = shaderHash22(n + g);
       float2 delta = g + o - f;
       float d = dot(delta, delta);
       if (d < dist1) {
@@ -206,7 +195,7 @@ inline VoronoiResult voronoi(float2 p) {
         secondDelta = nearestDelta;
         dist1 = d;
         nearestDelta = delta;
-        cellID = hash21(n + g);
+        cellID = shaderHash21(n + g);
       } else if (d < dist2) {
         dist2 = d;
         secondDelta = delta;

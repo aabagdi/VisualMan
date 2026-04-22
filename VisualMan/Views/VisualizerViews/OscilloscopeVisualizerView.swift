@@ -104,21 +104,21 @@ struct OscilloscopeVisualizerView: View {
           line.addLine(to: CGPoint(x: x, y: size.height))
           context.stroke(line, with: .color(.green.opacity(gridOpacity)), lineWidth: 0.5)
         }
-        
+
         for x in stride(from: centerX - gridSpacing, through: 0, by: -gridSpacing) {
           var line = Path()
           line.move(to: CGPoint(x: x, y: 0))
           line.addLine(to: CGPoint(x: x, y: size.height))
           context.stroke(line, with: .color(.green.opacity(gridOpacity)), lineWidth: 0.5)
         }
-        
+
         for y in stride(from: centerY, through: size.height, by: gridSpacing) {
           var line = Path()
           line.move(to: CGPoint(x: 0, y: y))
           line.addLine(to: CGPoint(x: size.width, y: y))
           context.stroke(line, with: .color(.green.opacity(gridOpacity)), lineWidth: 0.5)
         }
-        
+
         for y in stride(from: centerY - gridSpacing, through: 0, by: -gridSpacing) {
           var line = Path()
           line.move(to: CGPoint(x: 0, y: y))

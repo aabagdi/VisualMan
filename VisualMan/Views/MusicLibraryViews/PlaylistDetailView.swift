@@ -31,8 +31,8 @@ struct PlaylistDetailView: View {
           }
         }
       }
-      .toolbarVisibility(.hidden, for: .tabBar)
     }
     .navigationTitle(playlist.value(forProperty: MPMediaPlaylistPropertyName) as? String ?? "Unknown")
+    .toolbarVisibility(.hidden, for: .tabBar)
   }
 }

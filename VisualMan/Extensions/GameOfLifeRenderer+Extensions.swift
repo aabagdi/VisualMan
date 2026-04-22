@@ -98,8 +98,8 @@ extension GameOfLifeRenderer {
     argumentTable.setTexture(textures.simB.gpuResourceID, index: 1)
     argumentTable.setAddress(writeUniform(params), index: 0)
     let simTG = MTLSize(width: 16, height: 16, depth: 1)
-    let simGroups = MTLSize(width: 4, height: 4, depth: 1)
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: simGroups, threadsPerThreadgroup: simTG)
+    let simGrid = MTLSize(width: textures.simA.width, height: textures.simA.height, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid: simGrid, threadsPerThreadgroup: simTG)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     encoder.setComputePipelineState(renderPipeline)
@@ -107,8 +107,8 @@ extension GameOfLifeRenderer {
     argumentTable.setTexture(textures.display.gpuResourceID, index: 1)
     argumentTable.setAddress(writeUniform(params), index: 0)
     let renderTG = MTLSize(width: 16, height: 16, depth: 1)
-    let renderGroups = MTLSize(width: 16, height: 16, depth: 1)
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: renderGroups, threadsPerThreadgroup: renderTG)
+    let renderGrid = MTLSize(width: textures.display.width, height: textures.display.height, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid: renderGrid, threadsPerThreadgroup: renderTG)
   }
 
   func seedInitialState() {

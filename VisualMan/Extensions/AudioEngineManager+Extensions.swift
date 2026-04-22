@@ -6,10 +6,73 @@
 //
 
 import AVFoundation
+import Accelerate
 import Dependencies
 import os
 
 extension AudioEngineManager {
+  func handlePlaybackCompleted() {
+    guard playbackState != .completed else { return }
+    playbackState = .completed
+
+    currentTime = duration
+    stopDisplayLink()
+    playbackContinuation?.yield()
+  }
+
+  func pause() {
+    player?.pause()
+    playbackState = .paused
+    stopDisplayLink()
+    startPauseDecay()
+  }
+
+  func resume() {
+    stopPauseDecay()
+    do {
+      try AVAudioSession.sharedInstance().setActive(true)
+    } catch {
+      audioLogger.error("Failed to activate audio session on resume: \(error.localizedDescription)")
+    }
+    if let engine, !engine.isRunning {
+      do {
+        try engine.start()
+      } catch {
+        audioLogger.error("Failed to restart audio engine on resume: \(error.localizedDescription)")
+      }
+    }
+    player?.play()
+    playbackState = .playing
+    startDisplayLink()
+  }
+
+  func stopForTransition() {
+    let wasSeeking = playbackState == .seeking
+    currentPlaybackID = uuid()
+    player?.stop()
+    stopPauseDecay()
+    engine?.mainMixerNode.removeTap(onBus: 0)
+    playbackState = .idle
+    currentTime = 0
+    stopDisplayLink()
+    stopSecurityScopedAccess()
+    if !wasSeeking {
+      lastSeekFrame = 0
+    }
+    currentAudioSourceURL = nil
+  }
+
+  func stop() {
+    stopForTransition()
+    engine?.stop()
+    stopNowPlayingTimer()
+    do {
+      try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    } catch {
+      audioLogger.error("Failed to deactivate audio session: \(error.localizedDescription)")
+    }
+  }
+
   func startNowPlayingTimer(updateHandler: @escaping @MainActor () -> Void) {
     stopNowPlayingTimer()
     nowPlayingTask = Task { @MainActor [weak self] in
@@ -73,6 +136,64 @@ extension AudioEngineManager {
         handlePlaybackCompleted()
       }
     }
+  }
+}
+
+extension AudioEngineManager {
+  func startPauseDecay() {
+    stopPauseDecay()
+    let stream = DisplayLinkStream()
+    pauseDecayStream = stream
+    pauseDecayTask = Task { [weak self] in
+      for await _ in stream.frames {
+        guard !Task.isCancelled else { break }
+        guard let self else {
+          stream.stop()
+          break
+        }
+
+        var decayFactor = Constants.pauseDecayFactor
+        let threshold = Constants.pauseDecayThreshold
+
+        var bars = self.visualizerBars
+        var barMax: Float = 0
+        bars.withUnsafeElementPointer { ptr in
+          vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 32)
+          vDSP_maxv(ptr, 1, &barMax, 32)
+        }
+        self.visualizerBars = bars
+
+        var levels = self.audioLevels
+        var levelMax: Float = 0
+        levels.withUnsafeElementPointer { ptr in
+          vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 1024)
+          vDSP_maxv(ptr, 1, &levelMax, 1024)
+        }
+        self.audioLevels = levels
+
+        var wave = self.waveform
+        var waveMax: Float = 0
+        wave.withUnsafeElementPointer { ptr in
+          vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 1024)
+          vDSP_maxmgv(ptr, 1, &waveMax, 1024)
+        }
+        self.waveform = wave
+
+        if barMax < threshold && levelMax < threshold && waveMax < threshold {
+          self.visualizerBars = [32 of Float](repeating: 0)
+          self.audioLevels = [1024 of Float](repeating: 0)
+          self.waveform = [1024 of Float](repeating: 0)
+          break
+        }
+      }
+    }
+  }
+
+  func stopPauseDecay() {
+    pauseDecayTask?.cancel()
+    pauseDecayTask = nil
+    pauseDecayStream?.stop()
+    pauseDecayStream = nil
   }
 }
 

@@ -112,11 +112,11 @@ struct AlbumDetailView: View {
             }
             .padding(.vertical, 4)
           }
-          .toolbarVisibility(.hidden, for: .tabBar)
         }
       }
     }
     .listStyle(.insetGrouped)
+    .toolbarVisibility(.hidden, for: .tabBar)
   }
   
   private func formatDuration(_ duration: TimeInterval) -> String? {

@@ -8,6 +8,7 @@
 import SwiftUI
 import MetalKit
 import QuartzCore
+import os
 
 struct MetalViewConfig {
   var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
@@ -81,11 +82,19 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     init(renderer: R) {
       self.renderer = renderer
 
-      // Create blit render pipeline
+      let blitLogger = Logger(subsystem: "com.VisualMan", category: "AudioMetalView")
       var pipeline: MTLRenderPipelineState?
       var table: (any MTL4ArgumentTable)?
-      if let compiler = try? renderer.device.makeCompiler(descriptor: MTL4CompilerDescriptor()),
-         let library = renderer.device.makeDefaultLibrary() {
+      do {
+        let compiler = try renderer.device.makeCompiler(descriptor: MTL4CompilerDescriptor())
+        guard let library = renderer.device.makeDefaultLibrary() else {
+          blitLogger.error("Failed to create default Metal library for blit pipeline")
+          self.blitPipeline = nil
+          self.blitArgumentTable = nil
+          super.init()
+          return
+        }
+
         let vertexDesc = MTL4LibraryFunctionDescriptor()
         vertexDesc.name = "blitVertex"
         vertexDesc.library = library
@@ -99,11 +108,13 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         pipelineDesc.fragmentFunctionDescriptor = fragmentDesc
         pipelineDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
 
-        pipeline = try? compiler.makeRenderPipelineState(descriptor: pipelineDesc)
+        pipeline = try compiler.makeRenderPipelineState(descriptor: pipelineDesc)
 
         let tableDesc = MTL4ArgumentTableDescriptor()
         tableDesc.maxTextureBindCount = 1
-        table = try? renderer.device.makeArgumentTable(descriptor: tableDesc)
+        table = try renderer.device.makeArgumentTable(descriptor: tableDesc)
+      } catch {
+        blitLogger.error("Failed to create blit pipeline: \(error.localizedDescription)")
       }
       self.blitPipeline = pipeline
       self.blitArgumentTable = table
@@ -228,7 +239,6 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         return
       }
 
-      // Acquire drawable as late as possible, right before the render pass
       guard let renderPassDesc = view.currentMTL4RenderPassDescriptor,
             let drawable = view.currentDrawable else { return }
       renderPassDesc.colorAttachments[0].loadAction = .dontCare

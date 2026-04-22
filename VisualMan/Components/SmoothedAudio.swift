@@ -12,7 +12,7 @@ struct SmoothedAudio {
   var mid: Float = 0
   var high: Float = 0
   var time: Float = 0
-  
+
   private static let bassTau: Float = 0.012
   private static let midTau: Float = 0.020
   private static let highTau: Float = 0.008
