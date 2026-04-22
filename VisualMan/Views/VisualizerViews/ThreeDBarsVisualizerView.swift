@@ -106,7 +106,6 @@ struct ThreeDBarsVisualizerView: View {
   }
   
   private func barColor(index: Int, totalBars: Int) -> UIColor {
-    let (r, g, b) = BarView.barColorComponents(index: index, totalBars: totalBars)
-    return UIColor(red: r, green: g, blue: b, alpha: 1.0)
+    UIColor(BarView.barColor(index: index, totalBars: totalBars))
   }
 }

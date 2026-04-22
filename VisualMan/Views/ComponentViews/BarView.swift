@@ -21,21 +21,20 @@ struct BarView: View {
   }
 
   private var barColor: Color {
-    let (r, g, b) = Self.barColorComponents(index: index, totalBars: totalBars)
-    return Color(red: r, green: g, blue: b)
+    Self.barColor(index: index, totalBars: totalBars)
   }
 
-  static func barColorComponents(index: Int, totalBars: Int) -> (Double, Double, Double) {
+  static func barColor(index: Int, totalBars: Int) -> Color {
     let position = Float(index) / Float(totalBars)
     if position < 0.33 {
       let t = position / 0.33
-      return (Double(t), 1.0, 0.0)
+      return Color(red: Double(t), green: 1.0, blue: 0.0)
     } else if position < 0.66 {
       let t = (position - 0.33) / 0.33
-      return (1.0, Double(1.0 - t * 0.5), 0.0)
+      return Color(red: 1.0, green: Double(1.0 - t * 0.5), blue: 0.0)
     } else {
       let t = (position - 0.66) / 0.34
-      return (1.0, Double(0.5 - t * 0.5), 0.0)
+      return Color(red: 1.0, green: Double(0.5 - t * 0.5), blue: 0.0)
     }
   }
 
