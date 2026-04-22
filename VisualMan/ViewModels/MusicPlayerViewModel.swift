@@ -26,9 +26,12 @@ extension MusicPlayerView {
     var playingError: VMError?
     
     func start(audioSources: [any AudioSource], startingIndex: Int) {
+      playTask?.cancel()
+      songTransitionTask?.cancel()
+
       playlistManager.setPlaylist(audioSources, startingIndex: startingIndex)
       setupLockScreenControls()
-      
+
       playbackListeningTask?.cancel()
       playbackListeningTask = Task { [weak self] in
         guard let stream = self?.audioManager.playbackCompleted else { return }

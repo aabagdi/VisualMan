@@ -512,8 +512,8 @@ kernel void fluidCovectorPullback(texture2d<float, access::read>   psi  [[textur
   float2 psiU = psi.read(uint2(gid.x, uint(yU))).xy;
   float2 psiC = psi.read(gid).xy;
 
-  float invDx = 1.0 / float(xR - xL);
-  float invDy = 1.0 / float(yU - yD);
+  float invDx = (xR != xL) ? 1.0 / float(xR - xL) : 0.5;
+  float invDy = (yU != yD) ? 1.0 / float(yU - yD) : 0.5;
   float2 dpsi_dx = invDx * (psiR - psiL);
   float2 dpsi_dy = invDy * (psiU - psiD);
 
@@ -543,12 +543,6 @@ kernel void fluidCovectorPullback(texture2d<float, access::read>   psi  [[textur
   if (sp > 500.0) u *= 500.0 / sp;
 
   uOut.write(float4(u, 0, 0), gid);
-}
-
-kernel void fluidClearRG(texture2d<float, access::write> t [[texture(0)]],
-                         uint2 gid [[thread_position_in_grid]]) {
-  if (gid.x >= t.get_width() || gid.y >= t.get_height()) return;
-  t.write(float4(0), gid);
 }
 
 kernel void fluidClearRGBA(texture2d<float, access::write> t [[texture(0)]],

@@ -11,6 +11,7 @@ import MetalKit
 struct GameOfLifeVisualizerView: View {
   @Environment(VisualizerRendererCache.self) private var cache
   @State private var renderer: GameOfLifeRenderer?
+  @State private var rendererFailed = false
 
   let audioLevels: [1024 of Float]
 
@@ -23,6 +24,12 @@ struct GameOfLifeVisualizerView: View {
                        config: MetalViewConfig(
                            clearColor: MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1),
                            backgroundColor: .black))
+      } else if rendererFailed {
+        ContentUnavailableView("Renderer Unavailable",
+                               systemImage: "exclamationmark.triangle",
+                               description: Text("Metal rendering is not available on this device."))
+      } else {
+        ProgressView()
       }
     }
     .ignoresSafeArea()
@@ -32,6 +39,7 @@ struct GameOfLifeVisualizerView: View {
       } else {
         renderer = await cache.renderer(GameOfLifeRenderer.self) { await GameOfLifeRenderer.create() }
       }
+      if renderer == nil { rendererFailed = true }
     }
   }
 }

@@ -215,7 +215,9 @@ inline VoronoiResult voronoi(float2 p) {
   }
 
   float2 midpoint = 0.5 * (nearestDelta + secondDelta);
-  float2 edgeDir = fast::normalize(secondDelta - nearestDelta);
+  float2 diff = secondDelta - nearestDelta;
+  float diffLen = fast::length(diff);
+  float2 edgeDir = diffLen > 1e-6 ? diff / diffLen : float2(1.0, 0.0);
 
   VoronoiResult r;
   r.dist1 = fast::sqrt(dist1);

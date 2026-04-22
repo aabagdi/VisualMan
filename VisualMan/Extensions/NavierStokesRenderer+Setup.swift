@@ -25,7 +25,6 @@ extension NavierStokesRenderer {
     let bloomThresholdBlurH: MTLComputePipelineState
     let bloomDownsample: MTLComputePipelineState
     let render: MTLComputePipelineState
-    let clearRG: MTLComputePipelineState
     let clearRGBA: MTLComputePipelineState
     let curl: MTLComputePipelineState
     let vorticityConfinement: MTLComputePipelineState
@@ -92,7 +91,6 @@ extension NavierStokesRenderer {
           let bloomThresholdBlurH = makePipeline("fluidBloomThresholdBlurH"),
           let bloomDownsample = makePipeline("fluidBloomDownsample"),
           let render = makePipeline("fluidRender"),
-          let clearRG = makePipeline("fluidClearRG"),
           let clearRGBA = makePipeline("fluidClearRGBA"),
           let curl = makePipeline("fluidCurl"),
           let vorticityConfinement = makePipeline("fluidVorticityConfinement"),
@@ -109,7 +107,7 @@ extension NavierStokesRenderer {
                      gradientSubtract: gradientSubtract, blurH: blurH,
                      blurV: blurV, bloomThresholdBlurH: bloomThresholdBlurH,
                      bloomDownsample: bloomDownsample,
-                     render: render, clearRG: clearRG, clearRGBA: clearRGBA,
+                     render: render, clearRGBA: clearRGBA,
                      curl: curl, vorticityConfinement: vorticityConfinement,
                      macCormackCorrect: macCormackCorrect,
                      dyeDiffuse: dyeDiffuse)
@@ -145,7 +143,12 @@ extension NavierStokesRenderer {
   static func createResidencySet(device: MTLDevice) -> MTLResidencySet? {
     let desc = MTLResidencySetDescriptor()
     desc.initialCapacity = 20
-    return try? device.makeResidencySet(descriptor: desc)
+    do {
+      return try device.makeResidencySet(descriptor: desc)
+    } catch {
+      logger.error("Failed to create residency set: \(error.localizedDescription)")
+      return nil
+    }
   }
 
   static let bloomSize: Int = 256
@@ -210,19 +213,9 @@ extension NavierStokesRenderer {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
-    encoder.setComputePipelineState(pipelines.clearRG)
-    for tex in [velocityA, velocityB, u0] {
-      argumentTable.setTexture(tex.gpuResourceID, index: 0)
-      dispatchGrid(encoder: encoder)
-    }
-
-    for tex in [pressure, divergenceTexture] {
-      argumentTable.setTexture(tex.gpuResourceID, index: 0)
-      dispatchGrid(encoder: encoder)
-    }
-
     encoder.setComputePipelineState(pipelines.clearRGBA)
-    for tex in [dyeA, dyeB, dyeC, bloomA, bloomB, bloomMidA, bloomLoA] {
+    for tex in [velocityA, velocityB, u0, pressure, divergenceTexture,
+                dyeA, dyeB, dyeC, bloomA, bloomB, bloomMidA, bloomLoA] {
       argumentTable.setTexture(tex.gpuResourceID, index: 0)
       dispatchGrid(encoder: encoder)
     }

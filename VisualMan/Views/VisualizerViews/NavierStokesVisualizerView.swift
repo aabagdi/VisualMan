@@ -11,6 +11,7 @@ import MetalKit
 struct NavierStokesVisualizerView: View {
   @Environment(VisualizerRendererCache.self) private var cache
   @State private var renderer: NavierStokesRenderer?
+  @State private var rendererFailed = false
 
   let audioLevels: [1024 of Float]
 
@@ -22,6 +23,12 @@ struct NavierStokesVisualizerView: View {
                        audioLevels: audioLevels,
                        config: MetalViewConfig(
                            clearColor: MTLClearColor(red: 0, green: 0, blue: 0.02, alpha: 1)))
+      } else if rendererFailed {
+        ContentUnavailableView("Renderer Unavailable",
+                               systemImage: "exclamationmark.triangle",
+                               description: Text("Metal rendering is not available on this device."))
+      } else {
+        ProgressView()
       }
     }
     .ignoresSafeArea()
@@ -31,6 +38,7 @@ struct NavierStokesVisualizerView: View {
       } else {
         renderer = await cache.renderer(NavierStokesRenderer.self) { await NavierStokesRenderer.create() }
       }
+      if renderer == nil { rendererFailed = true }
     }
   }
 }

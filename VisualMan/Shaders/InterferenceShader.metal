@@ -10,7 +10,7 @@ using namespace metal;
 
 #define PI 3.141592653589793
 
-float calculateWave(float2 position,
+static float calculateWave(float2 position,
                     float2 sourcePos,
                     float time,
                     float amplitude,
@@ -20,7 +20,7 @@ float calculateWave(float2 position,
   float distance = length(position - sourcePos);
   
   float falloffRate = 0.3;
-  float distanceFalloff = exp(-distance * falloffRate);
+  float distanceFalloff = fast::exp(-distance * falloffRate);
   
   float audioScale = 0.3 + audioLevel * 0.7;
   
@@ -56,7 +56,7 @@ float calculateWave(float2 position,
   return wave;
 }
 
-float calculateParallaxLayer(float2 uv,
+static float calculateParallaxLayer(float2 uv,
                              float time,
                              float bassLevel,
                              float midLevel,
@@ -69,8 +69,8 @@ float calculateParallaxLayer(float2 uv,
   parallaxUV *= depthScale;
   
   float angleOffset = layerDepth * 1.5708;
-  float2x2 rotation = float2x2(cos(angleOffset), -sin(angleOffset),
-                               sin(angleOffset), cos(angleOffset));
+  float2x2 rotation = float2x2(fast::cos(angleOffset), -fast::sin(angleOffset),
+                               fast::sin(angleOffset), fast::cos(angleOffset));
   
   float2 source1 = rotation * float2(0.0, 0.5);
   float2 source2 = rotation * float2(-0.5, -0.5);

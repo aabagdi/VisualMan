@@ -28,8 +28,8 @@ extension NavierStokesRenderer {
     let gs = Float(gridSize)
     let s = gs / 1024.0
 
-    var forceSplats = [SplatParams]()
-    var dyeSplats = [SplatParams]()
+    forceSplats.removeAll(keepingCapacity: true)
+    dyeSplats.removeAll(keepingCapacity: true)
 
     let audioEnergy = (bass + mid + high) / 3.0
     collectVortexSplats(center: center, s: s, audioEnergy: audioEnergy,

@@ -75,33 +75,51 @@ extension DSPProcessor {
     }
   }
   
-  func createVisualizerBars(from fftData: [1024 of Float], sampleRate: Float) -> [32 of Float] {
-    var bars = [32 of Float](repeating: 0.0)
-    var fftData = fftData
+  struct BarBinRange {
+    let startBin: Int
+    let endBin: Int
+    let fracBinLow: Float
+    let fracBinHigh: Float
+    let logCenter: Float
+  }
 
+  func rebuildBarBinRanges(sampleRate: Float) {
     let binWidth = sampleRate / Float(Constants.fftSize)
     let logRange = Constants.logMaxFreq - Constants.logMinFreq
     let invBarCount = 1.0 / Float(Constants.barCount)
 
-    fftData.withUnsafeElementPointer { fft in
+    for i in 0..<Constants.barCount {
+      let logFreqLow = Constants.logMinFreq + logRange * Float(i) * invBarCount
+      let logFreqHigh = Constants.logMinFreq + logRange * Float(i + 1) * invBarCount
+      let freqLow = pow(10, logFreqLow)
+      let freqHigh = pow(10, logFreqHigh)
+      let fracBinLow = freqLow / binWidth
+      let fracBinHigh = freqHigh / binWidth
+      let startBin = max(0, min(Int(fracBinLow), 1023))
+      let endBin = max(startBin + 1, min(Int(fracBinHigh), 1024))
+      cachedBarBinRanges[i] = BarBinRange(
+        startBin: startBin, endBin: endBin,
+        fracBinLow: fracBinLow, fracBinHigh: fracBinHigh,
+        logCenter: (logFreqLow + logFreqHigh) / 2.0
+      )
+    }
+  }
+
+  func createVisualizerBars(from fftData: [1024 of Float], sampleRate: Float) -> [32 of Float] {
+    var bars = [32 of Float](repeating: 0.0)
+    
+    var fftCopy = fftData
+
+    fftCopy.withUnsafeElementPointer { fft in
       for i in 0..<Constants.barCount {
-        let logFreqLow = Constants.logMinFreq + logRange * Float(i) * invBarCount
-        let logFreqHigh = Constants.logMinFreq + logRange * Float(i + 1) * invBarCount
-
-        let freqLow = pow(10, logFreqLow)
-        let freqHigh = pow(10, logFreqHigh)
-
-        let fracBinLow = freqLow / binWidth
-        let fracBinHigh = freqHigh / binWidth
-        let startBin = max(0, min(Int(fracBinLow), 1023))
-        let endBin = max(startBin + 1, min(Int(fracBinHigh), 1024))
-        let count = vDSP_Length(endBin - startBin)
+        let range = cachedBarBinRanges[i]
+        let count = vDSP_Length(range.endBin - range.startBin)
 
         var maxMag: Float = 0
         var avgMag: Float = 0
 
         if count <= 2 {
-          let centerBin = (fracBinLow + fracBinHigh) / 2.0
+          let centerBin = (range.fracBinLow + range.fracBinHigh) / 2.0
           let binIndex = max(0, min(Int(centerBin), 1022))
           let frac = centerBin - Float(binIndex)
           let v0 = (fft + binIndex).pointee
@@ -109,13 +127,12 @@ extension DSPProcessor {
           avgMag = v0 + (v1 - v0) * frac
           maxMag = max(v0, v1)
         } else {
-          vDSP_maxv(fft + startBin, 1, &maxMag, count)
-          vDSP_meanv(fft + startBin, 1, &avgMag, count)
+          vDSP_maxv(fft + range.startBin, 1, &maxMag, count)
+          vDSP_meanv(fft + range.startBin, 1, &avgMag, count)
         }
 
         let rawMag = avgMag * Constants.avgWeight + maxMag * Constants.maxWeight
-        let logCenter = (logFreqLow + logFreqHigh) / 2.0
-        bars[i] = applyFrequencyBoosts(rawMag, logCenter: logCenter)
+        bars[i] = applyFrequencyBoosts(rawMag, logCenter: range.logCenter)
 
         bars[i] = tanh(bars[i] * Constants.tanhScale)
         bars[i] = max(0, min(1, bars[i]))

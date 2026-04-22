@@ -27,6 +27,7 @@ actor DSPProcessor {
   private var cachedSampleRate: Float = 0.0
   
   var aWeightTable: [1024 of Float] = .init(repeating: 0.0)
+  var cachedBarBinRanges: [32 of BarBinRange] = .init(repeating: BarBinRange(startBin: 0, endBin: 1, fracBinLow: 0, fracBinHigh: 0, logCenter: 0))
   
   private var ringBuffer: [2048 of Float] = .init(repeating: 0.0)
   private var ringWriteIndex: Int = 0
@@ -203,6 +204,7 @@ actor DSPProcessor {
   private func normalizeToLogScale(sampleRate: Float) {
     if sampleRate != cachedSampleRate {
       rebuildAWeightTable(sampleRate: sampleRate)
+      rebuildBarBinRanges(sampleRate: sampleRate)
       cachedSampleRate = sampleRate
     }
     
@@ -249,8 +251,8 @@ actor DSPProcessor {
   
   private func updateAutomaticGainControl(bars: [32 of Float], dt: Float) {
     var maxBar: Float = 0
-    var barsCopy = bars
-    barsCopy.withUnsafeElementPointer { ptr in
+    var bars = bars
+    bars.withUnsafeElementPointer { ptr in
       vDSP_maxv(ptr, 1, &maxBar, vDSP_Length(Constants.barCount))
     }
 

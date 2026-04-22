@@ -18,15 +18,17 @@ struct GenreListView: View {
   private var displayedGenres: [MPMediaItemCollection] {
     filteredGenres ?? genres
   }
-  
+
+  private var albumsByGenre: [String: [MPMediaItemCollection]] {
+    Dictionary(grouping: albums) { $0.representativeItem?.genre ?? "Unknown" }
+  }
+
   var body: some View {
     Section {
       if !genres.isEmpty {
         List(displayedGenres, id: \.representativeItem?.persistentID) { genre in
           let genreName = genre.representativeItem?.genre ?? "Unknown"
-          let genreAlbums = albums.filter {
-            $0.representativeItem?.genre == genre.representativeItem?.genre
-          }
+          let genreAlbums = albumsByGenre[genreName] ?? []
           NavigationLink(destination: GenreDetailView(genre: genreName, albums: genreAlbums)) {
             Text(genre.representativeItem?.genre ?? "Unknown")
           }

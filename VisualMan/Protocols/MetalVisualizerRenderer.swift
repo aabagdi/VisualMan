@@ -51,7 +51,11 @@ extension MetalVisualizerRenderer {
     let aligned = (uniformOffset + 15) & ~15
     let end = aligned + MemoryLayout<T>.size
     guard end <= Self.uniformBufferSize else {
+      assertionFailure("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
       rendererLogger.error("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+      let fallbackAligned = 0
+      (currentUniformBuffer.contents() + fallbackAligned).storeBytes(of: value, as: T.self)
+      uniformOffset = MemoryLayout<T>.size
       return currentUniformBuffer.gpuAddress
     }
     (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
@@ -61,18 +65,24 @@ extension MetalVisualizerRenderer {
   }
 
   func writeUniformArray<T>(_ values: [T]) -> MTLGPUAddress {
+    values.withUnsafeBufferPointer { buf in
+      writeUniformArray(buf)
+    }
+  }
+
+  func writeUniformArray<T>(_ values: UnsafeBufferPointer<T>) -> MTLGPUAddress {
     let aligned = (uniformOffset + 15) & ~15
     let size = MemoryLayout<T>.stride * values.count
     let end = aligned + size
     guard end <= Self.uniformBufferSize else {
+      assertionFailure("Uniform array buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
       rendererLogger.error("Uniform array buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
+      uniformOffset = 0
       return currentUniformBuffer.gpuAddress
     }
     let ptr = currentUniformBuffer.contents() + aligned
-    values.withUnsafeBufferPointer { buf in
-      if let baseAddress = buf.baseAddress {
-        memcpy(ptr, baseAddress, size)
-      }
+    if let baseAddress = values.baseAddress {
+      memcpy(ptr, baseAddress, size)
     }
     let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)
     uniformOffset = end

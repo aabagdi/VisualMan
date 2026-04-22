@@ -7,6 +7,10 @@
 
 import SwiftUI
 
+private nonisolated func drainGPU(event: MTLSharedEvent, target: UInt64) {
+  event.wait(untilSignaledValue: target, timeoutMS: 200)
+}
+
 @MainActor
 @Observable
 final class VisualizerRendererCache {
@@ -50,10 +54,27 @@ final class VisualizerRendererCache {
   }
 
   func purge() {
+    let fenceInfo: [(event: MTLSharedEvent, target: UInt64)] = renderers.values.compactMap { renderer in
+      let target = renderer.frameNumber
+      guard target > 0 else { return nil }
+      return (renderer.sharedEvent, target)
+    }
     renderers.removeAll()
+    Task.detached {
+      for info in fenceInfo {
+        drainGPU(event: info.event, target: info.target)
+      }
+    }
   }
 
   func purge<R: MetalVisualizerRenderer>(_ type: R.Type) {
-    renderers.removeValue(forKey: ObjectIdentifier(type))
+    let key = ObjectIdentifier(type)
+    guard let renderer = renderers.removeValue(forKey: key) else { return }
+    let target = renderer.frameNumber
+    guard target > 0 else { return }
+    let event = renderer.sharedEvent
+    Task.detached {
+      drainGPU(event: event, target: target)
+    }
   }
 }

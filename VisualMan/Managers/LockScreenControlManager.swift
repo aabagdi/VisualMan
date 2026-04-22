@@ -98,16 +98,22 @@ final class LockScreenControlManager {
   
   func cleanup() {
     let commandCenter = MPRemoteCommandCenter.shared()
+    commandCenter.playCommand.removeTarget(nil)
+    commandCenter.pauseCommand.removeTarget(nil)
+    commandCenter.previousTrackCommand.removeTarget(nil)
+    commandCenter.nextTrackCommand.removeTarget(nil)
+    commandCenter.changePlaybackPositionCommand.removeTarget(nil)
+
     commandCenter.playCommand.isEnabled = false
     commandCenter.pauseCommand.isEnabled = false
     commandCenter.previousTrackCommand.isEnabled = false
     commandCenter.nextTrackCommand.isEnabled = false
     commandCenter.changePlaybackPositionCommand.isEnabled = false
-    
+
     onPlayPause = nil
     onNext = nil
     onPrevious = nil
-    
+
     MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
   }
 }

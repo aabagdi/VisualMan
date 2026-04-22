@@ -26,7 +26,9 @@ struct AlbumListView: View {
     switch library.authorizationStatus {
     case .authorized, .restricted:
       Group {
-        if !library.albums.isEmpty {
+        if library.isLoading && library.albums.isEmpty {
+          LibraryLoadingView()
+        } else if !library.albums.isEmpty {
           List {
             if searchText.isEmpty {
               Section {
@@ -164,7 +166,8 @@ struct AlbumListView: View {
             }
           }
         } else {
-          LibraryLoadingView()
+          ContentUnavailableView("No Albums", systemImage: "music.note.list",
+                                 description: Text("Your music library is empty."))
         }
       }
       .listStyle(.insetGrouped)

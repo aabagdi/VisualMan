@@ -46,8 +46,20 @@ extension GameOfLifeRenderer {
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .shared
 
-    guard let a = device.makeTexture(descriptor: desc),
-          let b = device.makeTexture(descriptor: desc) else {
+    guard let a = device.makeTexture(descriptor: desc) else {
+      return nil
+    }
+
+    let descB = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .rg8Unorm,
+      width: width,
+      height: height,
+      mipmapped: false
+    )
+    descB.usage = [.shaderRead, .shaderWrite]
+    descB.storageMode = .private
+
+    guard let b = device.makeTexture(descriptor: descB) else {
       return nil
     }
     return (a, b)
@@ -113,6 +125,9 @@ extension GameOfLifeRenderer {
 
   func seedInitialState() {
     guard let simA else { return }
+    if frameNumber > 0 {
+      sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 200)
+    }
     let w = simWidth
     let h = simHeight
     var pixels = [UInt8](repeating: 0, count: w * h * 2)

@@ -165,7 +165,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
   if (lpy < shadowPx) {
     uint ncy = (cy > 0u) ? cy - 1u : mapH - 1u;
     uint nsx = landscape ? ncy : cx;
-    uint nsy = landscape ? cx : ncy;
+    uint nsy = landscape ? cx  : ncy;
     nsx = min(nsx, params.simWidth - 1u);
     nsy = min(nsy, params.simHeight - 1u);
     half4 aboveCell = sim.read(uint2(nsx, nsy));

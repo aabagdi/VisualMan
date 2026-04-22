@@ -7,11 +7,12 @@
 
 import AVFoundation
 import Dependencies
+import os
 
 extension AudioEngineManager {
   func startNowPlayingTimer(updateHandler: @escaping @MainActor () -> Void) {
     stopNowPlayingTimer()
-    nowPlayingTask = Task { [weak self] in
+    nowPlayingTask = Task { @MainActor [weak self] in
       while !Task.isCancelled {
         try? await Task.sleep(for: .seconds(1))
         guard !Task.isCancelled, self != nil else { break }
@@ -77,7 +78,7 @@ extension AudioEngineManager {
 
 extension AudioEngineManager {
   func observeAudioSessionInterruptions() {
-    NotificationCenter.default.addObserver(
+    interruptionObserver = NotificationCenter.default.addObserver(
       forName: AVAudioSession.interruptionNotification,
       object: AVAudioSession.sharedInstance(),
       queue: .main
@@ -103,9 +104,17 @@ extension AudioEngineManager {
         startPauseDecay()
       }
     case .ended:
-      try? AVAudioSession.sharedInstance().setActive(true)
+      do {
+        try AVAudioSession.sharedInstance().setActive(true)
+      } catch {
+        audioLogger.error("Failed to reactivate audio session after interruption: \(error.localizedDescription)")
+      }
       if let engine, !engine.isRunning {
-        try? engine.start()
+        do {
+          try engine.start()
+        } catch {
+          audioLogger.error("Failed to restart engine after interruption: \(error.localizedDescription)")
+        }
       }
       if let options, options.contains(.shouldResume) {
         stopPauseDecay()

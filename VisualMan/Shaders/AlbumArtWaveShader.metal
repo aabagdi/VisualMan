@@ -17,7 +17,7 @@ using namespace metal;
   float2 center = viewSize * 0.5;
   float2 toCenter = position - center;
   float distance = length(toCenter);
-  float2 direction = normalize(toCenter);
+  float2 direction = distance > 1e-4 ? toCenter / distance : float2(0.0);
   
   float pulse = sin(distance * 0.03 - time * 2.5) * bassLevel * 25.0;
   position += direction * pulse;

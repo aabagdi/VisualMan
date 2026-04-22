@@ -12,36 +12,28 @@ extension NavierStokesRenderer {
     time = 0
     prevBass = 0
     prevMid = 0
-    
+
     guard let allocator = device.makeCommandAllocator(),
-          let resetCmd = device.makeCommandBuffer(),
-          let resetEvent = device.makeSharedEvent() else {
-      return
-    }
+          let resetCmd = device.makeCommandBuffer() else { return }
 
     resetCmd.beginCommandBuffer(allocator: allocator)
     resetCmd.useResidencySet(residencySet)
 
-    guard let encoder = resetCmd.makeComputeCommandEncoder() else { return }
+    guard let encoder = resetCmd.makeComputeCommandEncoder() else {
+      resetCmd.endCommandBuffer()
+      return
+    }
     encoder.setArgumentTable(argumentTable)
 
-    encoder.setComputePipelineState(pipelines.clearRG)
-    let rgTextures: [MTLTexture] = [
-      velocityA, velocityB, pressure, divergenceTexture,
-      psiA, psiB, psiC, u0
-    ]
-    for tex in rgTextures {
-      argumentTable.setTexture(tex.gpuResourceID, index: 0)
-      dispatchGrid(encoder: encoder, width: tex.width, height: tex.height)
-    }
-
     encoder.setComputePipelineState(pipelines.clearRGBA)
-    let rgbaTextures: [MTLTexture] = [
+    let allTextures: [MTLTexture] = [
+      velocityA, velocityB, pressure, divergenceTexture,
+      psiA, psiB, psiC, u0,
       dyeA, dyeB, dyeC,
       bloomA, bloomB,
       bloomMidA, bloomLoA
     ]
-    for tex in rgbaTextures {
+    for tex in allTextures {
       argumentTable.setTexture(tex.gpuResourceID, index: 0)
       dispatchGrid(encoder: encoder, width: tex.width, height: tex.height)
     }
@@ -49,10 +41,11 @@ extension NavierStokesRenderer {
     encoder.endEncoding()
     resetCmd.endCommandBuffer()
 
+    let resetValue = frameNumber + 1000
     commandQueue.commit([resetCmd])
-    commandQueue.signalEvent(resetEvent, value: 1)
+    commandQueue.signalEvent(sharedEvent, value: resetValue)
 
-    resetEvent.wait(untilSignaledValue: 1, timeoutMS: 1000)
+    frameNumber = resetValue
 
     framesSinceReinit = reinitInterval
   }

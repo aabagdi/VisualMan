@@ -93,10 +93,7 @@ extension LiquidLightRenderer {
 
     let colorShift = time * 0.015 + audio.y * 0.08
 
-    var precomp = [SIMD4<Float>](repeating: .zero, count: 4)
-    var colors = [SIMD4<Float>](repeating: .zero, count: 4)
-    for i in 0..<4 {
-      let d = drops[i]
+    func computeDrop(_ d: SIMD4<Float>) -> (precomp: SIMD4<Float>, color: SIMD4<Float>) {
       let age = time - d.z
       let alive: Float = (d.z >= 0 && age >= 0 && age <= 4.0) ? 1.0 : 0.0
       let ringRadius = age * 0.35
@@ -104,18 +101,22 @@ extension LiquidLightRenderer {
       let smoothFade = max(0, 1.0 - tNorm * tNorm * (3.0 - 2.0 * tNorm))
       let easeIn = max(0, min(1, age / 0.1))
       let fade = smoothFade * easeIn * easeIn * (3.0 - 2.0 * easeIn)
-      precomp[i] = SIMD4<Float>(ringRadius, fade, alive, 0)
       let tint = Self.liquidColor(id: d.w, t: colorShift)
-      colors[i] = SIMD4<Float>(tint.x, tint.y, tint.z, 0)
+      return (SIMD4<Float>(ringRadius, fade, alive, 0),
+              SIMD4<Float>(tint.x, tint.y, tint.z, 0))
     }
+    let r0 = computeDrop(drops[0])
+    let r1 = computeDrop(drops[1])
+    let r2 = computeDrop(drops[2])
+    let r3 = computeDrop(drops[3])
 
     let params = LiquidLightParams(
       time: time, bass: audio.x, mid: audio.y, high: audio.z,
       drops: LiquidLightDrops(d0: drops[0], d1: drops[1], d2: drops[2], d3: drops[3]),
-      dropPrecomp: LiquidLightDropPrecomp(p0: precomp[0], p1: precomp[1],
-                                          p2: precomp[2], p3: precomp[3]),
-      dropColors: LiquidLightDropColors(c0: colors[0], c1: colors[1],
-                                        c2: colors[2], c3: colors[3])
+      dropPrecomp: LiquidLightDropPrecomp(p0: r0.precomp, p1: r1.precomp,
+                                          p2: r2.precomp, p3: r3.precomp),
+      dropColors: LiquidLightDropColors(c0: r0.color, c1: r1.color,
+                                        c2: r2.color, c3: r3.color)
     )
     argumentTable.setAddress(writeUniform(params), index: 0)
 

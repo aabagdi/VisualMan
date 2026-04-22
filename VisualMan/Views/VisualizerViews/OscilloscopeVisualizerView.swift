@@ -29,13 +29,13 @@ struct OscilloscopeVisualizerView: View {
   @State private var audio = SmoothedAudio()
   @State private var smoothedWaveform: [Float] = .init(repeating: 0.0, count: Constants.displayPointCount)
   @State private var phosphorTrail: [Float] = .init(repeating: 0.0, count: Constants.displayPointCount)
+  @State private var downsampleBuffer: [Float] = .init(repeating: 0.0, count: Constants.displayPointCount)
 
   let audioLevels: [1024 of Float]
   let waveform: [1024 of Float]
 
-  private func downsampleWaveform() -> [Float] {
+  private func downsampleWaveform(into buffer: inout [Float]) {
     let n = Constants.displayPointCount
-    var result = [Float](repeating: 0.0, count: n)
     let samplesPerPoint = 1024 / n
     for i in 0..<n {
       let start = i * samplesPerPoint
@@ -43,18 +43,15 @@ struct OscilloscopeVisualizerView: View {
       for j in start..<(start + samplesPerPoint) {
         sum += waveform[j]
       }
-      result[i] = sum / Float(samplesPerPoint)
+      buffer[i] = sum / Float(samplesPerPoint)
     }
 
     for _ in 0..<Constants.spatialSmoothingPasses {
-      var smoothed = result
+      let prev = buffer
       for i in 1..<(n - 1) {
-        smoothed[i] = result[i - 1] * 0.25 + result[i] * 0.5 + result[i + 1] * 0.25
+        buffer[i] = prev[i - 1] * 0.25 + prev[i] * 0.5 + prev[i + 1] * 0.25
       }
-      result = smoothed
     }
-
-    return result
   }
 
   private func buildWaveformPath(from data: [Float], size: CGSize) -> Path {
@@ -224,9 +221,9 @@ struct OscilloscopeVisualizerView: View {
             }
           }
         } else {
-          let newLevels = downsampleWaveform()
+          downsampleWaveform(into: &downsampleBuffer)
           for i in 0..<n {
-            let target = newLevels[i]
+            let target = downsampleBuffer[i]
             let current = smoothedWaveform[i]
             let smooth = abs(target) > abs(current) ? Constants.attackSmoothing : Constants.releaseSmoothing
             smoothedWaveform[i] = current * smooth + target * (1.0 - smooth)
@@ -234,6 +231,7 @@ struct OscilloscopeVisualizerView: View {
         }
       }
       .ignoresSafeArea()
+      .accessibilityHidden(true)
     }
   }
 }

@@ -110,8 +110,24 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
       )
     }
     .frame(height: 30)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Playback position")
+    .accessibilityValue("\(displayTime.asTimeString(style: .positional)) of \((inRange.upperBound).asTimeString(style: .positional))")
+    .accessibilityAdjustableAction { direction in
+      let range = inRange.upperBound - inRange.lowerBound
+      let step = range * 0.05
+      switch direction {
+      case .increment:
+        value = min(value + step, inRange.upperBound)
+      case .decrement:
+        value = max(value - step, inRange.lowerBound)
+      @unknown default:
+        break
+      }
+      onEditingChanged(false)
+    }
   }
-  
+
   private func getPrgPercentage(_ value: T) -> T {
     let range = inRange.upperBound - inRange.lowerBound
     if range == 0 { return 0 }

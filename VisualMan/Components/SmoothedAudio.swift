@@ -11,7 +11,7 @@ struct SmoothedAudio {
   var high: Float = 0
   var time: Float = 0
   
-  mutating func update(from levels: [1024 of Float], dt: Float) {
+  mutating func update(from levels: borrowing [1024 of Float], dt: Float) {
     bass = bass * 0.5 + levels.bassLevel * 0.5
     mid = mid * 0.6 + levels.midLevel * 0.4
     high = high * 0.4 + levels.highLevel * 0.6

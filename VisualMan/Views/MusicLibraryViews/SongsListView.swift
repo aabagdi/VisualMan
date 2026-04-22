@@ -8,6 +8,10 @@
 import SwiftUI
 import MediaPlayer
 
+private struct SongSelection: Hashable {
+  let index: Int
+}
+
 struct SongsListView: View {
   @State private var searchText: String = ""
   @State private var filteredSongs: [MPMediaItem]?
@@ -25,7 +29,7 @@ struct SongsListView: View {
       if !songs.isEmpty {
         List(displayedSongs.enumerated(), id: \.element.persistentID) { index, song in
           let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
-          NavigationLink(destination: MusicPlayerView(displayedSongs, startingIndex: index)) {
+          NavigationLink(value: SongSelection(index: index)) {
             HStack(spacing: 10) {
               if isCurrentSong {
                 NowPlayingIndicatorView(isAnimating: audioManager.isPlaying)
@@ -41,6 +45,9 @@ struct SongsListView: View {
             }
           }
           .toolbarVisibility(.hidden, for: .tabBar)
+        }
+        .navigationDestination(for: SongSelection.self) { selection in
+          MusicPlayerView(displayedSongs, startingIndex: selection.index)
         }
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
         .task(id: searchText) {

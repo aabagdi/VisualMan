@@ -16,11 +16,11 @@ using namespace metal;
                              float trebleLevel,
                              float2 viewSize) {
   half3 finalColor = half3(0.0);
-  float aa = 2.0;
-  
-  for (float sx = 0.0; sx < aa; sx++) {
-    for (float sy = 0.0; sy < aa; sy++) {
-      float2 offset = float2(sx, sy) / aa - 0.5;
+  const int aa = 2;
+
+  for (int sx = 0; sx < aa; sx++) {
+    for (int sy = 0; sy < aa; sy++) {
+      float2 offset = float2(float(sx), float(sy)) / float(aa) - 0.5;
       float2 samplePos = position + offset;
       
       float2 uv = (samplePos - viewSize * 0.5) / min(viewSize.x, viewSize.y) * 4.0;
@@ -30,8 +30,8 @@ using namespace metal;
       float cImag = 0.6 + trebleLevel * 0.2 * cos(time * 0.7);
       
       float rotation = midLevel * time * 0.2;
-      float cosR = cos(rotation);
-      float sinR = sin(rotation);
+      float cosR = fast::cos(rotation);
+      float sinR = fast::sin(rotation);
       float2 rotatedUV = float2(
                                 uv.x * cosR - uv.y * sinR,
                                 uv.x * sinR + uv.y * cosR
@@ -43,7 +43,7 @@ using namespace metal;
       
       int maxIterations = int(50 + audioEnergy * 50);
       int iterations = 0;
-      
+
       for (int i = 0; i < 100; i++) {
         if (i >= maxIterations) break;
         
@@ -103,7 +103,7 @@ using namespace metal;
     }
   }
   
-  finalColor /= (aa * aa);
+  finalColor /= float(aa * aa);
   
   finalColor = pow(finalColor, half3(0.9));
   

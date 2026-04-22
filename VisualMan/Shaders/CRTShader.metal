@@ -29,7 +29,7 @@ using namespace metal;
 
   half4 color = layer.sample(samplePos);
 
-  float scanline = 0.5 + 0.5 * cos(position.y * 3.14159265);
+  float scanline = 0.5 + 0.5 * cos(fract(position.y * 0.5) * 6.28318530);
   scanline = mix(1.0, scanline, scanlineIntensity);
   color.rgb *= half(scanline);
 

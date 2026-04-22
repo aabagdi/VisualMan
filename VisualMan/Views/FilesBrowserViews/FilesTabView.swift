@@ -48,10 +48,12 @@ struct FilesTabView: View {
           
           showingPlayer = true
           
+        } catch let error as VMError {
+          fileError = error
+          fileLoadingFailed = true
         } catch {
           fileError = VMError.failedToCreateFile
           fileLoadingFailed = true
-          print("Error loading file: \(error)")
         }
       }
     },

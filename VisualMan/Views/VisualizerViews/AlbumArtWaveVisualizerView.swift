@@ -28,9 +28,7 @@ struct AlbumArtWaveVisualizerView: View {
                               smoothedHigh: audio.high)
           .onChange(of: timeline.date) { oldValue, newValue in
             let dt = min(Float(newValue.timeIntervalSince(oldValue)), 1.0 / 30.0)
-            withAnimation(.smooth) {
-              audio.update(from: audioLevels, dt: dt)
-            }
+            audio.update(from: audioLevels, dt: dt)
           }
           .ignoresSafeArea()
       }

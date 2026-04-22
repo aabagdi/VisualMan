@@ -9,11 +9,11 @@ import SwiftUI
 
 struct BarsVisualizerView: View {
   let visualizerBars: [32 of Float]
-  
+
   let barCount = 32
   let barSpacing: CGFloat = 2
   let minBarHeight: CGFloat = 4
-  
+
   var body: some View {
     GeometryReader { g in
       HStack(spacing: barSpacing) {
@@ -30,5 +30,6 @@ struct BarsVisualizerView: View {
       .padding(.horizontal)
     }
     .background(Color.black)
+    .accessibilityHidden(true)
   }
 }

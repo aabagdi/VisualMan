@@ -94,7 +94,7 @@ struct MusicPlayerView: View {
             Image(systemName: "backward")
               .foregroundStyle(normalFillColor)
           }
-          .accessibilityLabel("Previous")
+          .accessibilityLabel(audioManager.currentTime >= 3 ? "Restart" : "Previous")
           .padding()
           
           Spacer()
@@ -141,6 +141,7 @@ struct MusicPlayerView: View {
       .zIndex(1)
       .opacity(isTapped ? 0 : 1)
       .allowsHitTesting(!isTapped)
+      .accessibilityHidden(isTapped)
     }
     .toolbar(.hidden, for: .tabBar)
     .onAppear {

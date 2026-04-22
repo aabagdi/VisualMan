@@ -9,6 +9,9 @@ import AVFoundation
 import Synchronization
 import Dependencies
 import Accelerate
+import os
+
+nonisolated let audioLogger = Logger(subsystem: "com.VisualMan", category: "AudioEngineManager")
 
 @Observable
 @MainActor
@@ -54,6 +57,7 @@ final class AudioEngineManager {
   @ObservationIgnored var lastSeekFrame: AVAudioFramePosition = 0
   @ObservationIgnored var currentPlaybackID: UUID
   @ObservationIgnored var nowPlayingTask: Task<Void, Never>?
+  @ObservationIgnored var interruptionObserver: (any NSObjectProtocol)?
   
   let audioTapProcessor = AudioTapProcessor()
   
@@ -83,6 +87,9 @@ final class AudioEngineManager {
     pauseDecayTask?.cancel()
     nowPlayingTask?.cancel()
     playbackContinuation?.finish()
+    if let interruptionObserver {
+      NotificationCenter.default.removeObserver(interruptionObserver)
+    }
   }
   
   private func setupAudioEngine() throws {
@@ -211,28 +218,37 @@ final class AudioEngineManager {
     pauseDecayTask = Task { [weak self] in
       for await _ in stream.frames {
         guard !Task.isCancelled else { break }
-        guard let self else { break }
+        guard let self else {
+          stream.stop()
+          break
+        }
         
         var decayFactor = Constants.pauseDecayFactor
         let threshold = Constants.pauseDecayThreshold
-        
+
+        var bars = self.visualizerBars
         var barMax: Float = 0
-        self.visualizerBars.withUnsafeElementPointer { ptr in
+        bars.withUnsafeElementPointer { ptr in
           vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 32)
           vDSP_maxv(ptr, 1, &barMax, 32)
         }
+        self.visualizerBars = bars
 
+        var levels = self.audioLevels
         var levelMax: Float = 0
-        self.audioLevels.withUnsafeElementPointer { ptr in
+        levels.withUnsafeElementPointer { ptr in
           vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 1024)
           vDSP_maxv(ptr, 1, &levelMax, 1024)
         }
+        self.audioLevels = levels
 
+        var wave = self.waveform
         var waveMax: Float = 0
-        self.waveform.withUnsafeElementPointer { ptr in
+        wave.withUnsafeElementPointer { ptr in
           vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 1024)
           vDSP_maxmgv(ptr, 1, &waveMax, 1024)
         }
+        self.waveform = wave
 
         if barMax < threshold && levelMax < threshold && waveMax < threshold {
           self.visualizerBars = [32 of Float](repeating: 0)
@@ -276,9 +292,17 @@ final class AudioEngineManager {
   
   func resume() {
     stopPauseDecay()
-    try? AVAudioSession.sharedInstance().setActive(true)
+    do {
+      try AVAudioSession.sharedInstance().setActive(true)
+    } catch {
+      audioLogger.error("Failed to activate audio session on resume: \(error.localizedDescription)")
+    }
     if let engine, !engine.isRunning {
-      try? engine.start()
+      do {
+        try engine.start()
+      } catch {
+        audioLogger.error("Failed to restart audio engine on resume: \(error.localizedDescription)")
+      }
     }
     player?.play()
     playbackState = .playing

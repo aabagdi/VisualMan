@@ -96,20 +96,28 @@ struct MarqueeTextView<ResetID: Equatable>: View {
     }
   }
   
+  @State private var resetTask: Task<Void, Never>?
+  @State private var scrollTask: Task<Void, Never>?
+
   private func resetMarquee() {
     scrollToEnd = false
     textSize = .zero
     scrollAnimationKey = uuid()
-    
-    Task {
+
+    resetTask?.cancel()
+    scrollTask?.cancel()
+    resetTask = Task {
       try? await clock.sleep(for: .milliseconds(100))
+      guard !Task.isCancelled else { return }
       scrollAnimationKey = uuid()
     }
   }
-  
+
   private func startScrollAfterDelay() {
-    Task {
+    scrollTask?.cancel()
+    scrollTask = Task {
       try? await clock.sleep(for: initialDelay)
+      guard !Task.isCancelled else { return }
       scrollToEnd = true
     }
   }

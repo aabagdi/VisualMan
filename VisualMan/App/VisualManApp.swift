@@ -28,9 +28,7 @@ struct VisualManApp: App {
           }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
-          if ProcessInfo.processInfo.isLowPowerModeEnabled {
-            showLowPowerAlert = true
-          }
+          showLowPowerAlert = ProcessInfo.processInfo.isLowPowerModeEnabled
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
           rendererCache.purge()

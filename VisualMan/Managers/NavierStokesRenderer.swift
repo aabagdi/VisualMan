@@ -101,6 +101,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
   var frameUniformsAddress: MTLGPUAddress = 0
   var framesSinceReinit: Int = 6
+
+  var forceSplats = [SplatParams]()
+  var dyeSplats = [SplatParams]()
   
   var currentUniformBuffer: MTLBuffer
   
@@ -256,12 +259,13 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     guard let encoder = beginFrame() else { return nil }
 
+    let hadTAAHistory = taaHistoryA != nil && taaHistoryB != nil
     ensureTAAHistory(width: displayTex.width, height: displayTex.height)
 
     runSimulationPass(encoder: encoder, bass: bass, mid: mid, high: high,
                       output: displayTex)
 
-    if taaHistoryA != nil && taaHistoryB != nil {
+    if hadTAAHistory && taaHistoryA != nil && taaHistoryB != nil {
       taaHistoryValid = true
     }
 

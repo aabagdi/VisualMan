@@ -12,7 +12,8 @@ import MediaPlayer
 final class MusicLibraryAccessManager {
   var authorizationStatus: MPMediaLibraryAuthorizationStatus
   private(set) var libraryChangeCount: Int = 0
-  
+  var isLoading: Bool = false
+
   @ObservationIgnored private var cachedSongs: [MPMediaItem]?
   @ObservationIgnored private var cachedPlaylists: [MPMediaItemCollection]?
   @ObservationIgnored private var cachedAlbums: [MPMediaItemCollection]?
@@ -20,6 +21,7 @@ final class MusicLibraryAccessManager {
   @ObservationIgnored private var cachedCompilations: [MPMediaItemCollection]?
   @ObservationIgnored private var cachedGenres: [MPMediaItemCollection]?
   @ObservationIgnored private var lastCacheChangeCount: Int = -1
+  @ObservationIgnored nonisolated(unsafe) private var libraryObserver: (any NSObjectProtocol)?
   
   var songs: [MPMediaItem] {
     _ = libraryChangeCount
@@ -59,23 +61,25 @@ final class MusicLibraryAccessManager {
   
   private func validateCache() {
     guard lastCacheChangeCount != libraryChangeCount else { return }
+    lastCacheChangeCount = libraryChangeCount
+    isLoading = true
     cachedSongs = MPMediaQuery.songs().items ?? []
     cachedPlaylists = MPMediaQuery.playlists().collections ?? []
     cachedAlbums = (MPMediaQuery.albums().collections ?? [])
       .filter { !($0.representativeItem?.isCompilation ?? false) }
       .sorted {
-        $0.representativeItem?.albumArtist ?? "Unknown" < $1.representativeItem?.albumArtist ?? "Unknown"
+        ($0.representativeItem?.albumArtist ?? "Unknown") < ($1.representativeItem?.albumArtist ?? "Unknown")
       }
     cachedArtists = MPMediaQuery.artists().collections ?? []
     cachedCompilations = MPMediaQuery.compilations().collections ?? []
     cachedGenres = MPMediaQuery.genres().collections ?? []
-    lastCacheChangeCount = libraryChangeCount
+    isLoading = false
   }
   
   init() {
     authorizationStatus = MPMediaLibrary.authorizationStatus()
-    
-    NotificationCenter.default.addObserver(
+
+    libraryObserver = NotificationCenter.default.addObserver(
       forName: .MPMediaLibraryDidChange,
       object: nil,
       queue: .main
@@ -86,11 +90,17 @@ final class MusicLibraryAccessManager {
     }
     MPMediaLibrary.default().beginGeneratingLibraryChangeNotifications()
   }
+
+  deinit {
+    if let libraryObserver {
+      NotificationCenter.default.removeObserver(libraryObserver)
+    }
+  }
     
   func requestMusicLibraryAccess() {
-    MPMediaLibrary.requestAuthorization { status in
+    MPMediaLibrary.requestAuthorization { [weak self] status in
       Task { @MainActor in
-        self.authorizationStatus = status
+        self?.authorizationStatus = status
       }
     }
   }

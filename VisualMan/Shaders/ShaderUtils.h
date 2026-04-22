@@ -34,4 +34,24 @@ inline half3 hsv2rgb(float h, float s, float v) {
   return half3(rgb);
 }
 
+inline float3 shaderRand3(float seed) {
+  float2 seed2 = float2(seed, seed * 1.371);
+  float3 p = float3(dot(seed2, float2(127.1, 311.7)),
+                    dot(seed2, float2(269.5, 183.3)),
+                    dot(seed2, float2(419.2, 371.9)));
+  return fract(sin(p) * 43758.5453);
+}
+
+inline float2 shaderHash22(float2 p) {
+  float3 p3 = fract(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+inline float shaderHash21(float2 p) {
+  float3 p3 = fract(float3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
 #endif

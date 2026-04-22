@@ -10,7 +10,7 @@ using namespace metal;
 
 #define PI 3.141592653589793
 
-float3 rand3(float seed) {
+static float3 rand3(float seed) {
   float2 seed2 = float2(seed, seed * 1.371);
   
   float3 p = float3(dot(seed2, float2(127.1, 311.7)),
@@ -27,7 +27,7 @@ float3 rand3(float seed) {
                                float trebleLevel,
                                float peakLevel,
                                float2 viewSize) {
-  float t = fmod(time + 10.0, 7200.0);
+  float t = fmod(time + 10.0, 36000.0);
   float aspectRatio = viewSize.x / viewSize.y;
   float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
   float3 col = float3(0.0);
@@ -69,8 +69,10 @@ float3 rand3(float seed) {
         
         sparkPos1.y += r1 * r1 * 0.03;
         
-        float dist = length(uv - sparkPos1);
-        if (dist < 0.4) {
+        float2 diff1 = uv - sparkPos1;
+        float dist2 = dot(diff1, diff1);
+        if (dist2 < 0.16) {
+          float dist = sqrt(dist2);
           float spark = 0.015 / (dist + 0.015);
           spark = spark * spark;
           float fade = max(0.0, 1.0 - (r1 / rScale1));
@@ -90,8 +92,10 @@ float3 rand3(float seed) {
         
         sparkPos2.y += r2 * r2 * 0.025;
         
-        float dist = length(uv - sparkPos2);
-        if (dist < 0.35) {
+        float2 diff2 = uv - sparkPos2;
+        float dist2 = dot(diff2, diff2);
+        if (dist2 < 0.1225) {
+          float dist = sqrt(dist2);
           float spark = 0.012 / (dist + 0.012);
           spark = spark * spark;
           float fade = max(0.0, 1.0 - (r2 / rScale2));
@@ -111,14 +115,16 @@ float3 rand3(float seed) {
         
         sparkPos3.y += r3 * r3 * 0.02;
         
-        float dist = length(uv - sparkPos3);
-        if (dist < 0.25) {
+        float2 diff3 = uv - sparkPos3;
+        float dist2 = dot(diff3, diff3);
+        if (dist2 < 0.0625) {
+          float dist = sqrt(dist2);
           float spark = 0.008 / (dist + 0.008);
           spark = spark * spark * spark;
           float fade = max(0.0, 1.0 - (r3 / rScale3));
-          
+
           float sparkle = 1.0 + 0.4 * sin(localTime * 15.0);
-          
+
           col += spark * fade * trebleColor * trebleLevel * sparkle * 2.5;
         }
       }
