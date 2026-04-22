@@ -104,7 +104,6 @@ extension GameOfLifeRenderer {
   func seedInitialState() {
     guard let simA else { return }
     if frameNumber > 0 {
-      // Ensure GPU has retired all in-flight frames before CPU-writing shared texture
       let targetValue = frameNumber
       let signaled = sharedEvent.signaledValue
       if signaled < targetValue {

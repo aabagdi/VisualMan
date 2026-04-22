@@ -21,7 +21,6 @@ final class MusicLibraryAccessManager {
   @ObservationIgnored private var cachedCompilations: [MPMediaItemCollection]?
   @ObservationIgnored private var cachedGenres: [MPMediaItemCollection]?
   @ObservationIgnored private var lastCacheChangeCount: Int = -1
-  @ObservationIgnored private var loadingTask: Task<Void, Never>?
   @ObservationIgnored private var libraryObserver: (any NSObjectProtocol)?
   
   var songs: [MPMediaItem] {
@@ -63,32 +62,22 @@ final class MusicLibraryAccessManager {
   private func validateCache() {
     guard lastCacheChangeCount != libraryChangeCount else { return }
     lastCacheChangeCount = libraryChangeCount
-    let changeCount = libraryChangeCount
     isLoading = true
-    loadingTask?.cancel()
-    loadingTask = Task {
-      let songs = MPMediaQuery.songs().items ?? []
-      let playlists = MPMediaQuery.playlists().collections ?? []
-      let albums = (MPMediaQuery.albums().collections ?? [])
-        .filter { !($0.representativeItem?.isCompilation ?? false) }
-        .sorted {
-          ($0.representativeItem?.albumArtist ?? "Unknown") < ($1.representativeItem?.albumArtist ?? "Unknown")
-        }
-      let artists = MPMediaQuery.artists().collections ?? []
-      let compilations = MPMediaQuery.compilations().collections ?? []
-      let genres = MPMediaQuery.genres().collections ?? []
 
-      guard !Task.isCancelled, lastCacheChangeCount == changeCount else { return }
-      cachedSongs = songs
-      cachedPlaylists = playlists
-      cachedAlbums = albums
-      cachedArtists = artists
-      cachedCompilations = compilations
-      cachedGenres = genres
-      isLoading = false
-      libraryChangeCount += 1
-      lastCacheChangeCount = libraryChangeCount
-    }
+    cachedSongs = MPMediaQuery.songs().items ?? []
+    cachedPlaylists = MPMediaQuery.playlists().collections ?? []
+    cachedAlbums = (MPMediaQuery.albums().collections ?? [])
+      .filter { !($0.representativeItem?.isCompilation ?? false) }
+      .sorted {
+        ($0.representativeItem?.albumArtist ?? "Unknown") < ($1.representativeItem?.albumArtist ?? "Unknown")
+      }
+    cachedArtists = MPMediaQuery.artists().collections ?? []
+    cachedCompilations = MPMediaQuery.compilations().collections ?? []
+    cachedGenres = MPMediaQuery.genres().collections ?? []
+
+    isLoading = false
+    libraryChangeCount += 1
+    lastCacheChangeCount = libraryChangeCount
   }
   
   init() {
@@ -107,7 +96,6 @@ final class MusicLibraryAccessManager {
   }
 
   isolated deinit {
-    loadingTask?.cancel()
     MPMediaLibrary.default().endGeneratingLibraryChangeNotifications()
     if let libraryObserver {
       NotificationCenter.default.removeObserver(libraryObserver)
