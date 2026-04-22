@@ -174,8 +174,10 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
       residencySet.commit()
     }
 
-    let allocator = commandAllocators[0]
-    currentUniformBuffer = uniformBuffers[0]
+    let warmupFrame: UInt64 = 1
+    let frameIndex = Int(warmupFrame % Self.maxFramesInFlight)
+    let allocator = commandAllocators[frameIndex]
+    currentUniformBuffer = uniformBuffers[frameIndex]
     allocator.reset()
     uniformOffset = 0
 
@@ -191,8 +193,8 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
     commandQueue.commit([commandBuffer])
-    commandQueue.signalEvent(sharedEvent, value: 1)
-    frameNumber = 1
+    commandQueue.signalEvent(sharedEvent, value: warmupFrame)
+    frameNumber = warmupFrame
   }
 
   func prepareForResume() {
