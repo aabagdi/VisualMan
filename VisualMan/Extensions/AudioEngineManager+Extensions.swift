@@ -92,6 +92,29 @@ extension AudioEngineManager {
         self?.handleInterruption(type: type, options: options)
       }
     }
+
+    routeChangeObserver = NotificationCenter.default.addObserver(
+      forName: AVAudioSession.routeChangeNotification,
+      object: AVAudioSession.sharedInstance(),
+      queue: .main
+    ) { [weak self] notification in
+      guard let userInfo = notification.userInfo,
+            let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+            let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else { return }
+      Task { @MainActor in
+        self?.handleRouteChange(reason: reason)
+      }
+    }
+
+    configChangeObserver = NotificationCenter.default.addObserver(
+      forName: .AVAudioEngineConfigurationChange,
+      object: engine,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.handleEngineConfigChange()
+      }
+    }
   }
   
   private func handleInterruption(type: AVAudioSession.InterruptionType, options: AVAudioSession.InterruptionOptions?) {
@@ -127,6 +150,43 @@ extension AudioEngineManager {
     }
   }
   
+  private func handleRouteChange(reason: AVAudioSession.RouteChangeReason) {
+    switch reason {
+    case .oldDeviceUnavailable:
+      if playbackState == .playing {
+        player?.pause()
+        playbackState = .paused
+        stopDisplayLink()
+        startPauseDecay()
+      }
+    case .newDeviceAvailable:
+      break
+    default:
+      break
+    }
+  }
+
+  private func handleEngineConfigChange() {
+    guard let engine else { return }
+    let wasPlaying = playbackState == .playing
+    if wasPlaying {
+      player?.pause()
+      stopDisplayLink()
+    }
+    do {
+      try engine.start()
+    } catch {
+      audioLogger.error("Failed to restart engine after config change: \(error.localizedDescription)")
+    }
+    if wasPlaying {
+      engine.mainMixerNode.removeTap(onBus: 0)
+      installAudioTap(on: engine)
+      player?.play()
+      playbackState = .playing
+      startDisplayLink()
+    }
+  }
+
   func seek(to time: TimeInterval) {
     guard let player,
           let audioFile else { return }
@@ -161,6 +221,13 @@ extension AudioEngineManager {
       }
       
       if wasPlaying {
+        if let engine, !engine.isRunning {
+          do {
+            try engine.start()
+          } catch {
+            audioLogger.error("Failed to restart engine during seek: \(error.localizedDescription)")
+          }
+        }
         player.play()
         playbackState = .playing
       } else {

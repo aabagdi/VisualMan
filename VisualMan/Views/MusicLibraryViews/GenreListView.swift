@@ -11,24 +11,21 @@ import MediaPlayer
 struct GenreListView: View {
   @State private var searchText: String = ""
   @State private var filteredGenres: [MPMediaItemCollection]?
-  
+  @State private var cachedAlbumsByGenre: [String: [MPMediaItemCollection]] = [:]
+
   let genres: [MPMediaItemCollection]
   let albums: [MPMediaItemCollection]
-  
+
   private var displayedGenres: [MPMediaItemCollection] {
     filteredGenres ?? genres
   }
 
-  private var albumsByGenre: [String: [MPMediaItemCollection]] {
-    Dictionary(grouping: albums) { $0.representativeItem?.genre ?? "Unknown" }
-  }
-
   var body: some View {
-    Section {
+    Group {
       if !genres.isEmpty {
         List(displayedGenres, id: \.representativeItem?.persistentID) { genre in
           let genreName = genre.representativeItem?.genre ?? "Unknown"
-          let genreAlbums = albumsByGenre[genreName] ?? []
+          let genreAlbums = cachedAlbumsByGenre[genreName] ?? []
           NavigationLink(destination: GenreDetailView(genre: genreName, albums: genreAlbums)) {
             Text(genre.representativeItem?.genre ?? "Unknown")
           }
@@ -51,5 +48,11 @@ struct GenreListView: View {
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
+    .onAppear {
+      cachedAlbumsByGenre = Dictionary(grouping: albums) { $0.representativeItem?.genre ?? "Unknown" }
+    }
+    .onChange(of: albums.count) {
+      cachedAlbumsByGenre = Dictionary(grouping: albums) { $0.representativeItem?.genre ?? "Unknown" }
+    }
   }
 }

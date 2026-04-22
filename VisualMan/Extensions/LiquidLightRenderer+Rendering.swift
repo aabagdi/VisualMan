@@ -121,12 +121,8 @@ extension LiquidLightRenderer {
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     let tg = MTLSize(width: 16, height: 16, depth: 1)
-    let groups = MTLSize(
-      width: (output.width + 15) / 16,
-      height: (output.height + 15) / 16,
-      depth: 1
-    )
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: groups, threadsPerThreadgroup: tg)
+    let grid = MTLSize(width: output.width, height: output.height, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
   }
 
   static func liquidColor(id: Float, t: Float) -> SIMD3<Float> {
@@ -169,11 +165,7 @@ extension LiquidLightRenderer {
     argumentTable.setAddress(writeUniform(blurParams), index: 0)
 
     let tg = MTLSize(width: 16, height: 16, depth: 1)
-    let groups = MTLSize(
-      width: (output.width + 15) / 16,
-      height: (output.height + 15) / 16,
-      depth: 1
-    )
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: groups, threadsPerThreadgroup: tg)
+    let grid = MTLSize(width: output.width, height: output.height, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
   }
 }

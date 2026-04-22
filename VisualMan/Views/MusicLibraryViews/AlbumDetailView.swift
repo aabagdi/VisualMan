@@ -16,8 +16,8 @@ struct AlbumDetailView: View {
   private let placeholder = UIImage(resource: .artPlaceholder)
   
   private var year: String {
-    if let year = album.representativeItem?.value(forProperty: "year") as? Int {
-      return String(year)
+    if let date = album.representativeItem?.releaseDate {
+      return String(Calendar.current.component(.year, from: date))
     } else {
       return "Unknown"
     }

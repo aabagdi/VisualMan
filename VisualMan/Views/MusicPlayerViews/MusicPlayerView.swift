@@ -45,103 +45,22 @@ struct MusicPlayerView: View {
   }
   
   var body: some View {
-    @Bindable var audioManager = audioManager
-    
     ZStack {
-      VisualizerContainerView(currentVisualizer: visualizerSelection.current,
-                    visualizerBars: audioManager.visualizerBars,
-                    audioLevels: audioManager.audioLevels,
-                    waveform: audioManager.waveform,
-                    albumArt: currentAudioSource?.albumArt)
+      AudioReactiveVisualizerLayer(
+        currentVisualizer: visualizerSelection.current,
+        albumArt: currentAudioSource?.albumArt
+      )
       .ignoresSafeArea()
       .onTapGesture {
         withAnimation(.easeInOut) {
           isTapped.toggle()
         }
       }
-      
-      VStack {
-        Spacer()
-        if let current = currentAudioSource {
-          MarqueeTextView(
-            "\(current.title ?? "Unknown") • \(current.artist ?? "Unknown")",
-            resetID: playlistManager.currentIndex
-          )
-          .font(.title2)
-          .fontWeight(.semibold)
-          .foregroundStyle(.white)
-          .frame(height: 40)
-        }
-        
-        ProgressSliderView(value: $audioManager.currentTime,
-                           inRange: TimeInterval.zero...max(audioManager.duration, 0.1),
-                           activeFillColor: sliderColor,
-                           fillColor: normalFillColor,
-                           emptyColor: emptyColor,
-                           height: 8
-        ) { isDragging in
-          if !isDragging {
-            audioManager.seek(to: audioManager.currentTime)
-          }
-        }
-        .frame(height: 60)
-        .padding()
-        
-        HStack {
-          Button {
-            viewModel.skipBackwards()
-          } label: {
-            Image(systemName: "backward")
-              .foregroundStyle(normalFillColor)
-          }
-          .accessibilityLabel(audioManager.currentTime >= 3 ? "Restart" : "Previous")
-          .padding()
-          
-          Spacer()
-          
-          Button {
-            viewModel.togglePlayback()
-          } label: {
-            Image(systemName: audioManager.isPlaying ? "pause" : "play")
-              .foregroundStyle(normalFillColor)
-          }
-          .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
-          .padding()
-          
-          Spacer()
-          
-          Button {
-            viewModel.skipForwards()
-          } label: {
-            Image(systemName: "forward")
-              .foregroundStyle(normalFillColor)
-          }
-          .accessibilityLabel("Next")
-          .padding()
-        }
-        .contentShape(Rectangle())
-        .padding()
-      }
-      .background(
-        LinearGradient(
-          stops: [
-            .init(color: .clear, location: 0.4),
-            .init(color: .black.opacity(0.7), location: 1.0)
-          ],
-          startPoint: .top,
-          endPoint: .bottom
-        )
+
+      PlayerControlsLayer(
+        viewModel: viewModel,
+        isTapped: $isTapped
       )
-      .contentShape(Rectangle())
-      .onTapGesture {
-        withAnimation(.easeInOut) {
-          isTapped.toggle()
-        }
-      }
-      .zIndex(1)
-      .opacity(isTapped ? 0 : 1)
-      .allowsHitTesting(!isTapped)
-      .accessibilityHidden(isTapped)
     }
     .toolbar(.hidden, for: .tabBar)
     .onAppear {
@@ -161,7 +80,7 @@ struct MusicPlayerView: View {
       }
     }
     .alert(audioManager.initializationError?.errorDescription ?? "An unknown error occurred during initialization.",
-           isPresented: $audioManager.failedToInitialize) {
+           isPresented: Bindable(audioManager).failedToInitialize) {
       Button("Okay", role: .cancel) {
         audioManager.failedToInitialize = false
         audioManager.initializationError = nil
@@ -186,5 +105,122 @@ struct MusicPlayerView: View {
         }
       }
     }
+  }
+}
+
+private struct AudioReactiveVisualizerLayer: View {
+  let currentVisualizer: VMVisualizer
+  let albumArt: UIImage?
+
+  @Environment(AudioEngineManager.self) private var audioManager
+
+  var body: some View {
+    VisualizerContainerView(
+      currentVisualizer: currentVisualizer,
+      visualizerBars: audioManager.visualizerBars,
+      audioLevels: audioManager.audioLevels,
+      waveform: audioManager.waveform,
+      albumArt: albumArt
+    )
+  }
+}
+
+private struct PlayerControlsLayer: View {
+  let viewModel: MusicPlayerView.MusicPlayerViewModel
+  @Binding var isTapped: Bool
+
+  @Environment(AudioEngineManager.self) private var audioManager
+  @Environment(AudioPlaylistManager.self) private var playlistManager
+
+  private let sliderColor: Color = .white
+
+  private var normalFillColor: Color { sliderColor.opacity(0.5) }
+  private var emptyColor: Color { sliderColor.opacity(0.3) }
+
+  var body: some View {
+    @Bindable var audioManager = audioManager
+
+    VStack {
+      Spacer()
+      if let current = playlistManager.currentAudioSource {
+        MarqueeTextView(
+          "\(current.title ?? "Unknown") • \(current.artist ?? "Unknown")",
+          resetID: playlistManager.currentIndex
+        )
+        .font(.title2)
+        .fontWeight(.semibold)
+        .foregroundStyle(.white)
+        .frame(height: 40)
+      }
+
+      ProgressSliderView(value: $audioManager.currentTime,
+                         inRange: TimeInterval.zero...max(audioManager.duration, 0.1),
+                         activeFillColor: sliderColor,
+                         fillColor: normalFillColor,
+                         emptyColor: emptyColor,
+                         height: 8
+      ) { isDragging in
+        if !isDragging {
+          audioManager.seek(to: audioManager.currentTime)
+        }
+      }
+      .frame(height: 60)
+      .padding()
+
+      HStack {
+        Button {
+          viewModel.skipBackwards()
+        } label: {
+          Image(systemName: "backward")
+            .foregroundStyle(normalFillColor)
+        }
+        .accessibilityLabel(audioManager.currentTime >= 3 ? "Restart" : "Previous")
+        .padding()
+
+        Spacer()
+
+        Button {
+          viewModel.togglePlayback()
+        } label: {
+          Image(systemName: audioManager.isPlaying ? "pause" : "play")
+            .foregroundStyle(normalFillColor)
+        }
+        .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
+        .padding()
+
+        Spacer()
+
+        Button {
+          viewModel.skipForwards()
+        } label: {
+          Image(systemName: "forward")
+            .foregroundStyle(normalFillColor)
+        }
+        .accessibilityLabel("Next")
+        .padding()
+      }
+      .contentShape(Rectangle())
+      .padding()
+    }
+    .background(
+      LinearGradient(
+        stops: [
+          .init(color: .clear, location: 0.4),
+          .init(color: .black.opacity(0.7), location: 1.0)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+    )
+    .contentShape(Rectangle())
+    .onTapGesture {
+      withAnimation(.easeInOut) {
+        isTapped.toggle()
+      }
+    }
+    .zIndex(1)
+    .opacity(isTapped ? 0 : 1)
+    .allowsHitTesting(!isTapped)
+    .accessibilityHidden(isTapped)
   }
 }

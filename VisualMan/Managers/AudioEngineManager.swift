@@ -58,6 +58,8 @@ final class AudioEngineManager {
   @ObservationIgnored var currentPlaybackID: UUID
   @ObservationIgnored var nowPlayingTask: Task<Void, Never>?
   @ObservationIgnored var interruptionObserver: (any NSObjectProtocol)?
+  @ObservationIgnored var routeChangeObserver: (any NSObjectProtocol)?
+  @ObservationIgnored var configChangeObserver: (any NSObjectProtocol)?
   
   let audioTapProcessor = AudioTapProcessor()
   
@@ -87,8 +89,8 @@ final class AudioEngineManager {
     pauseDecayTask?.cancel()
     nowPlayingTask?.cancel()
     playbackContinuation?.finish()
-    if let interruptionObserver {
-      NotificationCenter.default.removeObserver(interruptionObserver)
+    for observer in [interruptionObserver, routeChangeObserver, configChangeObserver].compactMap({ $0 }) {
+      NotificationCenter.default.removeObserver(observer)
     }
   }
   
@@ -108,42 +110,44 @@ final class AudioEngineManager {
           let player else { return }
     
     _ = engine.mainMixerNode
-    
-    let format = engine.mainMixerNode.outputFormat(forBus: 0)
-    
+
     engine.attach(player)
-    engine.connect(player, to: engine.mainMixerNode, format: format)
+    engine.connect(player, to: engine.mainMixerNode, format: nil)
   }
   
   func play(_ source: AudioSource) async throws {
     if currentAudioSourceURL == source.getPlaybackURL() && playbackState == .playing { return }
-    
+
     player?.stop()
-    
+
     stopDisplayLink()
     engine?.mainMixerNode.removeTap(onBus: 0)
-    
+
     audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
     waveform = [1024 of Float](repeating: 0.0)
     await audioTapProcessor.reset()
     lastSeekFrame = 0
-    
+
     guard let url = source.getPlaybackURL() else {
       throw VMError.invalidURL
     }
-    
-    try play(from: url)
+
+    let isSecurityScoped = (source as? FileAudioSource)?.isSecurityScoped ?? false
+    try play(from: url, isSecurityScoped: isSecurityScoped)
     currentAudioSourceURL = source.getPlaybackURL()
   }
-  
-  private func play(from url: URL) throws {
+
+  private func play(from url: URL, isSecurityScoped: Bool) throws {
     stopSecurityScopedAccess()
-    
-    let accessing = url.startAccessingSecurityScopedResource()
-    
-    if accessing {
+
+    if isSecurityScoped {
       securityScopedURL = url
+    } else {
+      let accessing = url.startAccessingSecurityScopedResource()
+      if accessing {
+        securityScopedURL = url
+      }
     }
     try playAudioFromURL(url)
   }
@@ -193,15 +197,15 @@ final class AudioEngineManager {
     player.play()
   }
   
-  private func installAudioTap(on engine: AVAudioEngine) {
+  func installAudioTap(on engine: AVAudioEngine) {
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
     let tapProcessor = audioTapProcessor
-    
-    let sampleRate = Float(format.sampleRate)
+
     engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable buffer, _ in
       guard let channelData = buffer.floatChannelData else { return }
       let frameLength = Int(buffer.frameLength)
       let channelCount = Int(buffer.format.channelCount)
+      let sampleRate = Float(buffer.format.sampleRate)
       tapProcessor.processSamples(
         channels: channelData,
         channelCount: channelCount,

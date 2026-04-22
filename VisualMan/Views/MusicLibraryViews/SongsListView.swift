@@ -25,7 +25,7 @@ struct SongsListView: View {
   }
   
   var body: some View {
-    Section {
+    Group {
       if !songs.isEmpty {
         List(displayedSongs.enumerated(), id: \.element.persistentID) { index, song in
           let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
@@ -44,7 +44,6 @@ struct SongsListView: View {
               }
             }
           }
-          .toolbarVisibility(.hidden, for: .tabBar)
         }
         .navigationDestination(for: SongSelection.self) { selection in
           MusicPlayerView(displayedSongs, startingIndex: selection.index)
@@ -65,6 +64,7 @@ struct SongsListView: View {
           .font(.caption)
       }
     }
+    .toolbarVisibility(.hidden, for: .tabBar)
     .navigationTitle("Songs")
   }
 }

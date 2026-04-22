@@ -30,6 +30,6 @@ BlitVertexOut blitVertex(uint vid [[vertex_id]]) {
 [[fragment]]
 half4 blitFragment(BlitVertexOut in [[stage_in]],
                    texture2d<half> src [[texture(0)]]) {
-  constexpr sampler s(filter::linear);
+  constexpr sampler s(filter::linear, address::clamp_to_edge);
   return src.sample(s, in.uv);
 }

@@ -7,13 +7,15 @@
 
 import Accelerate
 import Synchronization
+import os
 
 final class AudioTapProcessor: Sendable {
   nonisolated private static let ringCapacity = 8192
   nonisolated private static let ringMask = ringCapacity - 1
-  
+
   private let dspProcessor = DSPProcessor()
-  
+
+  private let ringLock = OSAllocatedUnfairLock()
   nonisolated(unsafe) private var ringBuffer: [8192 of Float] = .init(repeating: 0.0)
   nonisolated(unsafe) private var monoScratch: [8192 of Float] = .init(repeating: 0.0)
   nonisolated(unsafe) private var drainScratch: [Float] = Array(repeating: 0, count: ringCapacity)
@@ -32,13 +34,16 @@ final class AudioTapProcessor: Sendable {
 
     if channelCount == 1 {
       let buf = UnsafeBufferPointer(start: channels[0], count: frameCount)
-      processSamples(buf, sampleRate: sampleRate)
+      ringLock.lock()
+      writeToRing(buf, sampleRate: sampleRate)
+      ringLock.unlock()
       return
     }
 
     let n = min(frameCount, Self.ringCapacity)
     let skip = frameCount - n
 
+    ringLock.lock()
     monoScratch.withUnsafeElementPointer { dst in
       var scale: Float = 1.0 / Float(channelCount)
       vDSP_vsmul(channels[0] + skip, 1, &scale, dst, 1, vDSP_Length(n))
@@ -46,11 +51,12 @@ final class AudioTapProcessor: Sendable {
         vDSP_vsma(channels[c] + skip, 1, &scale, dst, 1, dst, 1, vDSP_Length(n))
       }
       let buf = UnsafeBufferPointer(start: dst, count: n)
-      processSamples(buf, sampleRate: sampleRate)
+      writeToRing(buf, sampleRate: sampleRate)
     }
+    ringLock.unlock()
   }
   
-  nonisolated func processSamples(_ samples: UnsafeBufferPointer<Float>, sampleRate: Float) {
+  nonisolated private func writeToRing(_ samples: UnsafeBufferPointer<Float>, sampleRate: Float) {
     let n = samples.count
     guard n > 0, let src = samples.baseAddress else { return }
 
@@ -91,15 +97,19 @@ final class AudioTapProcessor: Sendable {
       return nil
     }
 
-    drainScratch.withUnsafeMutableBufferPointer { dst in
-      guard let dstBase = dst.baseAddress else { return }
-      let readPos = r & Self.ringMask
-      let firstChunk = min(count, Self.ringCapacity - readPos)
-      ringBuffer.withUnsafeElementPointer { ring in
-        dstBase.update(from: ring + readPos, count: firstChunk)
-        let rem = count - firstChunk
-        if rem > 0 {
-          (dstBase + firstChunk).update(from: ring, count: rem)
+    let capturedR = r
+    let capturedCount = count
+    ringLock.withLock {
+      drainScratch.withUnsafeMutableBufferPointer { dst in
+        guard let dstBase = dst.baseAddress else { return }
+        let readPos = capturedR & Self.ringMask
+        let firstChunk = min(capturedCount, Self.ringCapacity - readPos)
+        ringBuffer.withUnsafeElementPointer { ring in
+          dstBase.update(from: ring + readPos, count: firstChunk)
+          let rem = capturedCount - firstChunk
+          if rem > 0 {
+            (dstBase + firstChunk).update(from: ring, count: rem)
+          }
         }
       }
     }

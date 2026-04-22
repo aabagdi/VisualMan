@@ -41,7 +41,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   var displayIntermediate: MTLTexture?
   var lastDrawableWidth: Int = 0
   var lastDrawableHeight: Int = 0
-  var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
+  private(set) var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
   var time: Float = 0
   var dt: Float = 1.0 / 60.0

@@ -13,15 +13,16 @@ struct BarView: View {
   let totalBars: Int
   let maxHeight: CGFloat
   let minHeight: CGFloat
-  
+  let cornerRadius: CGFloat
+
   private var barHeight: CGFloat {
     let height = CGFloat(level) * maxHeight * 0.85
     return min(maxHeight, max(minHeight, height))
   }
-  
+
   private var barColor: Color {
     let position = Float(index) / Float(totalBars)
-    
+
     if position < 0.33 {
       let t = position / 0.33
       return Color(
@@ -45,14 +46,12 @@ struct BarView: View {
       )
     }
   }
-  
+
   var body: some View {
-    GeometryReader { g in
-      RoundedRectangle(cornerRadius: g.size.width * 0.2077922078)
-        .fill(barColor)
-        .frame(height: barHeight)
-        .animation(.interpolatingSpring(duration: 0.15, bounce: 0), value: barHeight)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
+    RoundedRectangle(cornerRadius: cornerRadius)
+      .fill(barColor)
+      .frame(height: barHeight)
+      .animation(.interpolatingSpring(duration: 0.15, bounce: 0), value: barHeight)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }

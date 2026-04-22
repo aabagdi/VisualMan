@@ -42,9 +42,10 @@ final class VisualizerRendererCache {
   }
 
   func preWarm() async {
-      _ = await renderer(NavierStokesRenderer.self) { await NavierStokesRenderer.create() }
-      _ = await renderer(LiquidLightRenderer.self) { await LiquidLightRenderer.create() }
-      _ = await renderer(GameOfLifeRenderer.self) { await GameOfLifeRenderer.create() }
+    async let ns: NavierStokesRenderer? = renderer(NavierStokesRenderer.self) { await NavierStokesRenderer.create() }
+    async let ll: LiquidLightRenderer? = renderer(LiquidLightRenderer.self) { await LiquidLightRenderer.create() }
+    async let gol: GameOfLifeRenderer? = renderer(GameOfLifeRenderer.self) { await GameOfLifeRenderer.create() }
+    _ = await (ns, ll, gol)
   }
   
   func resetAll() {

@@ -241,7 +241,7 @@ extension NavierStokesRenderer {
       argumentTable.setTexture(hPrev.gpuResourceID, index: 5)
       argumentTable.setTexture(hNext.gpuResourceID, index: 6)
     } else {
-      argumentTable.setTexture(output.gpuResourceID, index: 5)
+      argumentTable.setTexture(dyeA.gpuResourceID, index: 5)
       argumentTable.setTexture(output.gpuResourceID, index: 6)
     }
 

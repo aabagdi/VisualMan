@@ -16,46 +16,48 @@ final class LockScreenControlManager {
   var onPlayPause: (() -> Void)?
   var onNext: (() -> Void)?
   var onPrevious: (() -> Void)?
-  
+
+  private var commandTargets: [Any] = []
+
   init() {
     setupRemoteTransportControls()
   }
-  
+
   private func setupRemoteTransportControls() {
     let commandCenter = MPRemoteCommandCenter.shared()
-    
+
     commandCenter.playCommand.isEnabled = true
     commandCenter.pauseCommand.isEnabled = true
     commandCenter.previousTrackCommand.isEnabled = true
     commandCenter.nextTrackCommand.isEnabled = true
     commandCenter.changePlaybackPositionCommand.isEnabled = true
-    
-    commandCenter.playCommand.addTarget { [weak self] _ in
+
+    commandTargets.append(commandCenter.playCommand.addTarget { [weak self] _ in
       Task { @MainActor in self?.onPlayPause?() }
       return .success
-    }
-    
-    commandCenter.pauseCommand.addTarget { [weak self] _ in
+    })
+
+    commandTargets.append(commandCenter.pauseCommand.addTarget { [weak self] _ in
       Task { @MainActor in self?.onPlayPause?() }
       return .success
-    }
-    
-    commandCenter.nextTrackCommand.addTarget { [weak self] _ in
+    })
+
+    commandTargets.append(commandCenter.nextTrackCommand.addTarget { [weak self] _ in
       Task { @MainActor in self?.onNext?() }
       return .success
-    }
-    
-    commandCenter.previousTrackCommand.addTarget { [weak self] _ in
+    })
+
+    commandTargets.append(commandCenter.previousTrackCommand.addTarget { [weak self] _ in
       Task { @MainActor in self?.onPrevious?() }
       return .success
-    }
-    
-    commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+    })
+
+    commandTargets.append(commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
       guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
       let position = positionEvent.positionTime
       Task { @MainActor in self?.seek(to: position) }
       return .success
-    }
+    })
   }
   
   private func seek(to time: TimeInterval) {
@@ -98,11 +100,14 @@ final class LockScreenControlManager {
   
   func cleanup() {
     let commandCenter = MPRemoteCommandCenter.shared()
-    commandCenter.playCommand.removeTarget(nil)
-    commandCenter.pauseCommand.removeTarget(nil)
-    commandCenter.previousTrackCommand.removeTarget(nil)
-    commandCenter.nextTrackCommand.removeTarget(nil)
-    commandCenter.changePlaybackPositionCommand.removeTarget(nil)
+    for target in commandTargets {
+      commandCenter.playCommand.removeTarget(target)
+      commandCenter.pauseCommand.removeTarget(target)
+      commandCenter.previousTrackCommand.removeTarget(target)
+      commandCenter.nextTrackCommand.removeTarget(target)
+      commandCenter.changePlaybackPositionCommand.removeTarget(target)
+    }
+    commandTargets.removeAll()
 
     commandCenter.playCommand.isEnabled = false
     commandCenter.pauseCommand.isEnabled = false

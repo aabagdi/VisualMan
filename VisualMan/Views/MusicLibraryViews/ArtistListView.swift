@@ -24,7 +24,7 @@ struct ArtistListView: View {
   }
 
   var body: some View {
-    Section {
+    Group {
       if !artists.isEmpty {
         List(displayedArtists, id: \.representativeItem?.persistentID) { artist in
           NavigationLink(value: ArtistSelection(artistName: artist.representativeItem?.artist ?? "")) {

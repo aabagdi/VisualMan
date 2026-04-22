@@ -19,7 +19,7 @@ struct PlaylistListView: View {
   }
   
   var body: some View {
-    Section {
+    Group {
       if !playlists.isEmpty {
         List(displayedPlaylists, id: \.representativeItem?.persistentID) { playlist in
           NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {

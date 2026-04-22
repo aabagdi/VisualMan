@@ -49,13 +49,13 @@ extension MetalVisualizerRenderer {
 
   func writeUniform<T>(_ value: T) -> MTLGPUAddress {
     let aligned = (uniformOffset + 15) & ~15
-    let end = aligned + MemoryLayout<T>.size
+    let stride = MemoryLayout<T>.stride
+    let end = aligned + stride
     guard end <= Self.uniformBufferSize else {
       assertionFailure("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
       rendererLogger.error("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
-      let fallbackAligned = 0
-      (currentUniformBuffer.contents() + fallbackAligned).storeBytes(of: value, as: T.self)
-      uniformOffset = MemoryLayout<T>.size
+      (currentUniformBuffer.contents()).storeBytes(of: value, as: T.self)
+      uniformOffset = stride
       return currentUniformBuffer.gpuAddress
     }
     (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
@@ -77,7 +77,11 @@ extension MetalVisualizerRenderer {
     guard end <= Self.uniformBufferSize else {
       assertionFailure("Uniform array buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
       rendererLogger.error("Uniform array buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
-      uniformOffset = 0
+      let clampedSize = min(size, Self.uniformBufferSize)
+      if let baseAddress = values.baseAddress, clampedSize > 0 {
+        memcpy(currentUniformBuffer.contents(), baseAddress, clampedSize)
+      }
+      uniformOffset = clampedSize
       return currentUniformBuffer.gpuAddress
     }
     let ptr = currentUniformBuffer.contents() + aligned

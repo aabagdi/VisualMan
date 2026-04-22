@@ -203,7 +203,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     }
 
     let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm,
+      pixelFormat: .bgra8Unorm_srgb,
       width: width,
       height: height,
       mipmapped: false

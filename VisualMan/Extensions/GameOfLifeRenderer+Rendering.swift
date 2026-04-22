@@ -112,12 +112,8 @@ extension GameOfLifeRenderer {
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     let simTG = MTLSize(width: 16, height: 16, depth: 1)
-    let simGroups = MTLSize(
-      width: (simWidth + 15) / 16,
-      height: (simHeight + 15) / 16,
-      depth: 1
-    )
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: simGroups, threadsPerThreadgroup: simTG)
+    let simGrid = MTLSize(width: simWidth, height: simHeight, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid: simGrid, threadsPerThreadgroup: simTG)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
   }
 
@@ -131,11 +127,7 @@ extension GameOfLifeRenderer {
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     let renderTG = MTLSize(width: 16, height: 16, depth: 1)
-    let renderGroups = MTLSize(
-      width: (outputTex.width + 15) / 16,
-      height: (outputTex.height + 15) / 16,
-      depth: 1
-    )
-    encoder.dispatchThreadgroups(threadgroupsPerGrid: renderGroups, threadsPerThreadgroup: renderTG)
+    let renderGrid = MTLSize(width: outputTex.width, height: outputTex.height, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid: renderGrid, threadsPerThreadgroup: renderTG)
   }
 }

@@ -418,8 +418,6 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   c *= 1.0 - vDist * vDist * vAmount;
   c = max(c, float3(0.0));
 
-  c = float3(srgbEncode(c.r), srgbEncode(c.g), srgbEncode(c.b));
-
   float3 finalColor = c;
   if (historyValid != 0u) {
     float3 prev = historyIn.read(gid).rgb;
@@ -608,6 +606,7 @@ kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[t
   if (gid.x >= w || gid.y >= h) return;
 
   constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
+  constexpr sampler nearestSampler(filter::nearest, address::clamp_to_edge);
 
   float2 pos = float2(gid) + 0.5;
   float2 vel = velocity.read(gid).xy;
@@ -625,10 +624,10 @@ kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[t
   int2 c10 = clamp(base + int2(1, 0), int2(0), int2(w - 1, h - 1));
   int2 c01 = clamp(base + int2(0, 1), int2(0), int2(w - 1, h - 1));
   int2 c11 = clamp(base + int2(1, 1), int2(0), int2(w - 1, h - 1));
-  float4 s00 = phiN.read(uint2(c00));
-  float4 s10 = phiN.read(uint2(c10));
-  float4 s01 = phiN.read(uint2(c01));
-  float4 s11 = phiN.read(uint2(c11));
+  float4 s00 = phiN.sample(nearestSampler, (float2(c00) + 0.5) * invSize);
+  float4 s10 = phiN.sample(nearestSampler, (float2(c10) + 0.5) * invSize);
+  float4 s01 = phiN.sample(nearestSampler, (float2(c01) + 0.5) * invSize);
+  float4 s11 = phiN.sample(nearestSampler, (float2(c11) + 0.5) * invSize);
   float4 lo = min(min(s00, s10), min(s01, s11));
   float4 hi = max(max(s00, s10), max(s01, s11));
 
