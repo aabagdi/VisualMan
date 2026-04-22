@@ -99,19 +99,15 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
 
   private var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
-  static func create() async -> LiquidLightRenderer? {
-    let prepared = await Task.detached(priority: .userInitiated) {
-      guard let device = MTLCreateSystemDefaultDevice(),
-            let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
-        return nil as (MTLDevice, Pipelines)?
+  static func create(device: MTLDevice) async -> LiquidLightRenderer? {
+    let pipelines = await Task.detached(priority: .userInitiated) {
+      guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+        return nil as Pipelines?
       }
-      guard let pipelines = createPipelines(device: device, compiler: compiler) else {
-        return nil
-      }
-      return (device, pipelines)
+      return createPipelines(device: device, compiler: compiler)
     }.value
 
-    guard let (device, pipelines) = prepared else { return nil }
+    guard let pipelines else { return nil }
     guard let renderer = LiquidLightRenderer(device: device, pipelines: pipelines) else { return nil }
     renderer.warmUpGPU()
     return renderer
@@ -168,11 +164,6 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     residencySet.addAllocation(dummyA)
     residencySet.addAllocation(dummyB)
     residencySet.commit()
-    defer {
-      residencySet.removeAllocation(dummyA)
-      residencySet.removeAllocation(dummyB)
-      residencySet.commit()
-    }
 
     let warmupFrame: UInt64 = 1
     let frameIndex = Int(warmupFrame % Self.maxFramesInFlight)
@@ -195,6 +186,11 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: warmupFrame)
     frameNumber = warmupFrame
+
+    sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 200)
+    residencySet.removeAllocation(dummyA)
+    residencySet.removeAllocation(dummyB)
+    residencySet.commit()
   }
 
   func prepareForResume() {
@@ -209,20 +205,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   }
 
   private func drainPendingTextureReleases() {
-    guard !pendingTextureReleases.isEmpty else { return }
-    let signaled = sharedEvent.signaledValue
-    var removedAny = false
-    pendingTextureReleases.removeAll { entry in
-      if signaled >= entry.frame {
-        residencySet.removeAllocation(entry.texture)
-        removedAny = true
-        return true
-      }
-      return false
-    }
-    if removedAny {
-      residencySet.commit()
-    }
+    drainPendingReleases(&pendingTextureReleases)
   }
 
   private func ensureIntermediateTextures(width: Int, height: Int) -> Bool {

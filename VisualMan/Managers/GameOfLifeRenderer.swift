@@ -71,19 +71,15 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
 
   private static var logger: Logger { gameOfLifeLogger }
 
-  static func create() async -> GameOfLifeRenderer? {
-    let prepared = await Task.detached(priority: .userInitiated) {
-      guard let device = MTLCreateSystemDefaultDevice(),
-            let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
-        return nil as (MTLDevice, Pipelines)?
+  static func create(device: MTLDevice) async -> GameOfLifeRenderer? {
+    let pipelines = await Task.detached(priority: .userInitiated) {
+      guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+        return nil as Pipelines?
       }
-      guard let pipelines = createPipelines(device: device, compiler: compiler) else {
-        return nil
-      }
-      return (device, pipelines)
+      return createPipelines(device: device, compiler: compiler)
     }.value
 
-    guard let (device, pipelines) = prepared else { return nil }
+    guard let pipelines else { return nil }
     guard let renderer = GameOfLifeRenderer(device: device, pipelines: pipelines) else { return nil }
     renderer.warmUpGPU()
     return renderer
@@ -146,12 +142,6 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     residencySet.addAllocation(textures.simB)
     residencySet.addAllocation(textures.display)
     residencySet.commit()
-    defer {
-      residencySet.removeAllocation(textures.simA)
-      residencySet.removeAllocation(textures.simB)
-      residencySet.removeAllocation(textures.display)
-      residencySet.commit()
-    }
 
     let warmupFrame: UInt64 = 1
     let frameIndex = Int(warmupFrame % Self.maxFramesInFlight)
@@ -172,6 +162,12 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: warmupFrame)
     frameNumber = warmupFrame
+
+    sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 200)
+    residencySet.removeAllocation(textures.simA)
+    residencySet.removeAllocation(textures.simB)
+    residencySet.removeAllocation(textures.display)
+    residencySet.commit()
   }
 
   func ensureSimTextures(drawableWidth: Int, drawableHeight: Int) {
@@ -183,8 +179,9 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     let shortAxis = max(Self.minShortAxisCells,
                         Int((Float(Self.longAxisCells) * aspect).rounded()))
 
-    simWidth = shortAxis
-    simHeight = Self.longAxisCells
+    let isLandscape = drawableWidth > drawableHeight
+    simWidth = isLandscape ? Self.longAxisCells : shortAxis
+    simHeight = isLandscape ? shortAxis : Self.longAxisCells
 
     guard let textures = Self.createSimTextures(device: device, width: simWidth, height: simHeight) else {
       Self.logger.error("Failed to create adaptive sim textures")
@@ -200,20 +197,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   }
 
   func drainPendingTextureReleases() {
-    guard !pendingTextureReleases.isEmpty else { return }
-    let signaled = sharedEvent.signaledValue
-    var removedAny = false
-    pendingTextureReleases.removeAll { entry in
-      if signaled >= entry.frame {
-        residencySet.removeAllocation(entry.texture)
-        removedAny = true
-        return true
-      }
-      return false
-    }
-    if removedAny {
-      residencySet.commit()
-    }
+    drainPendingReleases(&pendingTextureReleases)
   }
 
   func ensureDisplayIntermediate(width: Int, height: Int) -> Bool {

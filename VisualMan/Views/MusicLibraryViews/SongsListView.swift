@@ -30,19 +30,7 @@ struct SongsListView: View {
         List(displayedSongs.enumerated(), id: \.element.persistentID) { index, song in
           let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
           NavigationLink(value: SongSelection(index: index)) {
-            HStack(spacing: 10) {
-              if isCurrentSong {
-                NowPlayingIndicatorView(isAnimating: audioManager.isPlaying)
-                  .foregroundStyle(.tint)
-              }
-              VStack(alignment: .leading) {
-                Text(song.title ?? "Unknown")
-                  .font(.headline)
-                  .foregroundStyle(isCurrentSong ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-                Text("\(song.artist ?? "Unknown") • \(song.albumTitle ?? "Unknown")")
-                  .font(.caption2)
-              }
-            }
+            SongRowView(song: song, isCurrentSong: isCurrentSong, isPlaying: audioManager.isPlaying)
           }
         }
         .navigationDestination(for: SongSelection.self) { selection in
@@ -55,6 +43,7 @@ struct SongsListView: View {
             return
           }
           try? await Task.sleep(for: .milliseconds(300))
+          guard !Task.isCancelled else { return }
           filteredSongs = songs.filtered(by: searchText) {
             [$0.title, $0.artist]
           }

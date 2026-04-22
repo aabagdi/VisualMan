@@ -6,6 +6,7 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
 
 [[ stitchable ]] half4 julia(float2 position,
@@ -23,9 +24,9 @@ using namespace metal;
       float2 offset = float2(float(sx), float(sy)) / float(aa) - 0.5;
       float2 samplePos = position + offset;
       
-      float2 uv = (samplePos - viewSize * 0.5) / min(viewSize.x, viewSize.y) * 4.0;
-      
-      float audioEnergy = (bassLevel + midLevel + trebleLevel) / 3.0;
+      float2 uv = normalizedUV(samplePos, viewSize) * 4.0;
+
+      float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
       float cReal = -0.4 + bassLevel * 0.3 * sin(time * 0.5);
       float cImag = 0.6 + trebleLevel * 0.2 * cos(time * 0.7);
       
@@ -41,7 +42,7 @@ using namespace metal;
       float minDist = 1000.0;
       float orbitTrap = 1000.0;
       
-      int maxIterations = int(50 + audioEnergy * 50);
+      int maxIterations = int(50 + energy * 50);
       int iterations = 0;
 
       for (int i = 0; i < 100; i++) {
@@ -92,10 +93,10 @@ using namespace metal;
         sampleColor = mix(sampleColor, gradient3, trebleLevel * 0.5);
         
         float edgeFactor = exp(-smoothIter * 0.1);
-        half3 glowColor = half3(0.4, 0.6, 1.0) * edgeFactor * audioEnergy;
+        half3 glowColor = half3(0.4, 0.6, 1.0) * edgeFactor * energy;
         sampleColor += glowColor;
         
-        float noise = fract(sin(dot(samplePos, float2(12.9898, 78.233))) * 43758.5453);
+        float noise = shaderHash(samplePos);
         sampleColor += (noise - 0.5) * 0.02;
       }
       

@@ -23,6 +23,10 @@ final class LockScreenControlManager {
     setupRemoteTransportControls()
   }
 
+  isolated deinit {
+    cleanup()
+  }
+
   private func setupRemoteTransportControls() {
     let commandCenter = MPRemoteCommandCenter.shared()
 

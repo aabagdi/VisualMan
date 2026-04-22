@@ -16,25 +16,25 @@ using namespace metal;
                                float midLevel,
                                float trebleLevel,
                                float2 viewSize) {
-  float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
-  
-  float audioEnergy = (bassLevel + midLevel + trebleLevel) / 3.0;
-  
+  float2 uv = normalizedUV(position, viewSize);
+
+  float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
+
   float v1 = sin(uv.x * 6.0 + time * 1.2 + bassLevel * 8.0);
-  
+
   float v2 = sin((uv.x * 4.0 + uv.y * 4.0) + time * 0.8 + midLevel * 6.0);
-  
+
   float dist = length(uv);
   float v3 = sin(dist * 10.0 - time * 2.0 + trebleLevel * 10.0);
-  
+
   float angle = atan2(uv.y, uv.x);
-  float v4 = sin(angle * 3.0 + dist * 5.0 + time * 0.6 + audioEnergy * 5.0);
-  
+  float v4 = sin(angle * 3.0 + dist * 5.0 + time * 0.6 + energy * 5.0);
+
   float plasma = (v1 + v2 + v3 + v4) * 0.25;
-  
+
   float hue = fract(plasma * 0.5 + 0.5 + time * 0.03);
-  float sat = 0.6 + audioEnergy * 0.4;
-  float val = 0.4 + 0.4 * (plasma * 0.5 + 0.5) + audioEnergy * 0.3;
+  float sat = 0.6 + energy * 0.4;
+  float val = 0.4 + 0.4 * (plasma * 0.5 + 0.5) + energy * 0.3;
   
   half3 color = hsv2rgb(hue, sat, val);
   

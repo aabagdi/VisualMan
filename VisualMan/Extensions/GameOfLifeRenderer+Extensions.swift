@@ -16,17 +16,7 @@ extension GameOfLifeRenderer {
     }
 
     func makePipeline(_ name: String) -> MTLComputePipelineState? {
-      let functionDesc = MTL4LibraryFunctionDescriptor()
-      functionDesc.name = name
-      functionDesc.library = library
-      let pipelineDesc = MTL4ComputePipelineDescriptor()
-      pipelineDesc.computeFunctionDescriptor = functionDesc
-      do {
-        return try compiler.makeComputePipelineState(descriptor: pipelineDesc)
-      } catch {
-        gameOfLifeLogger.error("Failed to create pipeline '\(name)': \(error.localizedDescription)")
-        return nil
-      }
+      Self.makePipeline(name, library: library, compiler: compiler)
     }
 
     guard let step = makePipeline("gameOfLifeStep"),
@@ -114,7 +104,12 @@ extension GameOfLifeRenderer {
   func seedInitialState() {
     guard let simA else { return }
     if frameNumber > 0 {
-      sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 200)
+      // Ensure GPU has retired all in-flight frames before CPU-writing shared texture
+      let targetValue = frameNumber
+      let signaled = sharedEvent.signaledValue
+      if signaled < targetValue {
+        sharedEvent.wait(untilSignaledValue: targetValue, timeoutMS: 200)
+      }
     }
     let w = simWidth
     let h = simHeight

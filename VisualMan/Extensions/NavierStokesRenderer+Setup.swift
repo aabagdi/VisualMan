@@ -50,22 +50,6 @@ extension NavierStokesRenderer {
     let u0: MTLTexture
   }
 
-  private nonisolated static func makePipeline(
-    _ name: String, library: MTLLibrary, compiler: any MTL4Compiler
-  ) -> MTLComputePipelineState? {
-    let functionDesc = MTL4LibraryFunctionDescriptor()
-    functionDesc.name = name
-    functionDesc.library = library
-    let pipelineDesc = MTL4ComputePipelineDescriptor()
-    pipelineDesc.computeFunctionDescriptor = functionDesc
-    do {
-      return try compiler.makeComputePipelineState(descriptor: pipelineDesc)
-    } catch {
-      logger.error("Failed to create pipeline '\(name)': \(error.localizedDescription)")
-      return nil
-    }
-  }
-
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
     guard let library = device.makeDefaultLibrary() else {
       logger.error("Failed to create default Metal library")
@@ -111,21 +95,6 @@ extension NavierStokesRenderer {
                      curl: curl, vorticityConfinement: vorticityConfinement,
                      macCormackCorrect: macCormackCorrect,
                      dyeDiffuse: dyeDiffuse)
-  }
-
-  static func createAllocatorsAndBuffers(device: MTLDevice)
-    -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
-    var allocators = [any MTL4CommandAllocator]()
-    var buffers = [MTLBuffer]()
-    for _ in 0..<maxFramesInFlight {
-      guard let allocator = device.makeCommandAllocator(),
-            let buffer = device.makeBuffer(length: uniformBufferSize, options: .storageModeShared) else {
-        return nil
-      }
-      allocators.append(allocator)
-      buffers.append(buffer)
-    }
-    return (allocators, buffers)
   }
 
   static func createArgumentTable(device: MTLDevice) -> (any MTL4ArgumentTable)? {
@@ -236,20 +205,7 @@ extension NavierStokesRenderer {
   }
 
   func drainPendingTAAHistoryReleases() {
-    guard !pendingTAAHistoryReleases.isEmpty else { return }
-    let signaled = sharedEvent.signaledValue
-    var removedAny = false
-    pendingTAAHistoryReleases.removeAll { entry in
-      if signaled >= entry.frame {
-        residencySet.removeAllocation(entry.texture)
-        removedAny = true
-        return true
-      }
-      return false
-    }
-    if removedAny {
-      residencySet.commit()
-    }
+    drainPendingReleases(&pendingTAAHistoryReleases)
   }
 
   func ensureTAAHistory(width: Int, height: Int) {

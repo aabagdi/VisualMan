@@ -23,17 +23,7 @@ extension LiquidLightRenderer {
     }
 
     func makePipeline(_ name: String) -> MTLComputePipelineState? {
-      let functionDesc = MTL4LibraryFunctionDescriptor()
-      functionDesc.name = name
-      functionDesc.library = library
-      let pipelineDesc = MTL4ComputePipelineDescriptor()
-      pipelineDesc.computeFunctionDescriptor = functionDesc
-      do {
-        return try compiler.makeComputePipelineState(descriptor: pipelineDesc)
-      } catch {
-        liquidLightLogger.error("Failed to create pipeline '\(name)': \(error.localizedDescription)")
-        return nil
-      }
+      Self.makePipeline(name, library: library, compiler: compiler)
     }
 
     guard let renderPipeline = makePipeline("liquidLightRender"),
@@ -44,26 +34,16 @@ extension LiquidLightRenderer {
     return Pipelines(render: renderPipeline, blur: blurPipeline)
   }
 
-  static func createAllocatorsAndBuffers(device: MTLDevice)
-    -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
-    var allocators = [any MTL4CommandAllocator]()
-    var buffers = [MTLBuffer]()
-    for _ in 0..<maxFramesInFlight {
-      guard let allocator = device.makeCommandAllocator(),
-            let buffer = device.makeBuffer(length: uniformBufferSize, options: .storageModeShared) else {
-        return nil
-      }
-      allocators.append(allocator)
-      buffers.append(buffer)
-    }
-    return (allocators, buffers)
-  }
-
   static func createArgumentTable(device: MTLDevice) -> (any MTL4ArgumentTable)? {
     let desc = MTL4ArgumentTableDescriptor()
     desc.maxTextureBindCount = 2
     desc.maxBufferBindCount = 1
-    return try? device.makeArgumentTable(descriptor: desc)
+    do {
+      return try device.makeArgumentTable(descriptor: desc)
+    } catch {
+      liquidLightLogger.error("Failed to create argument table: \(error.localizedDescription)")
+      return nil
+    }
   }
 
   func configureResidencySet() {

@@ -37,7 +37,10 @@ struct GameOfLifeVisualizerView: View {
       if let cached = cache.renderer(GameOfLifeRenderer.self) {
         renderer = cached
       } else {
-        renderer = await cache.renderer(GameOfLifeRenderer.self) { await GameOfLifeRenderer.create() }
+        renderer = await cache.renderer(GameOfLifeRenderer.self) {
+          guard let device = cache.sharedDevice ?? MTLCreateSystemDefaultDevice() else { return nil }
+          return await GameOfLifeRenderer.create(device: device)
+        }
       }
       if renderer == nil { rendererFailed = true }
     }

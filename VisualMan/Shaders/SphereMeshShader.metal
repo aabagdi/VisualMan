@@ -6,6 +6,7 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
 
 float sphereDisplacement(float3 p, float time, float bass, float mid, float treble) {
@@ -44,7 +45,7 @@ float3 sphereNormal(float3 p, float time, float bass, float mid, float treble) {
                                    float midLevel,
                                    float trebleLevel,
                                    float2 viewSize) {
-  float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
+  float2 uv = normalizedUV(position, viewSize);
   uv.y = -uv.y;
   
   float camAngle = time * 0.2;
@@ -72,42 +73,41 @@ float3 sphereNormal(float3 p, float time, float bass, float mid, float treble) {
   }
   
   half3 color;
-  
+  float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
+
   if (hit) {
     float3 normal = sphereNormal(p, time, bassLevel, midLevel, trebleLevel);
-    
+
     float3 lightDir = normalize(float3(1.0, 1.0, -0.5));
     float diffuse = max(dot(normal, lightDir), 0.0);
-    
+
     float3 halfVec = normalize(lightDir - rd);
     float specular = pow(max(dot(normal, halfVec), 0.0), 32.0);
-    
+
     float fresnel = pow(1.0 - max(dot(normal, -rd), 0.0), 3.0);
-    
+
     half3 baseColor = half3(
       0.3 + 0.7 * sin(normal.x * 3.0 + time + bassLevel * 2.0),
       0.3 + 0.7 * sin(normal.y * 3.0 + time * 1.3 + midLevel * 2.0),
       0.3 + 0.7 * sin(normal.z * 3.0 + time * 0.7 + trebleLevel * 2.0)
     );
-    
+
     baseColor = max(baseColor, half3(0.05));
-    
-    float audioEnergy = (bassLevel + midLevel + trebleLevel) / 3.0;
-    half3 rimColor = half3(0.4, 0.6, 1.0) * fresnel * (1.0 + audioEnergy * 2.0);
-    
+
+    half3 rimColor = half3(0.4, 0.6, 1.0) * fresnel * (1.0 + energy * 2.0);
+
     color = baseColor * (0.15 + diffuse * 0.7) + specular * half3(0.6) + rimColor;
-    
+
     float ao = 0.5 + 0.5 * sphereMap(p + normal * 0.1, time, bassLevel, midLevel, trebleLevel) / 0.1;
     ao = clamp(ao, 0.3, 1.0);
     color *= ao;
   } else {
     float bgGlow = exp(-length(uv) * 2.0) * 0.15;
-    float audioEnergy = (bassLevel + midLevel + trebleLevel) / 3.0;
-    color = half3(0.01, 0.01, 0.03) + half3(0.08, 0.12, 0.25) * bgGlow * (1.0 + audioEnergy);
-    
+    color = half3(0.01, 0.01, 0.03) + half3(0.08, 0.12, 0.25) * bgGlow * (1.0 + energy);
+
     float2 gridUV = fract(uv * 20.0) - 0.5;
     float dotBrightness = smoothstep(0.02, 0.0, length(gridUV));
-    color += half3(0.05, 0.08, 0.15) * dotBrightness * audioEnergy * 0.3;
+    color += half3(0.05, 0.08, 0.15) * dotBrightness * energy * 0.3;
   }
   
   color = tanh(color * 1.1);

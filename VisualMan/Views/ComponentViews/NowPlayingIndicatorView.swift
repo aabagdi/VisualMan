@@ -20,6 +20,7 @@ struct NowPlayingIndicatorView: View {
       }
     }
     .frame(width: 14, height: 12, alignment: .bottom)
+    .accessibilityHidden(true)
     .onChange(of: isAnimating, initial: true) {
       if isAnimating {
         startAnimating()

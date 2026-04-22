@@ -17,6 +17,15 @@ final class VisualizerRendererCache {
   private var renderers = [ObjectIdentifier: any MetalVisualizerRenderer]()
   private var inFlightTasks = [ObjectIdentifier: Task<Void, Never>]()
 
+  @ObservationIgnored
+  private(set) var sharedDevice: MTLDevice?
+
+  private func getOrCreateDevice() -> MTLDevice? {
+    if let device = sharedDevice { return device }
+    sharedDevice = MTLCreateSystemDefaultDevice()
+    return sharedDevice
+  }
+
   func renderer<R: MetalVisualizerRenderer>(_ type: R.Type) -> R? {
     renderers[ObjectIdentifier(type)] as? R
   }
@@ -42,9 +51,16 @@ final class VisualizerRendererCache {
   }
 
   func preWarm() async {
-    async let ns: NavierStokesRenderer? = renderer(NavierStokesRenderer.self) { await NavierStokesRenderer.create() }
-    async let ll: LiquidLightRenderer? = renderer(LiquidLightRenderer.self) { await LiquidLightRenderer.create() }
-    async let gol: GameOfLifeRenderer? = renderer(GameOfLifeRenderer.self) { await GameOfLifeRenderer.create() }
+    guard let device = getOrCreateDevice() else { return }
+    async let ns: NavierStokesRenderer? = renderer(
+      NavierStokesRenderer.self
+    ) { await NavierStokesRenderer.create(device: device) }
+    async let ll: LiquidLightRenderer? = renderer(
+      LiquidLightRenderer.self
+    ) { await LiquidLightRenderer.create(device: device) }
+    async let gol: GameOfLifeRenderer? = renderer(
+      GameOfLifeRenderer.self
+    ) { await GameOfLifeRenderer.create(device: device) }
     _ = await (ns, ll, gol)
   }
   
@@ -61,9 +77,12 @@ final class VisualizerRendererCache {
       return (renderer.sharedEvent, target)
     }
     renderers.removeAll()
+    sharedDevice = nil
     Task.detached {
-      for info in fenceInfo {
-        drainGPU(event: info.event, target: info.target)
+      await withTaskGroup(of: Void.self) { group in
+        for info in fenceInfo {
+          group.addTask { drainGPU(event: info.event, target: info.target) }
+        }
       }
     }
   }

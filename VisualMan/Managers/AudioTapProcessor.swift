@@ -126,8 +126,10 @@ final class AudioTapProcessor: Sendable {
   }
 
   func reset() async {
-    readIndex.store(writeIndex.load(ordering: .acquiring), ordering: .releasing)
-    sampleRateBits.store(0, ordering: .relaxed)
+    ringLock.withLock {
+      readIndex.store(writeIndex.load(ordering: .acquiring), ordering: .releasing)
+      sampleRateBits.store(0, ordering: .relaxed)
+    }
     await dspProcessor.reset()
   }
 }

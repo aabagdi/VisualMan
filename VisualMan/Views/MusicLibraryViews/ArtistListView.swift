@@ -43,6 +43,7 @@ struct ArtistListView: View {
             return
           }
           try? await Task.sleep(for: .milliseconds(300))
+          guard !Task.isCancelled else { return }
           filteredArtists = artists.filtered(by: searchText) {
             [$0.representativeItem?.artist]
           }

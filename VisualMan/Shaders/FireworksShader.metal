@@ -6,18 +6,8 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
-
-#define PI 3.141592653589793
-
-static float3 rand3(float seed) {
-  float2 seed2 = float2(seed, seed * 1.371);
-  
-  float3 p = float3(dot(seed2, float2(127.1, 311.7)),
-                    dot(seed2, float2(269.5, 183.3)),
-                    dot(seed2, float2(419.2, 371.9)));
-  return fract(sin(p) * 43758.5453);
-}
 
 [[stitchable]] half4 fireworks(float2 position,
                                half4 color,
@@ -29,7 +19,7 @@ static float3 rand3(float seed) {
                                float2 viewSize) {
   float t = fmod(time + 10.0, 36000.0);
   float aspectRatio = viewSize.x / viewSize.y;
-  float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
+  float2 uv = normalizedUV(position, viewSize);
   float3 col = float3(0.0);
   
   uint numExplosions = uint(clamp(floor(peakLevel * 10.0 + 5.0), 5.0, 15.0));
@@ -48,7 +38,7 @@ static float3 rand3(float seed) {
   }
   
   for (uint i = 0; i < numExplosions; i++) {
-    float3 r0 = rand3((float(i) + 1234.1939) + 641.6974);
+    float3 r0 = shaderRand3((float(i) + 1234.1939) + 641.6974);
     
     float2 origin = (float2(r0.x, r0.y) - 0.5) * 1.2;
     origin.x *= aspectRatio;
@@ -60,7 +50,7 @@ static float3 rand3(float seed) {
     
     if (bassLevel > 0.1) {
       for (uint b = 0; b < bassParticles; b += 3) {
-        float3 rand = rand3(float(i) * 963.31 + float(b) + 497.8943);
+        float3 rand = shaderRand3(float(i) * 963.31 + float(b) + 497.8943);
         float a1 = rand.x * PI * 2.0;
         float rScale1 = rand.y * 0.3;
         
@@ -83,7 +73,7 @@ static float3 rand3(float seed) {
     
     if (midLevel > 0.1) {
       for (uint m = 0; m < midParticles; m += 3) {
-        float3 rand = rand3(float(i) * 753.31 + float(m) + 297.8943);
+        float3 rand = shaderRand3(float(i) * 753.31 + float(m) + 297.8943);
         float a2 = rand.x * PI * 2.0;
         float rScale2 = rand.y * 0.25;
         
@@ -106,7 +96,7 @@ static float3 rand3(float seed) {
     
     if (trebleLevel > 0.1) {
       for (uint tr = 0; tr < trebleParticles; tr += 3) {
-        float3 rand = rand3(float(i) * 563.31 + float(tr) + 197.8943);
+        float3 rand = shaderRand3(float(i) * 563.31 + float(tr) + 197.8943);
         float a3 = rand.x * PI * 2.0;
         float rScale3 = rand.y * 0.2;
         

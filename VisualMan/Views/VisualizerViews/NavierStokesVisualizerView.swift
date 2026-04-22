@@ -36,7 +36,10 @@ struct NavierStokesVisualizerView: View {
       if let cached = cache.renderer(NavierStokesRenderer.self) {
         renderer = cached
       } else {
-        renderer = await cache.renderer(NavierStokesRenderer.self) { await NavierStokesRenderer.create() }
+        renderer = await cache.renderer(NavierStokesRenderer.self) {
+          guard let device = cache.sharedDevice ?? MTLCreateSystemDefaultDevice() else { return nil }
+          return await NavierStokesRenderer.create(device: device)
+        }
       }
       if renderer == nil { rendererFailed = true }
     }

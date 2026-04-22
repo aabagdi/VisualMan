@@ -82,6 +82,7 @@ struct ThreeDBarsVisualizerView: View {
             updateCameraPosition()
           }
       )
+      .accessibilityHidden(true)
       .onAppear {
         model.startSmoothing()
       }

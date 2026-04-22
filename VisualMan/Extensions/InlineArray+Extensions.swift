@@ -9,7 +9,7 @@ import Foundation
 
 extension InlineArray {
   func enumerated() -> [(Int, Self.Element)] {
-    indices.lazy.map { ($0, self[$0]) }
+    indices.map { ($0, self[$0]) }
   }
 }
 

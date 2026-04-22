@@ -59,7 +59,7 @@ half3 auroraColor(float t, float time, float bass, float treble) {
   float starBrightness = step(0.995, starNoise) * (0.3 + 0.7 * fract(starNoise * 100.0));
   skyColor += half3(starBrightness * 0.4);
   
-  float audioIntensity = (bassLevel + midLevel + trebleLevel) / 3.0;
+  float audioIntensity = audioEnergy(bassLevel, midLevel, trebleLevel);
   
   half3 auroraAccum = half3(0.0);
   

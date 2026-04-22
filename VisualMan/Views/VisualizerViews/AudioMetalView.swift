@@ -59,10 +59,6 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   class Coordinator: NSObject, MTKViewDelegate {
     let renderer: R
     var audioLevels: [1024 of Float] = .init(repeating: 0.0)
-    private var smoothedBass: Float = 0
-    private var smoothedMid: Float = 0
-    private var smoothedHigh: Float = 0
-    private var needsSeedSmoothing = true
     private var lastFrameTime: CFTimeInterval = 0
 
     private let blitPipeline: MTLRenderPipelineState?
@@ -227,12 +223,10 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       let mid = audioLevels.midLevel
       let high = audioLevels.highLevel
 
-      smoothAudioLevels(bass: bass, mid: mid, high: high)
-
       guard let intermediateTex = renderer.encodeFrame(
-        bass: smoothedBass,
-        mid: smoothedMid,
-        high: smoothedHigh,
+        bass: bass,
+        mid: mid,
+        high: high,
         drawableWidth: Int(drawableSize.width),
         drawableHeight: Int(drawableSize.height)
       ) else {
@@ -257,24 +251,6 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       renderEncoder.endEncoding()
 
       renderer.commitFrame(drawable: drawable)
-    }
-
-    private func smoothAudioLevels(bass: Float, mid: Float, high: Float) {
-      if needsSeedSmoothing {
-        smoothedBass = bass
-        smoothedMid = mid
-        smoothedHigh = high
-        needsSeedSmoothing = false
-      } else {
-        let bSmooth: Float = bass > smoothedBass ? 0.2 : 0.85
-        smoothedBass = smoothedBass * bSmooth + bass * (1.0 - bSmooth)
-
-        let mSmooth: Float = mid > smoothedMid ? 0.25 : 0.8
-        smoothedMid = smoothedMid * mSmooth + mid * (1.0 - mSmooth)
-
-        let hSmooth: Float = high > smoothedHigh ? 0.15 : 0.75
-        smoothedHigh = smoothedHigh * hSmooth + high * (1.0 - hSmooth)
-      }
     }
   }
 }

@@ -37,6 +37,7 @@ struct GenreListView: View {
             return
           }
           try? await Task.sleep(for: .milliseconds(300))
+          guard !Task.isCancelled else { return }
           filteredGenres = genres.filtered(by: searchText) {
             [$0.representativeItem?.genre]
           }

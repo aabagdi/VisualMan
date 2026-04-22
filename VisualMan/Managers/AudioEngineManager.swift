@@ -85,13 +85,18 @@ final class AudioEngineManager {
   }
   
   isolated deinit {
+    player?.stop()
+    engine?.mainMixerNode.removeTap(onBus: 0)
+    engine?.stop()
     displayLinkTask?.cancel()
     pauseDecayTask?.cancel()
     nowPlayingTask?.cancel()
     playbackContinuation?.finish()
+    stopSecurityScopedAccess()
     for observer in [interruptionObserver, routeChangeObserver, configChangeObserver].compactMap({ $0 }) {
       NotificationCenter.default.removeObserver(observer)
     }
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
   }
   
   private func setupAudioEngine() throws {
@@ -120,6 +125,7 @@ final class AudioEngineManager {
 
     player?.stop()
 
+    stopPauseDecay()
     stopDisplayLink()
     engine?.mainMixerNode.removeTap(onBus: 0)
 
@@ -182,6 +188,8 @@ final class AudioEngineManager {
         }
       }
       
+      installAudioTap(on: engine)
+
       playbackState = .playing
       startDisplayLink()
     } catch {
@@ -189,9 +197,7 @@ final class AudioEngineManager {
       stopDisplayLink()
       throw VMError.failedToPlay(underlying: error)
     }
-    
-    installAudioTap(on: engine)
-    
+
     player.play()
   }
   

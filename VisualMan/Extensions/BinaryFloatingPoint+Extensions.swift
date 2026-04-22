@@ -15,15 +15,36 @@ private let _positionalFormatter: DateComponentsFormatter = {
   return formatter
 }()
 
+private let _abbreviatedFormatter: DateComponentsFormatter = {
+  let formatter = DateComponentsFormatter()
+  formatter.allowedUnits = [.minute, .second]
+  formatter.unitsStyle = .abbreviated
+  formatter.zeroFormattingBehavior = .pad
+  return formatter
+}()
+
+private let _shortFormatter: DateComponentsFormatter = {
+  let formatter = DateComponentsFormatter()
+  formatter.allowedUnits = [.minute, .second]
+  formatter.unitsStyle = .short
+  formatter.zeroFormattingBehavior = .pad
+  return formatter
+}()
+
 extension BinaryFloatingPoint {
   func asTimeString(style: DateComponentsFormatter.UnitsStyle) -> String {
-    if style == .positional {
-      return _positionalFormatter.string(from: TimeInterval(self)) ?? ""
+    let formatter: DateComponentsFormatter = switch style {
+    case .positional: _positionalFormatter
+    case .abbreviated: _abbreviatedFormatter
+    case .short: _shortFormatter
+    default: {
+      let f = DateComponentsFormatter()
+      f.allowedUnits = [.minute, .second]
+      f.unitsStyle = style
+      f.zeroFormattingBehavior = .pad
+      return f
+    }()
     }
-    let formatter = DateComponentsFormatter()
-    formatter.allowedUnits = [.minute, .second]
-    formatter.unitsStyle = style
-    formatter.zeroFormattingBehavior = .pad
     return formatter.string(from: TimeInterval(self)) ?? ""
   }
 }

@@ -214,8 +214,8 @@ actor DSPProcessor {
       aWeightTable.withUnsafeElementPointer { aw in
         weightedMagnitudes.withUnsafeElementPointer { wm in
           var floor: Float = 1e-10
-          vDSP_vsadd(mag, 1, &floor, wm, 1, 1024)
-          vDSP_vmul(wm, 1, aw, 1, wm, 1, 1024)
+          vDSP_vsadd(mag, 1, &floor, wm, 1, vDSP_Length(Constants.spectrumSize))
+          vDSP_vmul(wm, 1, aw, 1, wm, 1, vDSP_Length(Constants.spectrumSize))
         }
       }
     }
@@ -223,16 +223,17 @@ actor DSPProcessor {
     weightedMagnitudes.withUnsafeElementPointer { wm in
       normalizedSpectrum.withUnsafeElementPointer { lm in
         var ref: Float = 1.0
-        vDSP_vdbcon(wm, 1, &ref, lm, 1, 1024, 1)
-        
+        let specLen = vDSP_Length(Constants.spectrumSize)
+        vDSP_vdbcon(wm, 1, &ref, lm, 1, specLen, 1)
+
         var offset: Float = Constants.dbOffset
-        vDSP_vsadd(lm, 1, &offset, lm, 1, 1024)
+        vDSP_vsadd(lm, 1, &offset, lm, 1, specLen)
         var range: Float = Constants.dbRange
-        vDSP_vsdiv(lm, 1, &range, lm, 1, 1024)
-        
+        vDSP_vsdiv(lm, 1, &range, lm, 1, specLen)
+
         var low: Float = 0.0
         var high: Float = 1.0
-        vDSP_vclip(lm, 1, &low, &high, lm, 1, 1024)
+        vDSP_vclip(lm, 1, &low, &high, lm, 1, specLen)
       }
     }
   }

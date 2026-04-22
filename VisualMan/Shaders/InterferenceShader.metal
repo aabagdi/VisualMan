@@ -6,9 +6,8 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
-
-#define PI 3.141592653589793
 
 static float calculateWave(float2 position,
                     float2 sourcePos,
@@ -48,7 +47,7 @@ static float calculateWave(float2 position,
   
   wave = sign(wave) * pow(abs(wave), 0.7);
   
-  float reflection = modulatedAmplitude * 0.3 * sin(phase + PI);
+  float reflection = modulatedAmplitude * 0.3 * sin(phase + M_PI_F);
   wave += reflection;
   
   wave = sign(wave) * pow(abs(wave), 0.8);
@@ -104,9 +103,9 @@ static float calculateParallaxLayer(float2 uv,
                                        float midLevel,
                                        float trebleLevel,
                                        float2 viewSize) {
-  float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
- 
-  float audioIntensity = (bassLevel + midLevel + trebleLevel) / 3.0;
+  float2 uv = normalizedUV(position, viewSize);
+
+  float audioIntensity = audioEnergy(bassLevel, midLevel, trebleLevel);
   
   audioIntensity = pow(audioIntensity, 1.5);
   

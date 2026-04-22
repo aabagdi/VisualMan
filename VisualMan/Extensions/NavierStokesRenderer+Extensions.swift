@@ -177,22 +177,6 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder)
   }
   
-  func blurDyeH(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(pipelines.blurH)
-    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
-    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
-    
-    dispatchGrid(encoder: encoder)
-  }
-  
-  func blurDyeV(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(pipelines.blurV)
-    argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
-    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
-    
-    dispatchGrid(encoder: encoder)
-  }
-
   func bloomThresholdBlurH(encoder: any MTL4ComputeCommandEncoder,
                            dst: MTLTexture,
                            size: Int,

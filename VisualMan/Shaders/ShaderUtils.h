@@ -11,6 +11,8 @@
 #include <metal_stdlib>
 using namespace metal;
 
+constant float PI = 3.14159265358979323846;
+
 inline float shaderHash(float2 p) {
   return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
 }
@@ -52,6 +54,14 @@ inline float shaderHash21(float2 p) {
   float3 p3 = fract(float3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
+}
+
+inline float audioEnergy(float bass, float mid, float treble) {
+  return (bass + mid + treble) * (1.0 / 3.0);
+}
+
+inline float2 normalizedUV(float2 position, float2 viewSize) {
+  return (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
 }
 
 #endif

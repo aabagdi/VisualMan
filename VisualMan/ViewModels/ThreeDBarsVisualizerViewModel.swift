@@ -22,6 +22,7 @@ extension ThreeDBarsVisualizerView {
       let stream = DisplayLinkStream()
       displayLinkStream = stream
       smoothingTask = Task { [weak self] in
+        defer { self?.smoothingTask = nil }
         for await _ in stream.frames {
           guard !Task.isCancelled else { break }
           self?.updateSmoothedValues()

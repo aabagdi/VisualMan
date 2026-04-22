@@ -37,7 +37,10 @@ struct LiquidLightVisualizerView: View {
       if let cached = cache.renderer(LiquidLightRenderer.self) {
         renderer = cached
       } else {
-        renderer = await cache.renderer(LiquidLightRenderer.self) { await LiquidLightRenderer.create() }
+        renderer = await cache.renderer(LiquidLightRenderer.self) {
+          guard let device = cache.sharedDevice ?? MTLCreateSystemDefaultDevice() else { return nil }
+          return await LiquidLightRenderer.create(device: device)
+        }
       }
       if renderer == nil { rendererFailed = true }
     }

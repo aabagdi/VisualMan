@@ -107,6 +107,8 @@ final class MusicLibraryAccessManager {
   }
 
   isolated deinit {
+    loadingTask?.cancel()
+    MPMediaLibrary.default().endGeneratingLibraryChangeNotifications()
     if let libraryObserver {
       NotificationCenter.default.removeObserver(libraryObserver)
     }

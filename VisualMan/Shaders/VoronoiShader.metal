@@ -6,9 +6,8 @@
 //
 
 #include <metal_stdlib>
+#include "ShaderUtils.h"
 using namespace metal;
-
-#define PI 3.141592653589793
 #define GOLD 1.618033988749895
 #define MAX_SEEDS 20
 
@@ -73,10 +72,10 @@ half3 getSeedColor(int index,
                                float midLevel,
                                float trebleLevel,
                                float2 viewSize) {
-  float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
-  
-  float audioEnergy = (bassLevel + midLevel + trebleLevel) / 3.0;
-  int numSeeds = int(mix(8.0, float(MAX_SEEDS), audioEnergy));
+  float2 uv = normalizedUV(position, viewSize);
+
+  float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
+  int numSeeds = int(mix(8.0, float(MAX_SEEDS), energy));
   
   float minDist = 1000.0;
   float secondMinDist = 1000.0;
@@ -105,13 +104,13 @@ half3 getSeedColor(int index,
   float edgeGlow = 1.0 - edgeFactor;
   edgeGlow = pow(edgeGlow, 3.0);
   
-  half3 edgeColor = half3(1.0, 1.0, 1.0) * edgeGlow * audioEnergy;
-  
+  half3 edgeColor = half3(1.0, 1.0, 1.0) * edgeGlow * energy;
+
   half3 finalColor = cellColor + edgeColor * 0.5;
-  
+
   finalColor += half3(0.05, 0.05, 0.1) * (1.0 - minDist);
-  
-  finalColor *= 0.8 + audioEnergy * 0.4;
+
+  finalColor *= 0.8 + energy * 0.4;
   
   return half4(finalColor, 1.0);
 }

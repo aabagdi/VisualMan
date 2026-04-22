@@ -18,9 +18,10 @@ struct SmoothedAudio {
   private static let highTau: Float = 0.008
 
   mutating func update(from levels: borrowing [1024 of Float], dt: Float) {
-    let bassAlpha = 1 - exp(-dt / Self.bassTau)
-    let midAlpha = 1 - exp(-dt / Self.midTau)
-    let highAlpha = 1 - exp(-dt / Self.highTau)
+    let safeDt = max(dt, 1e-6)
+    let bassAlpha = 1 - exp(-safeDt / Self.bassTau)
+    let midAlpha = 1 - exp(-safeDt / Self.midTau)
+    let highAlpha = 1 - exp(-safeDt / Self.highTau)
     bass += (levels.bassLevel - bass) * bassAlpha
     mid += (levels.midLevel - mid) * midAlpha
     high += (levels.highLevel - high) * highAlpha

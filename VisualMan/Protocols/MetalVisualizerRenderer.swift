@@ -38,6 +38,54 @@ extension MetalVisualizerRenderer {
   func reset() {}
   func prepareForResume() {}
 
+  static func createAllocatorsAndBuffers(device: MTLDevice)
+    -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
+    var allocators = [any MTL4CommandAllocator]()
+    var buffers = [MTLBuffer]()
+    for _ in 0..<maxFramesInFlight {
+      guard let allocator = device.makeCommandAllocator(),
+            let buffer = device.makeBuffer(length: uniformBufferSize, options: .storageModeShared) else {
+        return nil
+      }
+      allocators.append(allocator)
+      buffers.append(buffer)
+    }
+    return (allocators, buffers)
+  }
+
+  nonisolated static func makePipeline(
+    _ name: String, library: MTLLibrary, compiler: any MTL4Compiler
+  ) -> MTLComputePipelineState? {
+    let functionDesc = MTL4LibraryFunctionDescriptor()
+    functionDesc.name = name
+    functionDesc.library = library
+    let pipelineDesc = MTL4ComputePipelineDescriptor()
+    pipelineDesc.computeFunctionDescriptor = functionDesc
+    do {
+      return try compiler.makeComputePipelineState(descriptor: pipelineDesc)
+    } catch {
+      rendererLogger.error("Failed to create pipeline '\(name)': \(error.localizedDescription)")
+      return nil
+    }
+  }
+
+  func drainPendingReleases(_ releases: inout [(frame: UInt64, texture: MTLTexture)]) {
+    guard !releases.isEmpty else { return }
+    let signaled = sharedEvent.signaledValue
+    var removedAny = false
+    releases.removeAll { entry in
+      if signaled >= entry.frame {
+        residencySet.removeAllocation(entry.texture)
+        removedAny = true
+        return true
+      }
+      return false
+    }
+    if removedAny {
+      residencySet.commit()
+    }
+  }
+
   func canRenderThisFrame() -> Bool {
     let nextFrame = frameNumber + 1
     if nextFrame > Self.maxFramesInFlight {

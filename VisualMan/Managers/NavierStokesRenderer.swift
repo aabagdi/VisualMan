@@ -107,19 +107,15 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   
   var currentUniformBuffer: MTLBuffer
   
-  static func create() async -> NavierStokesRenderer? {
-    let prepared = await Task.detached(priority: .userInitiated) {
-      guard let device = MTLCreateSystemDefaultDevice(),
-            let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
-        return nil as (MTLDevice, Pipelines)?
+  static func create(device: MTLDevice) async -> NavierStokesRenderer? {
+    let pipelines = await Task.detached(priority: .userInitiated) {
+      guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+        return nil as Pipelines?
       }
-      guard let pipelines = createPipelines(device: device, compiler: compiler) else {
-        return nil
-      }
-      return (device, pipelines)
+      return createPipelines(device: device, compiler: compiler)
     }.value
 
-    guard let (device, pipelines) = prepared else { return nil }
+    guard let pipelines else { return nil }
     guard let renderer = NavierStokesRenderer(device: device, pipelines: pipelines) else { return nil }
     renderer.warmUpGPU()
     return renderer
@@ -175,20 +171,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   }
 
   private func drainPendingDisplayReleases() {
-    guard !pendingDisplayReleases.isEmpty else { return }
-    let signaled = sharedEvent.signaledValue
-    var removedAny = false
-    pendingDisplayReleases.removeAll { entry in
-      if signaled >= entry.frame {
-        residencySet.removeAllocation(entry.texture)
-        removedAny = true
-        return true
-      }
-      return false
-    }
-    if removedAny {
-      residencySet.commit()
-    }
+    drainPendingReleases(&pendingDisplayReleases)
   }
 
   private func ensureDisplayIntermediate(width: Int, height: Int) -> Bool {

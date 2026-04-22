@@ -33,6 +33,7 @@ struct PlaylistListView: View {
             return
           }
           try? await Task.sleep(for: .milliseconds(300))
+          guard !Task.isCancelled else { return }
           filteredPlaylists = playlists.filtered(by: searchText) {
             [$0.value(forProperty: MPMediaPlaylistPropertyName) as? String]
           }

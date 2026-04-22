@@ -57,30 +57,30 @@ half3 inkPalette(float t, float bass, float treble) {
                             float midLevel,
                             float trebleLevel,
                             float2 viewSize) {
-  float2 uv = (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
-  
-  float audioEnergy = (bassLevel + midLevel + trebleLevel) / 3.0;
-  
+  float2 uv = normalizedUV(position, viewSize);
+
+  float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
+
   float warpStrength = 1.5 + bassLevel * 1.5;
-  
+
   float2 warped = inkWarp(uv * 2.0, time * (0.8 + midLevel * 0.4), warpStrength);
-  
+
   float pattern = inkFBM(warped, 5);
-  
+
   float2 warped2 = inkWarp(uv * 3.5 + float2(10.0, 10.0), time * 1.2, warpStrength * 0.7);
   float detail = inkFBM(warped2, 4);
-  
+
   float combined = pattern * 0.65 + detail * 0.35;
-  
+
   float2 toCenter = uv;
   float dist = length(toCenter);
   float angle = atan2(toCenter.y, toCenter.x);
   float vortex = sin(angle * 3.0 + dist * 5.0 - time * (1.0 + bassLevel) * 1.5) * 0.5 + 0.5;
-  combined = mix(combined, vortex, 0.2 * audioEnergy);
-  
+  combined = mix(combined, vortex, 0.2 * energy);
+
   half3 color = inkPalette(combined, bassLevel, trebleLevel);
-  
-  color *= 0.7 + audioEnergy * 0.5;
+
+  color *= 0.7 + energy * 0.5;
   
   float flowGrad = abs(inkFBM(warped + 0.01, 4) - pattern) * 30.0;
   flowGrad = clamp(flowGrad, 0.0, 1.0);
