@@ -322,7 +322,8 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   half rimIntensity = half(rimOuter * rimInner);
 
   half cellSizeScale = half(0.45 + 0.55 * smoothstep(0.05, 0.25, v1.dist1));
-  half contactLine = half(smoothstep(0.065, 0.008, minEdge)) * cellSizeScale;
+  half contactLine = half(smoothstep(0.008, 0.065, minEdge)) * cellSizeScale;
+  contactLine = 1.0h - contactLine;
   result *= (1.0h - contactLine * 0.45h);
 
   half3 tint = iridescence * 2.0h;

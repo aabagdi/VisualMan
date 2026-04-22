@@ -9,23 +9,15 @@
 #include "ShaderUtils.h"
 using namespace metal;
 
-float inkFBM(float2 p, int octaves) {
-  float value = 0.0;
-  float amplitude = 0.5;
-  float2 pos = p;
-  float2x2 rot = float2x2(0.8, -0.6, 0.6, 0.8);
-  
-  for (int i = 0; i < octaves; i++) {
-    value += amplitude * shaderNoise(pos);
-    pos = rot * pos * 2.0 + float2(3.7, 1.3);
-    amplitude *= 0.5;
-  }
-  return value;
+constant float2x2 inkRot = float2x2(0.8, -0.6, 0.6, 0.8);
+
+inline float inkFBM(float2 p, int octaves) {
+  return shaderFBM(p, octaves, inkRot, float2(3.7, 1.3));
 }
 
 float2 inkWarp(float2 p, float time, float intensity) {
   float2 q = float2(
-    inkFBM(p + float2(0.0, 0.0) + time * 0.15, 4),
+    inkFBM(p + time * 0.15, 4),
     inkFBM(p + float2(5.2, 1.3) + time * 0.12, 4)
   );
   

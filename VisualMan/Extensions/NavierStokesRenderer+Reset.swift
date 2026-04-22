@@ -13,6 +13,8 @@ extension NavierStokesRenderer {
     prevBass = 0
     prevMid = 0
 
+    sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 200)
+
     guard let allocator = device.makeCommandAllocator(),
           let resetCmd = device.makeCommandBuffer() else { return }
 

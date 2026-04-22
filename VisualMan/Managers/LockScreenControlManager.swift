@@ -94,12 +94,16 @@ final class LockScreenControlManager {
   }
   
   func activate() {
-    let commandCenter = MPRemoteCommandCenter.shared()
-    commandCenter.playCommand.isEnabled = true
-    commandCenter.pauseCommand.isEnabled = true
-    commandCenter.previousTrackCommand.isEnabled = true
-    commandCenter.nextTrackCommand.isEnabled = true
-    commandCenter.changePlaybackPositionCommand.isEnabled = true
+    if commandTargets.isEmpty {
+      setupRemoteTransportControls()
+    } else {
+      let commandCenter = MPRemoteCommandCenter.shared()
+      commandCenter.playCommand.isEnabled = true
+      commandCenter.pauseCommand.isEnabled = true
+      commandCenter.previousTrackCommand.isEnabled = true
+      commandCenter.nextTrackCommand.isEnabled = true
+      commandCenter.changePlaybackPositionCommand.isEnabled = true
+    }
   }
   
   func cleanup() {

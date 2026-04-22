@@ -26,17 +26,8 @@ struct PlaylistListView: View {
             Text(playlist.value(forProperty: MPMediaPlaylistPropertyName) as? String ?? "Unknown")
           }
         }
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-        .task(id: searchText) {
-          if searchText.isEmpty {
-            filteredPlaylists = nil
-            return
-          }
-          try? await Task.sleep(for: .milliseconds(300))
-          guard !Task.isCancelled else { return }
-          filteredPlaylists = playlists.filtered(by: searchText) {
-            [$0.value(forProperty: MPMediaPlaylistPropertyName) as? String]
-          }
+        .debouncedSearchable(text: $searchText, results: $filteredPlaylists, source: playlists) {
+          [$0.value(forProperty: MPMediaPlaylistPropertyName) as? String]
         }
       } else {
         Text("No playlists found!")

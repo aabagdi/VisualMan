@@ -17,8 +17,8 @@ struct GenreDetailView: View {
       NavigationLink(destination: AlbumDetailView(album: album)) {
         AlbumRowView(album: album)
       }
-      .toolbarVisibility(.hidden, for: .tabBar)
     }
+    .toolbarVisibility(.hidden, for: .tabBar)
     .navigationTitle(genre)
   }
 }

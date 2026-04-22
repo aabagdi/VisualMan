@@ -202,6 +202,8 @@ extension NavierStokesRenderer {
     commandQueue.commit([commandBuffer])
     commandQueue.signalEvent(sharedEvent, value: warmupFrame)
     frameNumber = warmupFrame
+
+    sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 200)
   }
 
   func drainPendingTAAHistoryReleases() {

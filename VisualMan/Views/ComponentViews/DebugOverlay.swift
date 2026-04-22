@@ -22,5 +22,6 @@ struct DebugOverlay: View {
     .background(.black.opacity(0.5))
     .foregroundStyle(.white)
     .font(.caption)
+    .accessibilityHidden(true)
   }
 }

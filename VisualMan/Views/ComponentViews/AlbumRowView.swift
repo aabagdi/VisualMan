@@ -43,5 +43,6 @@ struct AlbumRowView: View {
       Spacer()
     }
     .padding(.vertical, 2)
+    .accessibilityElement(children: .combine)
   }
 }

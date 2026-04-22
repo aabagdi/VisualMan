@@ -35,7 +35,8 @@ float3 sphereNormal(float3 p, float time, float bass, float mid, float treble) {
     sphereMap(p + float3(0, 0, eps), time, bass, mid, treble) -
     sphereMap(p - float3(0, 0, eps), time, bass, mid, treble)
   );
-  return normalize(n);
+  float len = length(n);
+  return len > 1e-6 ? n / len : float3(0.0, 1.0, 0.0);
 }
 
 [[ stitchable ]] half4 sphereMesh(float2 position,

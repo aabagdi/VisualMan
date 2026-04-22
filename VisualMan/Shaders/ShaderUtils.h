@@ -64,4 +64,15 @@ inline float2 normalizedUV(float2 position, float2 viewSize) {
   return (position - viewSize * 0.5) / min(viewSize.x, viewSize.y);
 }
 
+inline float shaderFBM(float2 p, int octaves, float2x2 rot = float2x2(1,0,0,1), float2 offset = float2(0)) {
+  float value = 0.0;
+  float amplitude = 0.5;
+  for (int i = 0; i < octaves; i++) {
+    value += amplitude * shaderNoise(p);
+    p = rot * p * 2.0 + offset;
+    amplitude *= 0.5;
+  }
+  return value;
+}
+
 #endif

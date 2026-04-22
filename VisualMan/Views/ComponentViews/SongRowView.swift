@@ -27,5 +27,7 @@ struct SongRowView: View {
           .font(.caption2)
       }
     }
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(isCurrentSong ? .isSelected : [])
   }
 }

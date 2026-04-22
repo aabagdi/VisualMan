@@ -19,25 +19,25 @@ using namespace metal;
   half3 finalColor = half3(0.0);
   const int aa = 2;
 
+  float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
+  float cReal = -0.4 + bassLevel * 0.3 * sin(time * 0.5);
+  float cImag = 0.6 + trebleLevel * 0.2 * cos(time * 0.7);
+  float rotation = midLevel * time * 0.2;
+  float cosR = fast::cos(rotation);
+  float sinR = fast::sin(rotation);
+
   for (int sx = 0; sx < aa; sx++) {
     for (int sy = 0; sy < aa; sy++) {
       float2 offset = float2(float(sx), float(sy)) / float(aa) - 0.5;
       float2 samplePos = position + offset;
-      
+
       float2 uv = normalizedUV(samplePos, viewSize) * 4.0;
 
-      float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
-      float cReal = -0.4 + bassLevel * 0.3 * sin(time * 0.5);
-      float cImag = 0.6 + trebleLevel * 0.2 * cos(time * 0.7);
-      
-      float rotation = midLevel * time * 0.2;
-      float cosR = fast::cos(rotation);
-      float sinR = fast::sin(rotation);
       float2 rotatedUV = float2(
                                 uv.x * cosR - uv.y * sinR,
                                 uv.x * sinR + uv.y * cosR
                                 );
-      
+
       float2 z = rotatedUV;
       float minDist = 1000.0;
       float orbitTrap = 1000.0;

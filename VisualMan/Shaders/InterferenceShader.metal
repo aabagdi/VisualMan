@@ -47,7 +47,7 @@ static float calculateWave(float2 position,
   
   wave = sign(wave) * pow(abs(wave), 0.7);
   
-  float reflection = modulatedAmplitude * 0.3 * sin(phase + M_PI_F);
+  float reflection = modulatedAmplitude * 0.3 * sin(phase + PI);
   wave += reflection;
   
   wave = sign(wave) * pow(abs(wave), 0.8);
@@ -67,9 +67,9 @@ static float calculateParallaxLayer(float2 uv,
   float depthScale = 1.0 + layerDepth * 2.0;
   parallaxUV *= depthScale;
   
-  float angleOffset = layerDepth * 1.5708;
-  float2x2 rotation = float2x2(fast::cos(angleOffset), -fast::sin(angleOffset),
-                               fast::sin(angleOffset), fast::cos(angleOffset));
+  float angleOffset = layerDepth * (PI * 0.5);
+  float ca = fast::cos(angleOffset), sa = fast::sin(angleOffset);
+  float2x2 rotation = float2x2(ca, -sa, sa, ca);
   
   float2 source1 = rotation * float2(0.0, 0.5);
   float2 source2 = rotation * float2(-0.5, -0.5);

@@ -60,7 +60,7 @@ final class AudioTapProcessor: Sendable {
     let n = samples.count
     guard n > 0, let src = samples.baseAddress else { return }
 
-    sampleRateBits.store(sampleRate.bitPattern, ordering: .relaxed)
+    sampleRateBits.store(sampleRate.bitPattern, ordering: .releasing)
 
     let effective = min(n, Self.ringCapacity)
     let srcStart = src + (n - effective)
@@ -91,7 +91,7 @@ final class AudioTapProcessor: Sendable {
       count = Self.ringCapacity
     }
 
-    let rate = Float(bitPattern: sampleRateBits.load(ordering: .relaxed))
+    let rate = Float(bitPattern: sampleRateBits.load(ordering: .acquiring))
     guard rate > 0 else {
       readIndex.store(w, ordering: .releasing)
       return nil

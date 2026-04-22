@@ -69,6 +69,7 @@ kernel void fluidAdvect(texture2d<float, access::read> velocityIn [[texture(0)]]
                         uint2 gid [[thread_position_in_grid]]) {
   uint w = fieldOut.get_width();
   uint h = fieldOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
 
   constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
 
@@ -85,6 +86,7 @@ kernel void fluidDivergence(texture2d<float, access::read> velocity [[texture(0)
                             uint2 gid [[thread_position_in_grid]]) {
   uint w = velocity.get_width();
   uint h = velocity.get_height();
+  if (gid.x >= w || gid.y >= h) return;
 
   uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
   uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
@@ -163,6 +165,7 @@ kernel void fluidGradientSubtract(texture2d<float, access::read> pressure [[text
                                   uint2 gid [[thread_position_in_grid]]) {
   uint w = pressure.get_width();
   uint h = pressure.get_height();
+  if (gid.x >= w || gid.y >= h) return;
 
   uint2 left  = uint2(max(int(gid.x) - 1, 0), gid.y);
   uint2 right = uint2(min(gid.x + 1, w - 1), gid.y);
@@ -336,11 +339,6 @@ inline float2 curlNoiseOffset(float2 uv, float t) {
   float a = fast::sin(uv.x * 13.0 + t * 0.7)  + fast::cos(uv.y *  9.0 - t * 0.55);
   float b = fast::cos(uv.x *  7.0 - t * 0.6)  + fast::sin(uv.y * 11.0 + t * 0.45);
   return float2(a, b);
-}
-
-inline float srgbEncode(float c) {
-  c = max(c, 0.0);
-  return c <= 0.0031308 ? 12.92 * c : 1.055 * fast::pow(c, 1.0 / 2.4) - 0.055;
 }
 
 kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],

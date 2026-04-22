@@ -10,21 +10,23 @@ import MediaPlayer
 
 struct AlbumDetailView: View {
   let album: MPMediaItemCollection
-  
+  let sortedSongs: [MPMediaItem]
+  let year: String
+
   @Environment(AudioEngineManager.self) private var audioManager
-  
+
   private let placeholder = UIImage(resource: .artPlaceholder)
-  
-  private var year: String {
-    if let date = album.representativeItem?.releaseDate {
-      return String(Calendar.current.component(.year, from: date))
-    } else {
-      return "Unknown"
+
+  init(album: MPMediaItemCollection) {
+    self.album = album
+    self.sortedSongs = album.items.sorted {
+      ($0.discNumber, $0.albumTrackNumber) < ($1.discNumber, $1.albumTrackNumber)
     }
-  }
-  
-  private var sortedSongs: [MPMediaItem] {
-    album.items.sorted { ($0.discNumber, $0.albumTrackNumber) < ($1.discNumber, $1.albumTrackNumber) }
+    if let date = album.representativeItem?.releaseDate {
+      self.year = String(Calendar.current.component(.year, from: date))
+    } else {
+      self.year = "Unknown"
+    }
   }
   
   var body: some View {

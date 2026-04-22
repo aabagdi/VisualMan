@@ -33,6 +33,5 @@ struct AlbumArtWaveVisualizerView: View {
           .ignoresSafeArea()
       }
     }
-    // .debugOverlay(smoothedBass: audio.bass, smoothedMid: audio.mid, smoothedHigh: audio.high)
   }
 }

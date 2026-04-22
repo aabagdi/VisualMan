@@ -30,17 +30,8 @@ struct GenreListView: View {
             Text(genre.representativeItem?.genre ?? "Unknown")
           }
         }
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-        .task(id: searchText) {
-          if searchText.isEmpty {
-            filteredGenres = nil
-            return
-          }
-          try? await Task.sleep(for: .milliseconds(300))
-          guard !Task.isCancelled else { return }
-          filteredGenres = genres.filtered(by: searchText) {
-            [$0.representativeItem?.genre]
-          }
+        .debouncedSearchable(text: $searchText, results: $filteredGenres, source: genres) {
+          [$0.representativeItem?.genre]
         }
         .navigationTitle("Genres")
       } else {
@@ -49,10 +40,7 @@ struct GenreListView: View {
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
-    .onAppear {
-      cachedAlbumsByGenre = Dictionary(grouping: albums) { $0.representativeItem?.genre ?? "Unknown" }
-    }
-    .onChange(of: albums.count) {
+    .task(id: albums.count) {
       cachedAlbumsByGenre = Dictionary(grouping: albums) { $0.representativeItem?.genre ?? "Unknown" }
     }
   }

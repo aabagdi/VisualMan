@@ -94,6 +94,10 @@ struct MarqueeTextView<ResetID: Equatable>: View {
         startScrollAfterDelay()
       }
     }
+    .onDisappear {
+      resetTask?.cancel()
+      scrollTask?.cancel()
+    }
   }
   
   @State private var resetTask: Task<Void, Never>?

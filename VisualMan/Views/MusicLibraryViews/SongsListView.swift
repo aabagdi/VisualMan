@@ -36,17 +36,8 @@ struct SongsListView: View {
         .navigationDestination(for: SongSelection.self) { selection in
           MusicPlayerView(displayedSongs, startingIndex: selection.index)
         }
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-        .task(id: searchText) {
-          if searchText.isEmpty {
-            filteredSongs = nil
-            return
-          }
-          try? await Task.sleep(for: .milliseconds(300))
-          guard !Task.isCancelled else { return }
-          filteredSongs = songs.filtered(by: searchText) {
-            [$0.title, $0.artist]
-          }
+        .debouncedSearchable(text: $searchText, results: $filteredSongs, source: songs) {
+          [$0.title, $0.artist]
         }
       } else {
         Text("No songs found!")

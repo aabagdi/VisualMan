@@ -36,17 +36,8 @@ struct ArtistListView: View {
             album.representativeItem?.artist == selection.artistName
           })
         }
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-        .task(id: searchText) {
-          if searchText.isEmpty {
-            filteredArtists = nil
-            return
-          }
-          try? await Task.sleep(for: .milliseconds(300))
-          guard !Task.isCancelled else { return }
-          filteredArtists = artists.filtered(by: searchText) {
-            [$0.representativeItem?.artist]
-          }
+        .debouncedSearchable(text: $searchText, results: $filteredArtists, source: artists) {
+          [$0.representativeItem?.artist]
         }
       } else {
         Text("No artists found!")

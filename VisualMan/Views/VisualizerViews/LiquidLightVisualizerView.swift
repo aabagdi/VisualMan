@@ -9,40 +9,14 @@ import SwiftUI
 import MetalKit
 
 struct LiquidLightVisualizerView: View {
-  @Environment(VisualizerRendererCache.self) private var cache
-  @State private var renderer: LiquidLightRenderer?
-  @State private var rendererFailed = false
-
   let audioLevels: [1024 of Float]
 
   var body: some View {
-    ZStack {
-      Color.black
-      if let renderer {
-        AudioMetalView(renderer: renderer,
-                       audioLevels: audioLevels,
-                       config: MetalViewConfig(
-                           clearColor: MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1),
-                           backgroundColor: .black))
-      } else if rendererFailed {
-        ContentUnavailableView("Renderer Unavailable",
-                               systemImage: "exclamationmark.triangle",
-                               description: Text("Metal rendering is not available on this device."))
-      } else {
-        ProgressView()
-      }
-    }
-    .ignoresSafeArea()
-    .task {
-      if let cached = cache.renderer(LiquidLightRenderer.self) {
-        renderer = cached
-      } else {
-        renderer = await cache.renderer(LiquidLightRenderer.self) {
-          guard let device = cache.sharedDevice ?? MTLCreateSystemDefaultDevice() else { return nil }
-          return await LiquidLightRenderer.create(device: device)
-        }
-      }
-      if renderer == nil { rendererFailed = true }
-    }
+    MetalVisualizerContainerView<LiquidLightRenderer>(
+      audioLevels: audioLevels,
+      config: MetalViewConfig(
+        clearColor: MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1),
+        backgroundColor: .black),
+      factory: { device in await LiquidLightRenderer.create(device: device) })
   }
 }

@@ -106,32 +106,7 @@ struct ThreeDBarsVisualizerView: View {
   }
   
   private func barColor(index: Int, totalBars: Int) -> UIColor {
-    let position = Float(index) / Float(totalBars)
-    
-    if position < 0.33 {
-      let t = position / 0.33
-      return UIColor(
-        red: Double(t),
-        green: 1.0,
-        blue: 0.0,
-        alpha: 1.0
-      )
-    } else if position < 0.66 {
-      let t = (position - 0.33) / 0.33
-      return UIColor(
-        red: 1.0,
-        green: Double(1.0 - t * 0.5),
-        blue: 0.0,
-        alpha: 1.0
-      )
-    } else {
-      let t = (position - 0.66) / 0.34
-      return UIColor(
-        red: 1.0,
-        green: Double(0.5 - t * 0.5),
-        blue: 0.0,
-        alpha: 1.0
-      )
-    }
+    let (r, g, b) = BarView.barColorComponents(index: index, totalBars: totalBars)
+    return UIColor(red: r, green: g, blue: b, alpha: 1.0)
   }
 }

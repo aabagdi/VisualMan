@@ -9,17 +9,8 @@
 #include "ShaderUtils.h"
 using namespace metal;
 
-float auroraFBM(float2 p) {
-  float value = 0.0;
-  float amplitude = 0.5;
-  float2 pos = p;
-  
-  for (int i = 0; i < 4; i++) {
-    value += amplitude * shaderNoise(pos);
-    pos *= 2.0;
-    amplitude *= 0.5;
-  }
-  return value;
+inline float auroraFBM(float2 p) {
+  return shaderFBM(p, 4);
 }
 
 half3 auroraColor(float t, float time, float bass, float treble) {

@@ -88,7 +88,9 @@ final class AudioEngineManager {
     player?.stop()
     engine?.mainMixerNode.removeTap(onBus: 0)
     engine?.stop()
+    displayLinkStream?.stop()
     displayLinkTask?.cancel()
+    pauseDecayStream?.stop()
     pauseDecayTask?.cancel()
     nowPlayingTask?.cancel()
     playbackContinuation?.finish()
@@ -112,7 +114,9 @@ final class AudioEngineManager {
     player = AVAudioPlayerNode()
     
     guard let engine,
-          let player else { return }
+          let player else {
+      throw VMError.nilEngineOrPlayer
+    }
     
     _ = engine.mainMixerNode
 

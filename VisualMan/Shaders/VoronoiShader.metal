@@ -21,8 +21,7 @@ float2 getSeedPosition(int index,
                        float time,
                        float bassLevel,
                        float midLevel,
-                       float trebleLevel,
-                       float2 viewSize) {
+                       float trebleLevel) {
   float t = time + float(index) * GOLD;
   
   float angle = t * 0.5 + float(index) * PI * 2.0 / float(MAX_SEEDS);
@@ -82,7 +81,7 @@ half3 getSeedColor(int index,
   int closestSeed = 0;
   
   for (int i = 0; i < numSeeds; i++) {
-    float2 seedPos = getSeedPosition(i, time, bassLevel, midLevel, trebleLevel, viewSize);
+    float2 seedPos = getSeedPosition(i, time, bassLevel, midLevel, trebleLevel);
     float dist = length(uv - seedPos);
     
     if (dist < minDist) {

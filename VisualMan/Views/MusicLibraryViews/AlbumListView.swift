@@ -123,7 +123,7 @@ struct AlbumListView: View {
             }
             
             Section {
-              if !albums.isEmpty {
+              if !displayedAlbums.isEmpty {
                 ForEach(displayedAlbums, id: \.persistentID) { album in
                   NavigationLink(destination: AlbumDetailView(album: album)) {
                     AlbumRowView(album: album)
@@ -141,17 +141,8 @@ struct AlbumListView: View {
         }
       }
       .listStyle(.insetGrouped)
-      .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-      .task(id: searchText) {
-        if searchText.isEmpty {
-          filteredAlbums = nil
-          return
-        }
-        try? await Task.sleep(for: .milliseconds(300))
-        guard !Task.isCancelled else { return }
-        filteredAlbums = albums.filtered(by: searchText) {
-          [$0.representativeItem?.albumTitle, $0.representativeItem?.artist]
-        }
+      .debouncedSearchable(text: $searchText, results: $filteredAlbums, source: albums) {
+        [$0.representativeItem?.albumTitle, $0.representativeItem?.artist]
       }
       .navigationTitle("Library")
     case .denied, .notDetermined:
