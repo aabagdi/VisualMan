@@ -26,7 +26,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     mtkView.delegate = context.coordinator
     mtkView.preferredFramesPerSecond = 120
     mtkView.colorPixelFormat = .bgra8Unorm
-    mtkView.framebufferOnly = true
+    mtkView.framebufferOnly = false
     mtkView.isPaused = false
     mtkView.enableSetNeedsDisplay = false
     mtkView.clearColor = config.clearColor
@@ -75,6 +75,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var framesRendered: Int = 0
     private var gpuRampedUp = false
     private let rampUpFrameThreshold = 30
+    private var hasEverPresented = false
 
     init(renderer: R) {
       self.renderer = renderer
@@ -220,32 +221,52 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       let blitPipeline = blitPipeline
       guard let blitPipeline, !blitArgumentTables.isEmpty else { return }
 
-      guard let intermediateTex = renderer.encodeFrame(
+      let intermediateTex = renderer.encodeFrame(
         bass: audioLevels.bassLevel,
         mid: audioLevels.midLevel,
         high: audioLevels.highLevel,
         drawableWidth: Int(drawableSize.width),
         drawableHeight: Int(drawableSize.height)
-      ) else {
-        return
-      }
+      )
 
       guard let renderPassDesc = view.currentMTL4RenderPassDescriptor,
             let drawable = view.currentDrawable else {
-        commitWithoutDrawable()
+        if intermediateTex != nil {
+          commitWithoutDrawable()
+        }
         return
       }
       renderPassDesc.colorAttachments[0].loadAction = .clear
       renderPassDesc.colorAttachments[0].storeAction = .store
 
-      guard let renderEncoder = renderer.commandBuffer.makeRenderCommandEncoder(
-              descriptor: renderPassDesc) else {
-        commitWithoutDrawable()
-        return
+      if let intermediateTex {
+        guard let renderEncoder = renderer.commandBuffer.makeRenderCommandEncoder(
+                descriptor: renderPassDesc) else {
+          commitWithoutDrawable()
+          return
+        }
+        encodeBlit(renderEncoder, pipeline: blitPipeline, texture: intermediateTex)
+        renderer.commitFrame(drawable: drawable)
+        hasEverPresented = true
+      } else if !hasEverPresented {
+        presentClearedDrawable(renderPassDesc: renderPassDesc, drawable: drawable)
+        hasEverPresented = true
       }
-      encodeBlit(renderEncoder, pipeline: blitPipeline, texture: intermediateTex)
+    }
 
-      renderer.commitFrame(drawable: drawable)
+    private func presentClearedDrawable(renderPassDesc: MTL4RenderPassDescriptor,
+                                        drawable: CAMetalDrawable) {
+      guard let allocator = renderer.device.makeCommandAllocator(),
+            let cmdBuf = renderer.device.makeCommandBuffer() else { return }
+      cmdBuf.beginCommandBuffer(allocator: allocator)
+      if let encoder = cmdBuf.makeRenderCommandEncoder(descriptor: renderPassDesc) {
+        encoder.endEncoding()
+      }
+      cmdBuf.endCommandBuffer()
+      renderer.commandQueue.commit([cmdBuf])
+      renderer.commandQueue.waitForDrawable(drawable)
+      renderer.commandQueue.signalDrawable(drawable)
+      drawable.present()
     }
 
     private func commitWithoutDrawable() {
