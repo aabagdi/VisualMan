@@ -97,16 +97,20 @@ extension NavierStokesRenderer {
                      dyeDiffuse: dyeDiffuse)
   }
 
-  static func createArgumentTable(device: MTLDevice) -> (any MTL4ArgumentTable)? {
+  static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
     let desc = MTL4ArgumentTableDescriptor()
     desc.maxTextureBindCount = 7
     desc.maxBufferBindCount = 3
-    do {
-      return try device.makeArgumentTable(descriptor: desc)
-    } catch {
-      logger.error("Failed to create argument table: \(error.localizedDescription)")
-      return nil
+    var tables = [any MTL4ArgumentTable]()
+    for _ in 0..<maxFramesInFlight {
+      do {
+        tables.append(try device.makeArgumentTable(descriptor: desc))
+      } catch {
+        logger.error("Failed to create argument table: \(error.localizedDescription)")
+        return nil
+      }
     }
+    return tables
   }
 
   static func createResidencySet(device: MTLDevice) -> MTLResidencySet? {

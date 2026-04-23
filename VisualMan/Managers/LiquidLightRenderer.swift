@@ -76,7 +76,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   static let maxFramesInFlight: UInt64 = 3
   var commandAllocators = [any MTL4CommandAllocator]()
   var commandBuffer: any MTL4CommandBuffer
-  var argumentTable: any MTL4ArgumentTable
+  var argumentTables: [any MTL4ArgumentTable]
   var uniformBuffers = [MTLBuffer]()
   var uniformOffset: Int = 0
   static let uniformBufferSize: Int = 4096
@@ -126,7 +126,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     let uniformBuffers = allocatorsAndBuffers.buffers
     guard let firstUniformBuffer = uniformBuffers.first else { return nil }
 
-    guard let argumentTable = Self.createArgumentTable(device: device) else { return nil }
+    guard let argumentTables = Self.createArgumentTables(device: device) else { return nil }
 
     let setDesc = MTLResidencySetDescriptor()
     setDesc.initialCapacity = 4
@@ -141,7 +141,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     self.commandAllocators = commandAllocators
     self.uniformBuffers = uniformBuffers
     self.currentUniformBuffer = firstUniformBuffer
-    self.argumentTable = argumentTable
+    self.argumentTables = argumentTables
     self.renderPipeline = pipelines.render
     self.blurPipeline = pipelines.blur
     self.residencySet = residencySet
@@ -274,6 +274,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
 
     renderBlur(encoder: encoder, input: intermediateTex, output: finalTex, audio: smoothed)
 
+    encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
     encoder.endEncoding()
 
     return finalTex

@@ -23,7 +23,7 @@ protocol MetalVisualizerRenderer: AnyObject {
   var currentUniformBuffer: MTLBuffer { get set }
   var uniformOffset: Int { get set }
   var residencySet: MTLResidencySet { get }
-  var argumentTable: any MTL4ArgumentTable { get }
+  var argumentTables: [any MTL4ArgumentTable] { get }
 
   static var maxFramesInFlight: UInt64 { get }
   static var uniformBufferSize: Int { get }
@@ -35,6 +35,10 @@ protocol MetalVisualizerRenderer: AnyObject {
 }
 
 extension MetalVisualizerRenderer {
+  var argumentTable: any MTL4ArgumentTable {
+    argumentTables[Int(frameNumber % Self.maxFramesInFlight)]
+  }
+
   func reset() {}
   func prepareForResume() {}
 
@@ -143,7 +147,14 @@ extension MetalVisualizerRenderer {
   }
 
   func beginFrame() -> (any MTL4ComputeCommandEncoder)? {
-    guard canRenderThisFrame() else { return nil }
+    let nextFrame = frameNumber + 1
+    if nextFrame > Self.maxFramesInFlight {
+      let waitValue = nextFrame - Self.maxFramesInFlight
+      if sharedEvent.signaledValue < waitValue {
+        sharedEvent.wait(untilSignaledValue: waitValue, timeoutMS: 16)
+        guard sharedEvent.signaledValue >= waitValue else { return nil }
+      }
+    }
     frameNumber += 1
     let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
     let allocator = commandAllocators[frameIndex]

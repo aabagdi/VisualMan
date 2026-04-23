@@ -40,6 +40,7 @@ extension GameOfLifeRenderer {
     let simSource = shouldStep ? localSimB : localSimA
     encodeRender(encoder: encoder, simSource: simSource, outputTex: displayTex, params: params)
 
+    encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
     encoder.endEncoding()
 
     pendingShouldStep = shouldStep

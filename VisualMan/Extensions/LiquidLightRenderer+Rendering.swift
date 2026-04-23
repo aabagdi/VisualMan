@@ -17,11 +17,13 @@ extension LiquidLightRenderer {
       dt = 0
       if gapResume {
         resumeSuppressionRemaining = Self.resumeFadeDuration
-        resumeFadeIn = 0
         envelope = .zero
         slowEnvelope = .zero
         smoothedBass = 0
         smoothedSpeed = 0.25
+        if gap > 2.0 {
+          resumeFadeIn = 0
+        }
       }
     } else {
       dt = Float(max(1.0 / 240.0, min(1.0 / 30.0, gap)))

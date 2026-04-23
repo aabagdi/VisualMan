@@ -82,7 +82,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   static let maxFramesInFlight: UInt64 = 3
   var commandAllocators = [any MTL4CommandAllocator]()
   var commandBuffer: any MTL4CommandBuffer
-  var argumentTable: any MTL4ArgumentTable
+  var argumentTables: [any MTL4ArgumentTable]
   var uniformBuffers = [MTLBuffer]()
   var uniformOffset: Int = 0
   static let uniformBufferSize: Int = 16384
@@ -132,7 +132,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     guard let allocatorsAndBuffers = Self.createAllocatorsAndBuffers(device: device),
           let firstUniformBuffer = allocatorsAndBuffers.buffers.first else { return nil }
 
-    guard let argumentTable = Self.createArgumentTable(device: device) else { return nil }
+    guard let argumentTables = Self.createArgumentTables(device: device) else { return nil }
     guard let textures = Self.createTextures(device: device) else { return nil }
     guard let residencySet = Self.createResidencySet(device: device) else { return nil }
 
@@ -143,7 +143,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.commandAllocators = allocatorsAndBuffers.allocators
     self.uniformBuffers = allocatorsAndBuffers.buffers
     self.currentUniformBuffer = firstUniformBuffer
-    self.argumentTable = argumentTable
+    self.argumentTables = argumentTables
     self.pipelines = pipelines
     self.velocityA = textures.velocityA
     self.velocityB = textures.velocityB
@@ -186,7 +186,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     }
 
     let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm_srgb,
+      pixelFormat: .bgra8Unorm,
       width: width,
       height: height,
       mipmapped: false
@@ -227,7 +227,11 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     if lastFrameTime == 0 {
       dt = 0
     } else {
-      dt = Float(max(1.0 / 240.0, min(1.0 / 30.0, now - lastFrameTime)))
+      let rawGap = now - lastFrameTime
+      dt = Float(max(1.0 / 240.0, min(1.0 / 30.0, rawGap)))
+      if rawGap > 0.1 {
+        taaHistoryValid = false
+      }
     }
     lastFrameTime = now
 
@@ -252,6 +256,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
       taaHistoryValid = true
     }
 
+    encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
     encoder.endEncoding()
 
     return displayTex

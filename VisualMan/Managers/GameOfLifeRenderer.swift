@@ -59,7 +59,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   static let maxFramesInFlight: UInt64 = 3
   var commandAllocators = [any MTL4CommandAllocator]()
   var commandBuffer: any MTL4CommandBuffer
-  var argumentTable: any MTL4ArgumentTable
+  var argumentTables: [any MTL4ArgumentTable]
   var uniformBuffers = [MTLBuffer]()
   var uniformOffset: Int = 0
   static let uniformBufferSize: Int = 4096
@@ -108,8 +108,12 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     let tableDesc = MTL4ArgumentTableDescriptor()
     tableDesc.maxTextureBindCount = 2
     tableDesc.maxBufferBindCount = 1
-    guard let argumentTable = try? device.makeArgumentTable(descriptor: tableDesc) else {
-      return nil
+    var argumentTables = [any MTL4ArgumentTable]()
+    for _ in 0..<Self.maxFramesInFlight {
+      guard let table = try? device.makeArgumentTable(descriptor: tableDesc) else {
+        return nil
+      }
+      argumentTables.append(table)
     }
 
     let setDesc = MTLResidencySetDescriptor()
@@ -125,7 +129,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     self.commandAllocators = allocators
     self.uniformBuffers = buffers
     self.currentUniformBuffer = firstBuffer
-    self.argumentTable = argumentTable
+    self.argumentTables = argumentTables
     self.stepPipeline = pipelines.step
     self.renderPipeline = pipelines.render
     self.residencySet = residencySet
