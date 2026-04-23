@@ -9,7 +9,7 @@
 #include "ShaderUtils.h"
 using namespace metal;
 
-float sphereDisplacement(float3 p, float time, float bass, float mid, float treble) {
+static float sphereDisplacement(float3 p, float time, float bass, float mid, float treble) {
   float d = sin(p.x * 3.0 + time * 0.8) * sin(p.y * 3.0 + time * 0.6) * sin(p.z * 2.5 + time * 0.7) * bass * 0.3;
   
   d += sin(p.x * 7.0 + time * 1.3) * sin(p.z * 7.0 + time * 1.1) * mid * 0.15;
@@ -19,13 +19,13 @@ float sphereDisplacement(float3 p, float time, float bass, float mid, float treb
   return d;
 }
 
-float sphereMap(float3 p, float time, float bass, float mid, float treble) {
+static float sphereMap(float3 p, float time, float bass, float mid, float treble) {
   float sphere = length(p) - 1.0;
   float disp = sphereDisplacement(p, time, bass, mid, treble);
   return sphere + disp;
 }
 
-float3 sphereNormal(float3 p, float time, float bass, float mid, float treble) {
+static float3 sphereNormal(float3 p, float time, float bass, float mid, float treble) {
   float eps = 0.002;
   float3 n = float3(
     sphereMap(p + float3(eps, 0, 0), time, bass, mid, treble) -
@@ -62,7 +62,7 @@ float3 sphereNormal(float3 p, float time, float bass, float mid, float treble) {
   float3 p = ro;
   bool hit = false;
   
-  for (int i = 0; i < 64; i++) {
+  for (int i = 0; i < 48; i++) {
     p = ro + rd * totalDist;
     float d = sphereMap(p, time, bassLevel, midLevel, trebleLevel);
     if (d < 0.001) {

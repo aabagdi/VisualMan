@@ -62,8 +62,7 @@ extension DSPProcessor {
       let term2 = f2 + c3
       let term3 = f2 + c4
       let term4 = f2 + c1
-      let sqrtTerm = sqrt(term2 * term3)
-      let den = term1 * sqrtTerm * term4
+      let den = term1 * sqrt(term2 * term3) * term4
       
       var aWeight: Float = 0.0
       if den > 0 && frequency > 10 {
@@ -109,8 +108,7 @@ extension DSPProcessor {
     var bars = [32 of Float](repeating: 0.0)
 
     var fftData = fftData
-
-    fftData.withUnsafeElementPointer { fft in
+    return fftData.withUnsafeElementPointer { fft in
       for i in 0..<Constants.barCount {
         let range = cachedBarBinRanges[i]
         let count = vDSP_Length(range.endBin - range.startBin)
@@ -137,9 +135,8 @@ extension DSPProcessor {
         bars[i] = tanh(bars[i] * Constants.tanhScale)
         bars[i] = max(0, min(1, bars[i]))
       }
+      return bars
     }
-
-    return bars
   }
   
   private func applyFrequencyBoosts(_ magnitude: Float, logCenter: Float) -> Float {

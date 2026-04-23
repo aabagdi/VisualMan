@@ -8,8 +8,6 @@
 import Metal
 import os
 
-private nonisolated let liquidLightLogger = Logger(subsystem: "com.VisualMan", category: "LiquidLightRenderer")
-
 extension LiquidLightRenderer {
   struct Pipelines {
     let render: MTLComputePipelineState
@@ -18,7 +16,7 @@ extension LiquidLightRenderer {
 
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
     guard let library = device.makeDefaultLibrary() else {
-      liquidLightLogger.error("Failed to create default Metal library")
+      logger.error("Failed to create default Metal library")
       return nil
     }
 
@@ -41,7 +39,7 @@ extension LiquidLightRenderer {
     do {
       return try device.makeArgumentTable(descriptor: desc)
     } catch {
-      liquidLightLogger.error("Failed to create argument table: \(error.localizedDescription)")
+      logger.error("Failed to create argument table: \(error.localizedDescription)")
       return nil
     }
   }

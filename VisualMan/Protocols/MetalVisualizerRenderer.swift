@@ -102,9 +102,10 @@ extension MetalVisualizerRenderer {
     guard end <= Self.uniformBufferSize else {
       assertionFailure("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
       rendererLogger.error("Uniform buffer overflow: need \(end) bytes, have \(Self.uniformBufferSize)")
-      (currentUniformBuffer.contents()).storeBytes(of: value, as: T.self)
-      uniformOffset = stride
-      return currentUniformBuffer.gpuAddress
+      let fallbackAligned = (0 + 15) & ~15
+      (currentUniformBuffer.contents() + fallbackAligned).storeBytes(of: value, as: T.self)
+      uniformOffset = fallbackAligned + stride
+      return currentUniformBuffer.gpuAddress + MTLGPUAddress(fallbackAligned)
     }
     (currentUniformBuffer.contents() + aligned).storeBytes(of: value, as: T.self)
     let addr = currentUniformBuffer.gpuAddress + MTLGPUAddress(aligned)

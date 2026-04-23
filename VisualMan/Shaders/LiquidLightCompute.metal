@@ -411,6 +411,7 @@ kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)
 
   float dynamicInner = params.innerRadius - params.bass * 0.15;
   float dynamicOuter = params.outerRadius - params.bass * 0.1;
+  dynamicOuter = max(dynamicOuter, dynamicInner + 0.01);
 
   float blurStrength = smoothstep(dynamicInner, dynamicOuter, dist);
   blurStrength *= blurStrength;

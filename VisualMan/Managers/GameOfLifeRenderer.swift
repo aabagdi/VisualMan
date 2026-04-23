@@ -171,7 +171,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   }
 
   func ensureSimTextures(drawableWidth: Int, drawableHeight: Int) {
-    guard simA == nil || simB == nil else { return }
+    guard simA == nil && simB == nil else { return }
 
     if let old = simA { residencySet.removeAllocation(old) }
     if let old = simB { residencySet.removeAllocation(old) }

@@ -245,8 +245,10 @@ extension NavierStokesRenderer {
       0.15 + 0.2 * sin(hue * .pi * 2.0 + 2.094),
       0.25 + 0.2 * sin(hue * .pi * 2.0 + 4.189)
     )
-    dyeSplats.append(SplatParams(position: SIMD2<Float>(center, center),
-                                 value: color * (0.3 + audioEnergy * 0.7),
-                                 radius: 90.0 * s))
+    if audioEnergy > 0.05 {
+      dyeSplats.append(SplatParams(position: SIMD2<Float>(center, center),
+                                   value: color * (0.3 + audioEnergy * 0.7),
+                                   radius: 90.0 * s))
+    }
   }
 }

@@ -31,10 +31,10 @@ static float calculateWave(float2 position,
   
   float carrierFreq = frequency;
   
-  float modFreq = 0.5 + audioLevel * 2.0;
-  
-  float effectiveModIndex = modIndex * audioLevel;
-  
+  float modFreq = 0.7;
+
+  float effectiveModIndex = modIndex * 0.3;
+
   float freqModulation = effectiveModIndex * sin(modFreq * time);
   
   float modulatedFrequency = carrierFreq * (1.0 + freqModulation);
@@ -121,7 +121,7 @@ static float calculateParallaxLayer(float2 uv,
     
     float layerWave = calculateParallaxLayer(uv, time, bassLevel, midLevel, trebleLevel, depth, parallaxOffset);
     
-    layerWave = tanh(layerWave * (0.5 - depth * 0.1));
+    layerWave = tanh(layerWave * (0.8 - depth * 0.1));
 
     half3 layerColor;
     
@@ -146,7 +146,7 @@ static float calculateParallaxLayer(float2 uv,
     
     float waveContribution = abs(layerWave);
 
-    waveContribution = pow(waveContribution, 1.2);
+    waveContribution = pow(waveContribution, 0.9);
     
     if (i < 3) {
       finalColor += layerColor * waveContribution * fogFactor * 0.4;
@@ -158,9 +158,9 @@ static float calculateParallaxLayer(float2 uv,
     finalColor += layerColor * edgeGlow * fogFactor * 0.2;
   }
   
-  float vignette = 1.0 - length(uv) * 0.5;
-  half3 vignetteColor = half3(0.1, 0.15, 0.3) * vignette;
-  finalColor += vignetteColor;
+  float vignette = 1.0 - dot(uv, uv) * 0.4;
+  vignette = clamp(vignette, 0.0, 1.0);
+  finalColor *= vignette;
   
   float smoothBass = pow(bassLevel, 1.5);
   float smoothMid = pow(midLevel, 1.5);
@@ -173,7 +173,7 @@ static float calculateParallaxLayer(float2 uv,
   float audioGlow = pow(audioIntensity, 1.2);
   finalColor *= 1.1 + audioGlow * 0.3;
   
-  finalColor = tanh(finalColor * 0.8) * 1.25;
+  finalColor = tanh(finalColor * 1.2);
   
   return half4(finalColor, 1.0);
 }

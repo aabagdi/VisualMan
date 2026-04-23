@@ -14,20 +14,24 @@ using namespace metal;
                                  float midLevel,
                                  float trebleLevel,
                                  float2 viewSize) {
+  float scale = min(viewSize.x, viewSize.y);
   float2 center = viewSize * 0.5;
   float2 toCenter = position - center;
   float distance = length(toCenter);
+  float normDist = distance / scale;
   float2 direction = distance > 1e-4 ? toCenter / distance : float2(0.0);
-  
-  float pulse = sin(distance * 0.03 - time * 2.5) * bassLevel * 25.0;
+
+  float pulse = sin(normDist * 12.0 - time * 2.5) * bassLevel * scale * 0.06;
   position += direction * pulse;
-  
-  float wave = sin(position.x * 0.015 + time * 1.8) * midLevel * 12.0;
-  float wave2 = sin(position.x * 0.025 - time * 2.5) * midLevel * 8.0;
+
+  float normX = position.x / scale;
+  float wave = sin(normX * 6.0 + time * 1.8) * midLevel * scale * 0.03;
+  float wave2 = sin(normX * 10.0 - time * 2.5) * midLevel * scale * 0.02;
   position.y += wave + wave2;
-  
-  float shimmerX = sin(position.y * 0.12 + time * 11.0) * trebleLevel * 8.0;
-  float shimmerY = cos(position.x * 0.1 + time * 13.0) * trebleLevel * 8.0;
+
+  float normY = position.y / scale;
+  float shimmerX = sin(normY * 48.0 + time * 11.0) * trebleLevel * scale * 0.02;
+  float shimmerY = cos(normX * 40.0 + time * 13.0) * trebleLevel * scale * 0.02;
   position += float2(shimmerX, shimmerY);
   
   return position;

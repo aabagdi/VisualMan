@@ -15,7 +15,7 @@ inline float inkFBM(float2 p, int octaves) {
   return shaderFBM(p, octaves, inkRot, float2(3.7, 1.3));
 }
 
-float2 inkWarp(float2 p, float time, float intensity) {
+static float2 inkWarp(float2 p, float time, float intensity) {
   float2 q = float2(
     inkFBM(p + time * 0.15, 4),
     inkFBM(p + float2(5.2, 1.3) + time * 0.12, 4)

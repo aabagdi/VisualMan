@@ -83,7 +83,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   let sharedEvent: MTLSharedEvent
   var frameNumber: UInt64 = 0
   let residencySet: MTLResidencySet
-  private static let logger = Logger(subsystem: "com.VisualMan", category: "LiquidLightRenderer")
+  nonisolated static let logger = Logger(subsystem: "com.VisualMan", category: "LiquidLightRenderer")
 
   var currentUniformBuffer: MTLBuffer
 

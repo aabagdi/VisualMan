@@ -11,14 +11,14 @@ using namespace metal;
 
 #define NUM_BLOBS 7
 
-float2 blobPosition(int index, float time, float bass, float mid) {
+static float2 blobPosition(int index, float time, float bass, float mid) {
   float i = float(index);
   float speed = 0.3 + mid * 0.5;
   
   float x = sin(time * speed * (0.4 + i * 0.15) + i * 2.0) * (0.3 + i * 0.05);
   float y = cos(time * speed * (0.3 + i * 0.12) + i * 1.7) * (0.35 + i * 0.04);
   
-  float expand = 1.0 + bass * 3.0;
+  float expand = 1.0 + bass * 1.5;
   return float2(x, y) * expand;
 }
 
@@ -39,7 +39,7 @@ float2 blobPosition(int index, float time, float bass, float mid) {
   float3 weightedColor = float3(0.0);
   float totalWeight = 0.0;
 
-  float hues[NUM_BLOBS] = {0.0, 0.04, 0.08, 0.95, 0.97, 0.02, 0.06};
+  float hues[NUM_BLOBS] = {0.0, 0.08, 0.15, 0.33, 0.55, 0.75, 0.90};
 
   for (int i = 0; i < NUM_BLOBS; i++) {
     float2 bPos = blobPosition(i, time, bassLevel, midLevel);

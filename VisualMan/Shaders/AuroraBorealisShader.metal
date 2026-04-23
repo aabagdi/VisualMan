@@ -14,7 +14,7 @@ inline float auroraFBM(float2 p) {
 }
 
 half3 auroraColor(float t, float time, float bass, float treble) {
-  float hueShift = time * 0.05 + bass * 0.3;
+  float hueShift = time * 0.15 + bass * 0.3;
   float phase = t + hueShift;
   
   half3 green = half3(0.1, 0.8, 0.3);

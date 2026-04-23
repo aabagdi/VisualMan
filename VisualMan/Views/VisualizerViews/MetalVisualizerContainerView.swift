@@ -18,10 +18,11 @@ struct MetalVisualizerContainerView<R: MetalVisualizerRenderer>: View {
   let factory: @MainActor (MTLDevice) async -> R?
 
   var body: some View {
+    let resolved = renderer ?? cache.renderer(R.self)
     ZStack {
       Color.black
-      if let renderer {
-        AudioMetalView(renderer: renderer,
+      if let resolved {
+        AudioMetalView(renderer: resolved,
                        audioLevels: audioLevels,
                        config: config)
       } else if rendererFailed {
@@ -34,6 +35,7 @@ struct MetalVisualizerContainerView<R: MetalVisualizerRenderer>: View {
     }
     .ignoresSafeArea()
     .task {
+      guard renderer == nil else { return }
       if let cached = cache.renderer(R.self) {
         renderer = cached
       } else {

@@ -10,7 +10,7 @@ import SwiftUI
 struct BarsVisualizerView: View {
   let visualizerBars: [32 of Float]
 
-  let barCount = 32
+  var barCount: Int { visualizerBars.count }
   let barSpacing: CGFloat = 2
   let minBarHeight: CGFloat = 4
 

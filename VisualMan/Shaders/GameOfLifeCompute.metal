@@ -113,7 +113,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
   const float3 bezelColor  = float3(0.350, 0.400, 0.180);
 
   float2 screenUV = float2(float(gid.x), float(gid.y)) / float2(float(outW), float(outH));
-  float2 vD = screenUV - float2(0.48, 0.45);
+  float2 vD = screenUV - float2(0.5, 0.5);
   float vignette = 1.0 - 0.35 * dot(vD, vD) * 4.0;
   vignette = saturate(vignette);
 

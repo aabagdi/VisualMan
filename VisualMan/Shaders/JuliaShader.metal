@@ -28,7 +28,7 @@ using namespace metal;
 
   for (int sx = 0; sx < aa; sx++) {
     for (int sy = 0; sy < aa; sy++) {
-      float2 offset = float2(float(sx), float(sy)) / float(aa) - 0.5;
+      float2 offset = (float2(float(sx), float(sy)) + 0.5) / float(aa) - 0.5;
       float2 samplePos = position + offset;
 
       float2 uv = normalizedUV(samplePos, viewSize) * 4.0;
@@ -96,7 +96,7 @@ using namespace metal;
         half3 glowColor = half3(0.4, 0.6, 1.0) * edgeFactor * energy;
         sampleColor += glowColor;
         
-        float noise = shaderHash(samplePos);
+        float noise = shaderHash(samplePos + float2(float(sx) * 7.23, float(sy) * 3.77));
         sampleColor += (noise - 0.5) * 0.02;
       }
       

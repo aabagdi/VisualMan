@@ -39,24 +39,18 @@ kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture
 
   float2 pos = float2(gid) + 0.5;
 
-  bool anyNearby = false;
-  for (uint i = 0; i < splatCount; i++) {
-    float2 diff = pos - splats[i].position;
-    if (dot(diff, diff) < 6.0 * splats[i].radius * splats[i].radius) {
-      anyNearby = true;
-      break;
-    }
-  }
-  if (!anyNearby) return;
-
   float4 current = field.read(gid);
+  bool anyHit = false;
   for (uint i = 0; i < splatCount; i++) {
     float2 diff = pos - splats[i].position;
     float dist2 = dot(diff, diff);
     float r2 = splats[i].radius * splats[i].radius;
+    if (dist2 >= 6.0 * r2) continue;
+    anyHit = true;
     float falloff = fast::exp(-dist2 / r2);
     current.xyz += splats[i].value * falloff;
   }
+  if (!anyHit) return;
   current.xyz = min(current.xyz, float3(1.5));
   field.write(current, gid);
 }

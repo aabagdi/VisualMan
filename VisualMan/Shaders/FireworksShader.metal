@@ -181,8 +181,8 @@ static inline void addLaunchTrail(thread float3 &col, float2 uv,
     float fanAngle = -fanHalfAngle + (float(i) / float(numSlots - 1u)) * 2.0 * fanHalfAngle;
 
     float localTime = t + (float(i) + 1.0) * 7.319;
-    float cycle = floor(localTime * 0.28 / cycleDuration);
-    float phase = fmod(localTime * 0.28, cycleDuration);
+    float cycle = floor(localTime * 0.38 / cycleDuration);
+    float phase = fmod(localTime * 0.38, cycleDuration);
 
     float3 r0 = shaderRand3(float(i) * 347.77 + cycle * 519.43 + 1234.19);
 
@@ -223,7 +223,7 @@ static inline void addLaunchTrail(thread float3 &col, float2 uv,
                  band, palette, intensity, float(i) * 963.31 + cycle * 127.7);
   }
 
-  col = clamp(col, 0.0, 3.0);
+  col = float3(tanh(col));
 
   return half4(half3(col), 1.0h);
 }

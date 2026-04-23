@@ -11,11 +11,6 @@ using namespace metal;
 #define GOLD 1.618033988749895
 #define MAX_SEEDS 20
 
-float2 rand2(float2 p) {
-  p = float2(dot(p, float2(127.1, 311.7)),
-             dot(p, float2(269.5, 183.3)));
-  return fract(sin(p) * 43758.5453) * 2.0 - 1.0;
-}
 
 float2 getSeedPosition(int index,
                        float time,
@@ -32,7 +27,10 @@ float2 getSeedPosition(int index,
   
   float2 pos = float2(cos(angle), sin(angle)) * radius;
   
-  pos += rand2(float2(index, floor(time * 10.0))) * trebleLevel * 0.05;
+  float jitterTime = time * 0.8 + float(index) * 5.731;
+  float2 jitter = float2(sin(jitterTime * 1.3 + float(index) * 2.17),
+                          cos(jitterTime * 0.9 + float(index) * 3.51));
+  pos += jitter * trebleLevel * 0.05;
   
   return pos;
 }
@@ -54,14 +52,16 @@ half3 getSeedColor(int index,
     color = half3(0.3, 0.5, 1.0) * (0.5 + trebleLevel * 0.5);
   }
   
-  half3 baseColor = color;
-  
   float hueShift = time * 0.1;
-  half3 shiftedColor = half3(color.r * cos(hueShift) - color.g * sin(hueShift),
-                             color.r * sin(hueShift) + color.g * cos(hueShift),
-                             color.b);
-  
-  return mix(baseColor, shiftedColor, 0.3);
+  float cosH = cos(hueShift), sinH = sin(hueShift);
+  float3 c = float3(color);
+  float3 shifted = float3(
+    c.r * (0.667 * cosH + 0.333) + c.g * (0.333 - 0.333 * cosH - 0.577 * sinH) + c.b * (0.333 - 0.333 * cosH + 0.577 * sinH),
+    c.r * (0.333 - 0.333 * cosH + 0.577 * sinH) + c.g * (0.667 * cosH + 0.333) + c.b * (0.333 - 0.333 * cosH - 0.577 * sinH),
+    c.r * (0.333 - 0.333 * cosH - 0.577 * sinH) + c.g * (0.333 - 0.333 * cosH + 0.577 * sinH) + c.b * (0.667 * cosH + 0.333)
+  );
+
+  return half3(mix(c, shifted, 0.3));
 }
 
 [[ stitchable ]] half4 voronoi(float2 position,
