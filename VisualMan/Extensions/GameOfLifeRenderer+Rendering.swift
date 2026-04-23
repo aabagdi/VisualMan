@@ -47,6 +47,8 @@ extension GameOfLifeRenderer {
   }
 
   func commitFrame(drawable: CAMetalDrawable) {
+    // Use default protocol implementation for the Metal commit sequence,
+    // then swap sim textures if a step was performed this frame.
     commandBuffer.endCommandBuffer()
     commandQueue.waitForDrawable(drawable)
     commandQueue.commit([commandBuffer])

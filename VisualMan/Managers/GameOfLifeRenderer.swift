@@ -163,7 +163,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     commandQueue.signalEvent(sharedEvent, value: warmupFrame)
     frameNumber = warmupFrame
 
-    sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 200)
+    sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 1000)
     residencySet.removeAllocation(textures.simA)
     residencySet.removeAllocation(textures.simB)
     residencySet.removeAllocation(textures.display)

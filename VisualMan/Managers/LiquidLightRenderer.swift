@@ -187,7 +187,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     commandQueue.signalEvent(sharedEvent, value: warmupFrame)
     frameNumber = warmupFrame
 
-    sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 200)
+    sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 1000)
     residencySet.removeAllocation(dummyA)
     residencySet.removeAllocation(dummyB)
     residencySet.commit()

@@ -64,7 +64,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var displayIntermediate: MTLTexture?
   private var lastDisplayWidth: Int = 0
   private var lastDisplayHeight: Int = 0
-  private var pendingDisplayReleases: [(frame: UInt64, texture: MTLTexture)] = []
+  var pendingDisplayReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
   var time: Float = 0
   var dt: Float = 1.0 / 60.0

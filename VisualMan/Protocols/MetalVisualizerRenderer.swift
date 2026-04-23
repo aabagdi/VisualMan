@@ -142,6 +142,7 @@ extension MetalVisualizerRenderer {
   }
 
   func beginFrame() -> (any MTL4ComputeCommandEncoder)? {
+    guard canRenderThisFrame() else { return nil }
     frameNumber += 1
     let frameIndex = Int(frameNumber % Self.maxFramesInFlight)
     let allocator = commandAllocators[frameIndex]

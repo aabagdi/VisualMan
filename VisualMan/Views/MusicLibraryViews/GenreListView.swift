@@ -11,7 +11,6 @@ import MediaPlayer
 struct GenreListView: View {
   @State private var searchText: String = ""
   @State private var filteredGenres: [MPMediaItemCollection]?
-  @State private var cachedAlbumsByGenre: [String: [MPMediaItemCollection]] = [:]
 
   let genres: [MPMediaItemCollection]
   let albums: [MPMediaItemCollection]
@@ -20,12 +19,16 @@ struct GenreListView: View {
     filteredGenres ?? genres
   }
 
+  private var albumsByGenre: [String: [MPMediaItemCollection]] {
+    Dictionary(grouping: albums) { $0.representativeItem?.genre ?? "Unknown" }
+  }
+
   var body: some View {
     Group {
       if !genres.isEmpty {
         List(displayedGenres, id: \.representativeItem?.persistentID) { genre in
           let genreName = genre.representativeItem?.genre ?? "Unknown"
-          let genreAlbums = cachedAlbumsByGenre[genreName] ?? []
+          let genreAlbums = albumsByGenre[genreName] ?? []
           NavigationLink(destination: GenreDetailView(genre: genreName, albums: genreAlbums)) {
             Text(genre.representativeItem?.genre ?? "Unknown")
           }
@@ -40,8 +43,5 @@ struct GenreListView: View {
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
-    .task(id: albums.count) {
-      cachedAlbumsByGenre = Dictionary(grouping: albums) { $0.representativeItem?.genre ?? "Unknown" }
-    }
   }
 }

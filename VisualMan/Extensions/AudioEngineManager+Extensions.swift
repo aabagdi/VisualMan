@@ -93,7 +93,7 @@ extension AudioEngineManager {
     stopDisplayLink()
     let stream = DisplayLinkStream()
     displayLinkStream = stream
-    displayLinkTask = Task { [weak self] in
+    displayLinkTask = Task { @MainActor [weak self] in
       for await _ in stream.frames {
         guard !Task.isCancelled, let self else { break }
         self.updateTime()
@@ -144,7 +144,7 @@ extension AudioEngineManager {
     stopPauseDecay()
     let stream = DisplayLinkStream()
     pauseDecayStream = stream
-    pauseDecayTask = Task { [weak self] in
+    pauseDecayTask = Task { @MainActor [weak self] in
       for await _ in stream.frames {
         guard !Task.isCancelled else { break }
         guard let self else {

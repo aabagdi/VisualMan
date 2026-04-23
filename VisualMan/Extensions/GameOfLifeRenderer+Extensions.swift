@@ -107,7 +107,7 @@ extension GameOfLifeRenderer {
       let targetValue = frameNumber
       let signaled = sharedEvent.signaledValue
       if signaled < targetValue {
-        sharedEvent.wait(untilSignaledValue: targetValue, timeoutMS: 200)
+        sharedEvent.wait(untilSignaledValue: targetValue, timeoutMS: 1000)
       }
     }
     let w = simWidth

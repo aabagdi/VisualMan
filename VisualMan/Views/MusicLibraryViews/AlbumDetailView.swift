@@ -108,7 +108,7 @@ struct AlbumDetailView: View {
               
               Spacer()
               
-              if let duration = formatDuration(song.playbackDuration) {
+              if let duration = song.playbackDuration.formattedDuration() {
                 Text(duration)
                   .font(.system(size: 14))
                   .foregroundStyle(.secondary)
@@ -123,10 +123,4 @@ struct AlbumDetailView: View {
     .toolbarVisibility(.hidden, for: .tabBar)
   }
   
-  private func formatDuration(_ duration: TimeInterval) -> String? {
-    guard duration > 0 else { return nil }
-    let minutes = Int(duration) / 60
-    let seconds = Int(duration) % 60
-    return String(format: "%d:%02d", minutes, seconds)
-  }
 }

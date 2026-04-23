@@ -13,7 +13,14 @@ extension NavierStokesRenderer {
     prevBass = 0
     prevMid = 0
 
-    sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 200)
+    sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
+
+    // Drain pending releases now that GPU is idle, before jumping frameNumber
+    pendingDisplayReleases.forEach { residencySet.removeAllocation($0.texture) }
+    pendingDisplayReleases.removeAll()
+    pendingTAAHistoryReleases.forEach { residencySet.removeAllocation($0.texture) }
+    pendingTAAHistoryReleases.removeAll()
+    residencySet.commit()
 
     guard let allocator = device.makeCommandAllocator(),
           let resetCmd = device.makeCommandBuffer() else { return }
@@ -43,7 +50,7 @@ extension NavierStokesRenderer {
     encoder.endEncoding()
     resetCmd.endCommandBuffer()
 
-    let resetValue = frameNumber + 1000
+    let resetValue = frameNumber + 1
     commandQueue.commit([resetCmd])
     commandQueue.signalEvent(sharedEvent, value: resetValue)
 
