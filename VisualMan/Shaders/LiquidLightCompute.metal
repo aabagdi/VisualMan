@@ -341,7 +341,6 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   result += half3(1.0h, 0.95h, 0.9h) * spec * 0.4h * specMask;
 
   result *= 1.0h + half(bass) * 0.45h;
-  // Derive shimmer from same noise field with offset to avoid second vnoise call
   float shimmerf = vnoise(noiseCoord * 1.6 + float2(7.3, 3.1));
   shimmerf = max(shimmerf, 0.0f);
   float sh2 = shimmerf * shimmerf;

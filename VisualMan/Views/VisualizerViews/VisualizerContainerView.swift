@@ -15,39 +15,45 @@ struct VisualizerContainerView: View {
   let albumArt: UIImage?
   
   var body: some View {
+    resolvedView
+  }
+  
+  private var resolvedView: AnyView {
     switch currentVisualizer {
     case .bars:
-      BarsVisualizerView(visualizerBars: visualizerBars)
+      return AnyView(BarsVisualizerView(visualizerBars: visualizerBars))
     case .threeD:
-      ThreeDBarsVisualizerView(visualizerBars: visualizerBars)
+      return AnyView(ThreeDBarsVisualizerView(visualizerBars: visualizerBars))
     case .album:
-      AlbumArtWaveVisualizerView(audioLevels: audioLevels, albumArt: albumArt)
+      return AnyView(AlbumArtWaveVisualizerView(audioLevels: audioLevels, albumArt: albumArt))
     case .julia:
-      JuliaVisualizerView(audioLevels: audioLevels)
+      return AnyView(JuliaVisualizerView(audioLevels: audioLevels))
     case .fireworks:
-      FireworksVisualizerView(audioLevels: audioLevels)
+      return AnyView(FireworksVisualizerView(audioLevels: audioLevels))
     case .interference:
-      InterferenceVisualizerView(audioLevels: audioLevels)
+      return AnyView(InterferenceVisualizerView(audioLevels: audioLevels))
     case .voronoi:
-      VoronoiVisualizerView(audioLevels: audioLevels)
+      return AnyView(VoronoiVisualizerView(audioLevels: audioLevels))
     case .aurora:
-      AuroraBorealisVisualizerView(audioLevels: audioLevels)
+      return AnyView(AuroraBorealisVisualizerView(audioLevels: audioLevels))
     case .oscilloscope:
-      OscilloscopeVisualizerView(audioLevels: audioLevels, waveform: waveform)
+      return AnyView(OscilloscopeVisualizerView(audioLevels: audioLevels, waveform: waveform))
     case .sphereMesh:
-      SphereMeshVisualizerView(audioLevels: audioLevels)
+      return AnyView(SphereMeshVisualizerView(audioLevels: audioLevels))
     case .plasma:
-      PlasmaVisualizerView(audioLevels: audioLevels)
+      return AnyView(PlasmaVisualizerView(audioLevels: audioLevels))
     case .metaball:
-      MetaballVisualizerView(audioLevels: audioLevels)
+      return AnyView(MetaballVisualizerView(audioLevels: audioLevels))
     case .ink:
-      InkVisualizerView(audioLevels: audioLevels)
+      return AnyView(InkVisualizerView(audioLevels: audioLevels))
     case .navierStokes:
-      NavierStokesVisualizerView(audioLevels: audioLevels)
+      return AnyView(NavierStokesVisualizerView(audioLevels: audioLevels))
     case .liquidLight:
-      LiquidLightVisualizerView(audioLevels: audioLevels)
+      return AnyView(LiquidLightVisualizerView(audioLevels: audioLevels))
     case .gameOfLife:
-      GameOfLifeVisualizerView(audioLevels: audioLevels)
+      return AnyView(GameOfLifeVisualizerView(audioLevels: audioLevels))
+    case .abstractExpressionism:
+      return AnyView(AbstractExpressionismVisualizerView(audioLevels: audioLevels))
     }
   }
 }

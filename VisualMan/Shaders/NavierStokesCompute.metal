@@ -548,7 +548,6 @@ kernel void fluidVorticityConfinementMerged(texture2d<float, access::read_write>
   uint w = velocity.get_width();
   uint h = velocity.get_height();
 
-  // 2-cell halo: need neighbor curl, which needs neighbor velocity
   constexpr uint TILE = 20;
   threadgroup float2 velTile[TILE * TILE];
 
@@ -571,8 +570,6 @@ kernel void fluidVorticityConfinementMerged(texture2d<float, access::read_write>
   uint lx = tid.x + 2;
   uint ly = tid.y + 2;
 
-  // Compute curl at center and 4 neighbors from shared velocity tile
-  // curl(i,j) = 0.5*(vy(i+1,j)-vy(i-1,j)) - 0.5*(vx(i,j+1)-vx(i,j-1))
   #define CURL_AT(cx, cy) ( \
     0.5f * (velTile[(cy) * TILE + (cx) + 1].y - velTile[(cy) * TILE + (cx) - 1].y) - \
     0.5f * (velTile[((cy) + 1) * TILE + (cx)].x - velTile[((cy) - 1) * TILE + (cx)].x) )

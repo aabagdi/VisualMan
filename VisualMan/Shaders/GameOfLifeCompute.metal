@@ -180,7 +180,6 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
 
     color = segColor * vignette;
   } else {
-    // Only compute shadows for dead cells (alive cells don't use shadowStrength)
     const uint shadowPx = max(2u, cellPx / 3u);
     float shadowStrength = 0.0;
 

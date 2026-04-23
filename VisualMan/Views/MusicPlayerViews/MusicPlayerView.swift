@@ -10,9 +10,11 @@ import SwiftUI
 struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
   @State private var isTapped: Bool = false
-  
+  @State private var isCapturing = false
+  @State private var showScreenshotToast = false
+
   @Environment(VisualizerSelection.self) private var visualizerSelection
-  
+
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(AudioPlaylistManager.self) private var playlistManager
   @Environment(VisualizerRendererCache.self) private var rendererCache
@@ -61,8 +63,24 @@ struct MusicPlayerView: View {
         viewModel: viewModel,
         isTapped: $isTapped
       )
+      .opacity(isCapturing ? 0 : 1)
+
+      if showScreenshotToast {
+        Text("Screenshot Saved")
+          .font(.subheadline)
+          .fontWeight(.semibold)
+          .foregroundStyle(.white)
+          .padding(.horizontal, 16)
+          .padding(.vertical, 10)
+          .background(.ultraThinMaterial, in: Capsule())
+          .frame(maxHeight: .infinity, alignment: .top)
+          .padding(.top, 12)
+          .transition(.opacity)
+          .allowsHitTesting(false)
+      }
     }
     .toolbar(.hidden, for: .tabBar)
+    .toolbar(isCapturing ? .hidden : .visible, for: .navigationBar)
     .onAppear {
       viewModel.start(audioSources: _audioSources, startingIndex: _startingIndex)
     }
@@ -88,21 +106,44 @@ struct MusicPlayerView: View {
     }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Menu {
-          ForEach(VMVisualizer.allCases, id: \.self) { type in
-            Button {
-              visualizerSelection.current = type
-            } label: {
-              if type == visualizerSelection.current {
-                Label(type.rawValue, systemImage: "checkmark")
-              } else {
-                Text(type.rawValue)
+        HStack(spacing: 12) {
+          Button {
+            captureScreenshot()
+          } label: {
+            Image(systemName: "camera")
+          }
+          .disabled(isCapturing)
+          .accessibilityLabel("Capture Screenshot")
+
+          Menu {
+            ForEach(VMVisualizer.allCases, id: \.self) { type in
+              Button {
+                visualizerSelection.current = type
+              } label: {
+                if type == visualizerSelection.current {
+                  Label(type.rawValue, systemImage: "checkmark")
+                } else {
+                  Text(type.rawValue)
+                }
               }
             }
+          } label: {
+            Text(visualizerSelection.current.rawValue)
           }
-        } label: {
-          Text(visualizerSelection.current.rawValue)
         }
+      }
+    }
+  }
+
+  private func captureScreenshot() {
+    isCapturing = true
+    let success = VisualizerSnapshot.capture()
+    isCapturing = false
+    if success {
+      withAnimation(.easeInOut(duration: 0.3)) { showScreenshotToast = true }
+      Task {
+        try? await Task.sleep(for: .seconds(2))
+        withAnimation(.easeInOut(duration: 0.5)) { showScreenshotToast = false }
       }
     }
   }

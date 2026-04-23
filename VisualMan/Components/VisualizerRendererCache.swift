@@ -61,7 +61,10 @@ final class VisualizerRendererCache {
     async let gol: GameOfLifeRenderer? = renderer(
       GameOfLifeRenderer.self
     ) { await GameOfLifeRenderer.create(device: device) }
-    _ = await (ns, ll, gol)
+    async let abex: AbstractExpressionismRenderer? = renderer(
+      AbstractExpressionismRenderer.self
+    ) { await AbstractExpressionismRenderer.create(device: device) }
+    _ = await (ns, ll, gol, abex)
   }
   
   func resetAll() {
