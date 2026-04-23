@@ -29,15 +29,8 @@ extension NavierStokesRenderer {
   func applyVorticityConfinement(encoder: any MTL4ComputeCommandEncoder,
                                  bass: Float,
                                  mid: Float) {
-    encoder.setComputePipelineState(pipelines.curl)
+    encoder.setComputePipelineState(pipelines.vorticityConfinementMerged)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
-    argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 1)
-    dispatchGrid(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    encoder.setComputePipelineState(pipelines.vorticityConfinement)
-    argumentTable.setTexture(divergenceTexture.gpuResourceID, index: 0)
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 1)
     let dtVal: Float = dt * 40.0
     let epsilon: Float = 0.05 + bass * 0.50 + mid * 0.18
     argumentTable.setAddress(writeUniform(dtVal), index: 0)

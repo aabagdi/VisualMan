@@ -26,8 +26,7 @@ extension NavierStokesRenderer {
     let bloomDownsample: MTLComputePipelineState
     let render: MTLComputePipelineState
     let clearRGBA: MTLComputePipelineState
-    let curl: MTLComputePipelineState
-    let vorticityConfinement: MTLComputePipelineState
+    let vorticityConfinementMerged: MTLComputePipelineState
     let macCormackCorrect: MTLComputePipelineState
     let dyeDiffuse: MTLComputePipelineState
   }
@@ -76,8 +75,7 @@ extension NavierStokesRenderer {
           let bloomDownsample = makePipeline("fluidBloomDownsample"),
           let render = makePipeline("fluidRender"),
           let clearRGBA = makePipeline("fluidClearRGBA"),
-          let curl = makePipeline("fluidCurl"),
-          let vorticityConfinement = makePipeline("fluidVorticityConfinement"),
+          let vorticityConfinementMerged = makePipeline("fluidVorticityConfinementMerged"),
           let macCormackCorrect = makePipeline("fluidMacCormackCorrect"),
           let dyeDiffuse = makePipeline("fluidDyeDiffuse") else {
       return nil
@@ -92,7 +90,7 @@ extension NavierStokesRenderer {
                      blurV: blurV, bloomThresholdBlurH: bloomThresholdBlurH,
                      bloomDownsample: bloomDownsample,
                      render: render, clearRGBA: clearRGBA,
-                     curl: curl, vorticityConfinement: vorticityConfinement,
+                     vorticityConfinementMerged: vorticityConfinementMerged,
                      macCormackCorrect: macCormackCorrect,
                      dyeDiffuse: dyeDiffuse)
   }

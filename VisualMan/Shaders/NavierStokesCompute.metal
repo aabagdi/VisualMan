@@ -362,10 +362,8 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
 
   float4 color = float4(0);
   color += dye.sample(bilinear, sampleCenter + float2(-0.25, -0.75) * texel);
-  color += dye.sample(bilinear, sampleCenter + float2( 0.75, -0.25) * texel);
-  color += dye.sample(bilinear, sampleCenter + float2(-0.75,  0.25) * texel);
   color += dye.sample(bilinear, sampleCenter + float2( 0.25,  0.75) * texel);
-  color *= 0.25;
+  color *= 0.5;
 
   float3 cRGB = max(color.rgb, float3(0.0));
 
@@ -502,31 +500,31 @@ kernel void fluidCovectorPullback(texture2d<float, access::read>   psi  [[textur
   float2 psiU = psi.read(uint2(gid.x, uint(yU))).xy;
   float2 psiC = psi.read(gid).xy;
 
-  float invDx = (xR != xL) ? 1.0 / float(xR - xL) : 0.5;
-  float invDy = (yU != yD) ? 1.0 / float(yU - yD) : 0.5;
-  float2 dpsi_dx = invDx * (psiR - psiL);
-  float2 dpsi_dy = invDy * (psiU - psiD);
+  half invDx = (xR != xL) ? half(1.0 / float(xR - xL)) : 0.5h;
+  half invDy = (yU != yD) ? half(1.0 / float(yU - yD)) : 0.5h;
+  half2 dpsi_dx = half2(psiR - psiL) * invDx;
+  half2 dpsi_dy = half2(psiU - psiD) * invDy;
 
   {
-    float2 dev_x = dpsi_dx - float2(1, 0);
-    float2 dev_y = dpsi_dy - float2(0, 1);
-    float devNorm = max(fast::length(dev_x), fast::length(dev_y));
-    if (devNorm > 0.5) {
-      float scale = 0.5 / devNorm;
-      dpsi_dx = float2(1, 0) + dev_x * scale;
-      dpsi_dy = float2(0, 1) + dev_y * scale;
+    half2 dev_x = dpsi_dx - half2(1, 0);
+    half2 dev_y = dpsi_dy - half2(0, 1);
+    half devNorm = max(length(dev_x), length(dev_y));
+    if (devNorm > 0.5h) {
+      half scale = 0.5h / devNorm;
+      dpsi_dx = half2(1, 0) + dev_x * scale;
+      dpsi_dy = half2(0, 1) + dev_y * scale;
     }
   }
 
   constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
   float2 uv = psiC / float2(float(w), float(h));
-  float2 u0val = u0.sample(linearSampler, uv).xy;
+  half2 u0val = half2(u0.sample(linearSampler, uv).xy);
 
-  float2 u;
-  u.x = dpsi_dx.x * u0val.x + dpsi_dx.y * u0val.y;
-  u.y = dpsi_dy.x * u0val.x + dpsi_dy.y * u0val.y;
+  half2 uh;
+  uh.x = dpsi_dx.x * u0val.x + dpsi_dx.y * u0val.y;
+  uh.y = dpsi_dy.x * u0val.x + dpsi_dy.y * u0val.y;
 
-  u *= dissipation;
+  float2 u = float2(uh) * dissipation;
 
   if (any(isnan(u)) || any(isinf(u))) u = float2(0);
   float sp = fast::length(u);
@@ -541,44 +539,55 @@ kernel void fluidClearRGBA(texture2d<float, access::write> t [[texture(0)]],
   t.write(float4(0), gid);
 }
 
-kernel void fluidCurl(texture2d<float, access::read> velocity [[texture(0)]],
-                      texture2d<float, access::write> curlOut [[texture(1)]],
-                      uint2 gid [[thread_position_in_grid]]) {
+kernel void fluidVorticityConfinementMerged(texture2d<float, access::read_write> velocity [[texture(0)]],
+                                             constant float &dt [[buffer(0)]],
+                                             constant float &epsilon [[buffer(1)]],
+                                             uint2 gid [[thread_position_in_grid]],
+                                             uint2 tid [[thread_position_in_threadgroup]],
+                                             uint2 tgid [[threadgroup_position_in_grid]]) {
   uint w = velocity.get_width();
   uint h = velocity.get_height();
+
+  // 2-cell halo: need neighbor curl, which needs neighbor velocity
+  constexpr uint TILE = 20;
+  threadgroup float2 velTile[TILE * TILE];
+
+  int tileOriginX = int(tgid.x * 16) - 2;
+  int tileOriginY = int(tgid.y * 16) - 2;
+
+  uint localIdx = tid.y * 16 + tid.x;
+  for (uint idx = localIdx; idx < TILE * TILE; idx += 256) {
+    uint tx = idx % TILE;
+    uint ty = idx / TILE;
+    int gx = clamp(tileOriginX + int(tx), 0, int(w) - 1);
+    int gy = clamp(tileOriginY + int(ty), 0, int(h) - 1);
+    velTile[idx] = velocity.read(uint2(gx, gy)).xy;
+  }
+
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+
   if (gid.x >= w || gid.y >= h) return;
-  uint2 L = uint2(max(int(gid.x) - 1, 0),     gid.y);
-  uint2 R = uint2(min(int(gid.x) + 1, int(w) - 1), gid.y);
-  uint2 D = uint2(gid.x, max(int(gid.y) - 1, 0));
-  uint2 U = uint2(gid.x, min(int(gid.y) + 1, int(h) - 1));
-  float dvy_dx = 0.5 * (velocity.read(R).y - velocity.read(L).y);
-  float dvx_dy = 0.5 * (velocity.read(U).x - velocity.read(D).x);
-  curlOut.write(float4(dvy_dx - dvx_dy, 0, 0, 0), gid);
-}
 
-kernel void fluidVorticityConfinement(texture2d<float, access::read> curl [[texture(0)]],
-                                      texture2d<float, access::read_write> velocity [[texture(1)]],
-                                      constant float &dt [[buffer(0)]],
-                                      constant float &epsilon [[buffer(1)]],
-                                      uint2 gid [[thread_position_in_grid]]) {
-  uint w = velocity.get_width();
-  uint h = velocity.get_height();
-  if (gid.x >= w || gid.y >= h) return;
-  uint2 L = uint2(max(int(gid.x) - 1, 0),     gid.y);
-  uint2 R = uint2(min(int(gid.x) + 1, int(w) - 1), gid.y);
-  uint2 D = uint2(gid.x, max(int(gid.y) - 1, 0));
-  uint2 U = uint2(gid.x, min(int(gid.y) + 1, int(h) - 1));
+  uint lx = tid.x + 2;
+  uint ly = tid.y + 2;
 
-  float cL = abs(curl.read(L).x);
-  float cR = abs(curl.read(R).x);
-  float cD = abs(curl.read(D).x);
-  float cU = abs(curl.read(U).x);
-  float cC = curl.read(gid).x;
+  // Compute curl at center and 4 neighbors from shared velocity tile
+  // curl(i,j) = 0.5*(vy(i+1,j)-vy(i-1,j)) - 0.5*(vx(i,j+1)-vx(i,j-1))
+  #define CURL_AT(cx, cy) ( \
+    0.5f * (velTile[(cy) * TILE + (cx) + 1].y - velTile[(cy) * TILE + (cx) - 1].y) - \
+    0.5f * (velTile[((cy) + 1) * TILE + (cx)].x - velTile[((cy) - 1) * TILE + (cx)].x) )
 
-  float2 grad = float2(0.5 * (cR - cL), 0.5 * (cU - cD));
+  float curlC = CURL_AT(lx, ly);
+  float curlL = CURL_AT(lx - 1, ly);
+  float curlR = CURL_AT(lx + 1, ly);
+  float curlD = CURL_AT(lx, ly - 1);
+  float curlU = CURL_AT(lx, ly + 1);
+  #undef CURL_AT
+
+  float2 grad = float2(0.5 * (abs(curlR) - abs(curlL)), 0.5 * (abs(curlU) - abs(curlD)));
   float len = fast::length(grad) + 1e-5;
   float2 N = grad / len;
-  float2 force = epsilon * float2(N.y, -N.x) * cC;
+  float2 force = epsilon * float2(N.y, -N.x) * curlC;
 
   float4 vel = velocity.read(gid);
   vel.xy += dt * force;
@@ -598,7 +607,6 @@ kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[t
   if (gid.x >= w || gid.y >= h) return;
 
   constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
-  constexpr sampler nearestSampler(filter::nearest, address::clamp_to_edge);
 
   float2 pos = float2(gid) + 0.5;
   float2 vel = velocity.read(gid).xy;
@@ -612,14 +620,15 @@ kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[t
   float4 corrected = forward + 0.5 * (source - backward);
 
   int2 base = int2(floor(backPos - 0.5));
-  int2 c00 = clamp(base,              int2(0), int2(w - 1, h - 1));
-  int2 c10 = clamp(base + int2(1, 0), int2(0), int2(w - 1, h - 1));
-  int2 c01 = clamp(base + int2(0, 1), int2(0), int2(w - 1, h - 1));
-  int2 c11 = clamp(base + int2(1, 1), int2(0), int2(w - 1, h - 1));
-  float4 s00 = phiN.sample(nearestSampler, (float2(c00) + 0.5) * invSize);
-  float4 s10 = phiN.sample(nearestSampler, (float2(c10) + 0.5) * invSize);
-  float4 s01 = phiN.sample(nearestSampler, (float2(c01) + 0.5) * invSize);
-  float4 s11 = phiN.sample(nearestSampler, (float2(c11) + 0.5) * invSize);
+  int2 maxCoord = int2(w - 1, h - 1);
+  int2 c00 = clamp(base,              int2(0), maxCoord);
+  int2 c10 = clamp(base + int2(1, 0), int2(0), maxCoord);
+  int2 c01 = clamp(base + int2(0, 1), int2(0), maxCoord);
+  int2 c11 = clamp(base + int2(1, 1), int2(0), maxCoord);
+  float4 s00 = phiN.read(uint2(c00));
+  float4 s10 = phiN.read(uint2(c10));
+  float4 s01 = phiN.read(uint2(c01));
+  float4 s11 = phiN.read(uint2(c11));
   float4 lo = min(min(s00, s10), min(s01, s11));
   float4 hi = max(max(s00, s10), max(s01, s11));
 
@@ -632,21 +641,40 @@ kernel void fluidDyeDiffuse(texture2d<half, access::read>  dyeIn  [[texture(0)]]
                             texture2d<half, access::write> dyeOut [[texture(1)]],
                             constant float &baseStrengthF [[buffer(0)]],
                             constant float &edgeBoostF    [[buffer(1)]],
-                            uint2 gid [[thread_position_in_grid]]) {
+                            uint2 gid [[thread_position_in_grid]],
+                            uint2 tid [[thread_position_in_threadgroup]],
+                            uint2 tgid [[threadgroup_position_in_grid]]) {
   uint w = dyeIn.get_width();
   uint h = dyeIn.get_height();
+
+  constexpr uint TILE = 18;
+  threadgroup half4 tile[TILE * TILE];
+
+  int tileOriginX = int(tgid.x * 16) - 1;
+  int tileOriginY = int(tgid.y * 16) - 1;
+
+  uint localIdx = tid.y * 16 + tid.x;
+  for (uint idx = localIdx; idx < TILE * TILE; idx += 256) {
+    uint tx = idx % TILE;
+    uint ty = idx / TILE;
+    int gx = clamp(tileOriginX + int(tx), 0, int(w) - 1);
+    int gy = clamp(tileOriginY + int(ty), 0, int(h) - 1);
+    tile[idx] = dyeIn.read(uint2(gx, gy));
+  }
+
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+
   if (gid.x >= w || gid.y >= h) return;
 
-  uint2 L = uint2(max(int(gid.x) - 1, 0), gid.y);
-  uint2 R = uint2(min(gid.x + 1, w - 1),  gid.y);
-  uint2 D = uint2(gid.x, max(int(gid.y) - 1, 0));
-  uint2 U = uint2(gid.x, min(gid.y + 1, h - 1));
+  uint lx = tid.x + 1;
+  uint ly = tid.y + 1;
+  uint myIdx = ly * TILE + lx;
 
-  half4 c  = dyeIn.read(gid);
-  half4 cL = dyeIn.read(L);
-  half4 cR = dyeIn.read(R);
-  half4 cD = dyeIn.read(D);
-  half4 cU = dyeIn.read(U);
+  half4 c  = tile[myIdx];
+  half4 cL = tile[myIdx - 1];
+  half4 cR = tile[myIdx + 1];
+  half4 cD = tile[myIdx - TILE];
+  half4 cU = tile[myIdx + TILE];
   half4 neighbours = (cL + cR + cD + cU) * 0.25h;
 
   half3 gradVec = neighbours.xyz - c.xyz;

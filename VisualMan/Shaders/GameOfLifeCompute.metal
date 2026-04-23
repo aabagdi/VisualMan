@@ -33,29 +33,48 @@ inline float lcdDarkness(float age) {
 kernel void gameOfLifeStep(texture2d<half, access::read>  input   [[texture(0)]],
                            texture2d<half, access::write> output  [[texture(1)]],
                            constant GameOfLifeParams &params      [[buffer(0)]],
-                           uint2 gid [[thread_position_in_grid]]) {
+                           uint2 gid [[thread_position_in_grid]],
+                           uint2 tid [[thread_position_in_threadgroup]],
+                           uint2 tgid [[threadgroup_position_in_grid]]) {
   const uint w = params.simWidth;
   const uint h = params.simHeight;
+
+  constexpr uint TILE = 18;
+  threadgroup half2 tile[TILE * TILE];
+
+  int tileOriginX = int(tgid.x * 16) - 1;
+  int tileOriginY = int(tgid.y * 16) - 1;
+
+  uint localIdx = tid.y * 16 + tid.x;
+  for (uint idx = localIdx; idx < TILE * TILE; idx += 256) {
+    uint tx = idx % TILE;
+    uint ty = idx / TILE;
+    int gx = tileOriginX + int(tx);
+    int gy = tileOriginY + int(ty);
+    gx = ((gx % int(w)) + int(w)) % int(w);
+    gy = ((gy % int(h)) + int(h)) % int(h);
+    half4 c = input.read(uint2(uint(gx), uint(gy)));
+    tile[idx] = half2(c.r, c.g);
+  }
+
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+
   if (gid.x >= w || gid.y >= h) return;
 
-  half4 cell = input.read(gid);
-  bool alive = cell.r > 0.5h;
-  float age = float(cell.g);
+  uint lx = tid.x + 1;
+  uint ly = tid.y + 1;
+  uint myIdx = ly * TILE + lx;
 
-  uint xm1 = select(gid.x - 1u, w - 1u, gid.x == 0u);
-  uint xp1 = select(gid.x + 1u, 0u,     gid.x == w - 1u);
-  uint ym1 = select(gid.y - 1u, h - 1u, gid.y == 0u);
-  uint yp1 = select(gid.y + 1u, 0u,     gid.y == h - 1u);
-
-  uint xs[3] = { xm1, gid.x, xp1 };
-  uint ys[3] = { ym1, gid.y, yp1 };
+  half2 cell = tile[myIdx];
+  bool alive = cell.x > 0.5h;
+  float age = float(cell.y);
 
   int neighbors = 0;
-  for (uint dy = 0u; dy < 3u; dy++) {
-    for (uint dx = 0u; dx < 3u; dx++) {
-      if (dx == 1u && dy == 1u) continue;
-      half4 n = input.read(uint2(xs[dx], ys[dy]));
-      if (n.r > 0.5h) neighbors++;
+  for (int dy = -1; dy <= 1; dy++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      if (dx == 0 && dy == 0) continue;
+      half2 n = tile[(ly + dy) * TILE + (lx + dx)];
+      if (n.x > 0.5h) neighbors++;
     }
   }
 
@@ -146,50 +165,6 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
     return;
   }
 
-  const uint shadowPx = max(2u, cellPx / 3u);
-  float shadowStrength = 0.0;
-
-  if (lpx < shadowPx) {
-    uint ncx = (cx > 0u) ? cx - 1u : mapW - 1u;
-    uint nsx = landscape ? cy : ncx;
-    uint nsy = landscape ? ncx : cy;
-    nsx = min(nsx, params.simWidth - 1u);
-    nsy = min(nsy, params.simHeight - 1u);
-    half4 leftCell = sim.read(uint2(nsx, nsy));
-    if (leftCell.r > 0.5h) {
-      float fade = 1.0 - float(lpx) / float(shadowPx);
-      shadowStrength = max(shadowStrength, fade * 0.55);
-    }
-  }
-
-  if (lpy < shadowPx) {
-    uint ncy = (cy > 0u) ? cy - 1u : mapH - 1u;
-    uint nsx = landscape ? ncy : cx;
-    uint nsy = landscape ? cx  : ncy;
-    nsx = min(nsx, params.simWidth - 1u);
-    nsy = min(nsy, params.simHeight - 1u);
-    half4 aboveCell = sim.read(uint2(nsx, nsy));
-    if (aboveCell.r > 0.5h) {
-      float fade = 1.0 - float(lpy) / float(shadowPx);
-      shadowStrength = max(shadowStrength, fade * 0.55);
-    }
-  }
-
-  if (lpx < shadowPx && lpy < shadowPx) {
-    uint ncx = (cx > 0u) ? cx - 1u : mapW - 1u;
-    uint ncy = (cy > 0u) ? cy - 1u : mapH - 1u;
-    uint nsx = landscape ? ncy : ncx;
-    uint nsy = landscape ? ncx : ncy;
-    nsx = min(nsx, params.simWidth - 1u);
-    nsy = min(nsy, params.simHeight - 1u);
-    half4 diagCell = sim.read(uint2(nsx, nsy));
-    if (diagCell.r > 0.5h) {
-      float fadeX = 1.0 - float(lpx) / float(shadowPx);
-      float fadeY = 1.0 - float(lpy) / float(shadowPx);
-      shadowStrength = max(shadowStrength, min(fadeX, fadeY) * 0.45);
-    }
-  }
-
   float3 color;
 
   if (alive) {
@@ -205,6 +180,51 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
 
     color = segColor * vignette;
   } else {
+    // Only compute shadows for dead cells (alive cells don't use shadowStrength)
+    const uint shadowPx = max(2u, cellPx / 3u);
+    float shadowStrength = 0.0;
+
+    if (lpx < shadowPx) {
+      uint ncx = (cx > 0u) ? cx - 1u : mapW - 1u;
+      uint nsx = landscape ? cy : ncx;
+      uint nsy = landscape ? ncx : cy;
+      nsx = min(nsx, params.simWidth - 1u);
+      nsy = min(nsy, params.simHeight - 1u);
+      half4 leftCell = sim.read(uint2(nsx, nsy));
+      if (leftCell.r > 0.5h) {
+        float fade = 1.0 - float(lpx) / float(shadowPx);
+        shadowStrength = max(shadowStrength, fade * 0.55);
+      }
+    }
+
+    if (lpy < shadowPx) {
+      uint ncy = (cy > 0u) ? cy - 1u : mapH - 1u;
+      uint nsx = landscape ? ncy : cx;
+      uint nsy = landscape ? cx  : ncy;
+      nsx = min(nsx, params.simWidth - 1u);
+      nsy = min(nsy, params.simHeight - 1u);
+      half4 aboveCell = sim.read(uint2(nsx, nsy));
+      if (aboveCell.r > 0.5h) {
+        float fade = 1.0 - float(lpy) / float(shadowPx);
+        shadowStrength = max(shadowStrength, fade * 0.55);
+      }
+    }
+
+    if (lpx < shadowPx && lpy < shadowPx) {
+      uint ncx = (cx > 0u) ? cx - 1u : mapW - 1u;
+      uint ncy = (cy > 0u) ? cy - 1u : mapH - 1u;
+      uint nsx = landscape ? ncy : ncx;
+      uint nsy = landscape ? ncx : ncy;
+      nsx = min(nsx, params.simWidth - 1u);
+      nsy = min(nsy, params.simHeight - 1u);
+      half4 diagCell = sim.read(uint2(nsx, nsy));
+      if (diagCell.r > 0.5h) {
+        float fadeX = 1.0 - float(lpx) / float(shadowPx);
+        float fadeY = 1.0 - float(lpy) / float(shadowPx);
+        shadowStrength = max(shadowStrength, min(fadeX, fadeY) * 0.45);
+      }
+    }
+
     float3 baseColor = backlight * (1.0 - 0.025) * vignette;
     color = mix(baseColor, shadowTint * vignette, shadowStrength);
   }
