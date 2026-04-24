@@ -12,6 +12,7 @@ struct MusicPlayerView: View {
   @State private var isTapped: Bool = false
   @State private var isCapturing = false
   @State private var showScreenshotToast = false
+  @State private var toastDismissTask: Task<Void, Never>?
 
   @Environment(VisualizerSelection.self) private var visualizerSelection
 
@@ -65,19 +66,18 @@ struct MusicPlayerView: View {
       )
       .opacity(isCapturing ? 0 : 1)
 
-      if showScreenshotToast {
-        Text("Screenshot Saved")
-          .font(.subheadline)
-          .fontWeight(.semibold)
-          .foregroundStyle(.white)
-          .padding(.horizontal, 16)
-          .padding(.vertical, 10)
-          .background(.ultraThinMaterial, in: Capsule())
-          .frame(maxHeight: .infinity, alignment: .top)
-          .padding(.top, 12)
-          .transition(.opacity)
-          .allowsHitTesting(false)
-      }
+      Text("Screenshot Saved")
+        .font(.subheadline)
+        .fontWeight(.semibold)
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+        .opacity(showScreenshotToast ? 1 : 0)
+        .animation(.easeInOut(duration: 0.35), value: showScreenshotToast)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.top, 12)
+        .allowsHitTesting(false)
     }
     .toolbar(.hidden, for: .tabBar)
     .toolbar(isCapturing ? .hidden : .visible, for: .navigationBar)
@@ -141,12 +141,14 @@ struct MusicPlayerView: View {
     isCapturing = true
     let success = VisualizerSnapshot.capture()
     isCapturing = false
-    if success {
-      withAnimation(.easeInOut(duration: 0.3)) { showScreenshotToast = true }
-      Task {
-        try? await Task.sleep(for: .seconds(2))
-        withAnimation(.easeInOut(duration: 0.5)) { showScreenshotToast = false }
-      }
+    guard success else { return }
+
+    toastDismissTask?.cancel()
+    showScreenshotToast = true
+    toastDismissTask = Task { @MainActor in
+      try? await Task.sleep(for: .seconds(2))
+      guard !Task.isCancelled else { return }
+      showScreenshotToast = false
     }
   }
 }
