@@ -23,5 +23,8 @@ extension AbstractExpressionismRenderer {
     slowEnvelope = .zero
     resumeSuppressionRemaining = 0
     resumeFadeIn = 1.0
+    // Fresh painting per reset
+    songSeed = Float.random(in: 0..<1000)
+    warmBias = Float.random(in: 0.2..<0.8)
   }
 }

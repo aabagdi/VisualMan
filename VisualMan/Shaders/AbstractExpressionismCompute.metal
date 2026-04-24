@@ -27,7 +27,6 @@ inline float hash11(float x) {
   x *= x + x;
   return fract(x);
 }
-
 inline float hash21(float2 p) {
   p = fract(p * float2(443.897, 441.423));
   p += dot(p, p.yx + 19.19);
@@ -35,11 +34,29 @@ inline float hash21(float2 p) {
 }
 
 inline half canvasWeave(float2 pixelPos) {
-  float threadX = sin(pixelPos.x * 0.8) * 0.5 + 0.5;
-  float threadY = sin(pixelPos.y * 0.8) * 0.5 + 0.5;
+  float threadX = sin(pixelPos.x * 0.85) * 0.5 + 0.5;
+  float threadY = sin(pixelPos.y * 0.85) * 0.5 + 0.5;
   float weave = threadX * threadY;
-  float irregular = shaderNoise(pixelPos * 0.05) * 0.3;
-  return half(weave * 0.025 + irregular * 0.01);
+
+  float fiber = shaderNoise(pixelPos * 0.18);
+
+  float irregular = shaderNoise(pixelPos * 0.04);
+
+  return half(weave * 0.045 + fiber * 0.020 + irregular * 0.012);
+}
+
+inline float2 canvasWeaveGradient(float2 pixelPos) {
+  float cX = 0.85;
+  float cY = 0.85;
+  float sinX = sin(pixelPos.x * cX);
+  float sinY = sin(pixelPos.y * cY);
+  float cosX = cos(pixelPos.x * cX);
+  float cosY = cos(pixelPos.y * cY);
+  float tX = sinX * 0.5 + 0.5;
+  float tY = sinY * 0.5 + 0.5;
+  float dtX = 0.5 * cX * cosX;
+  float dtY = 0.5 * cY * cosY;
+  return float2(dtX * tY * 0.045, tX * dtY * 0.045);
 }
 
 struct StrokeResult {
@@ -65,18 +82,28 @@ inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s) {
   float2 d = p - center;
   float2 local = float2(d.x * cs + d.y * sn, -d.x * sn + d.y * cs);
 
-  float alongT = local.x / halfLen;             // -1 .. 1 along length
-  float acrossT = local.y / halfWd;             // local y in widths
+  float alongT = local.x / halfLen;
+  float acrossT = local.y / halfWd;
 
-  if (abs(alongT) > 1.25 || abs(acrossT) > 1.35) return r;
+  if (alongT < -1.15 || alongT > 1.25 || abs(acrossT) > 1.35) return r;
 
   float wob = sin(alongT * (3.0 + hash11(seed) * 3.0) + seed * 17.0) * 0.15;
   wob += (shaderNoise(float2(alongT * 2.2, seed)) - 0.5) * 0.35;
   acrossT += wob;
 
-  float loaded = 1.0 - smoothstep(-1.0, 1.4, alongT) * 0.65;
+  float sAlong = (alongT + 1.0) * 0.5;
 
-  float endTaper = smoothstep(-1.05, -0.75, alongT) * smoothstep(1.05, 0.75, alongT);
+  float paintLoad = exp(-sAlong * 1.5) + 0.22;
+  paintLoad = min(paintLoad, 1.0);
+
+  float impastoLoad = exp(-sAlong * 3.8);
+  impastoLoad += exp(-sAlong * 10.0) * 0.25;
+
+  float dryness = smoothstep(0.15, 0.95, sAlong);
+
+  float startTaper = smoothstep(-1.10, -0.88, alongT);
+  float endTaper   = smoothstep(1.25, 0.30, alongT);
+  float lengthMask = startTaper * endTaper;
 
   float widthProfile = 1.0 - smoothstep(0.70, 1.10, abs(acrossT));
   widthProfile *= widthProfile;
@@ -89,24 +116,35 @@ inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s) {
   float bProfile     = 1.0 - abs(bInB - 0.5) * 2.0;
   bProfile           = pow(max(bProfile, 0.0), 0.55);
 
-  float dry = shaderNoise(float2(alongT * 5.5 + seed, bristleId * 0.37));
-  dry = smoothstep(0.18, 0.62, dry);
+  float dryNoise  = shaderNoise(float2(alongT * 5.5 + seed, bristleId * 0.37));
+  float dryThresh = mix(0.12, 0.62, dryness);
+  float dry       = smoothstep(dryThresh, dryThresh + 0.25, dryNoise);
 
   float bristleAmount = bStrength * bProfile * dry;
 
-  float core = widthProfile * loaded * endTaper * baseOp * (1.0 - smoothstep(0.45, 0.92, abs(acrossT))) * 0.38;
-  float bristleCov = widthProfile * loaded * endTaper * baseOp * bristleAmount;
+  float core = widthProfile * paintLoad * lengthMask * baseOp
+             * (1.0 - smoothstep(0.45, 0.92, abs(acrossT))) * 0.40;
+  float bristleCov = widthProfile * paintLoad * lengthMask * baseOp * bristleAmount;
   float coverage = max(core, bristleCov);
 
   if (coverage < 0.002) return r;
 
   r.coverage    = coverage;
-  r.alongNorm   = (alongT + 1.0) * 0.5;
+  r.alongNorm   = sAlong;
   r.acrossT     = acrossT;
   r.bristleTone = (bStrength - 0.65) * 1.4;
 
-  float ridge = 0.55 + 0.45 * bProfile;
-  r.heightDelta = widthProfile * loaded * endTaper * baseOp * ridge * 0.85;
+  float ridge = 0.30 + 0.9 * pow(bProfile, 0.75);
+  r.heightDelta = widthProfile * impastoLoad * lengthMask * baseOp * ridge * 0.95;
+
+  float grainMed    = shaderNoise(p * 300.0  + center * 10.0) - 0.5;
+  float grainCoarse = shaderNoise(p * 650.0  + center * 20.0) - 0.5;
+  float grainFine   = shaderNoise(p * 2200.0 + seed * 3.7)    - 0.5;
+  float grain = grainMed * 0.40 + grainCoarse * 0.40 + grainFine * 0.30;
+
+  r.heightDelta *= (1.0 + grain * 0.80);
+  r.heightDelta = max(r.heightDelta, 0.0);
+
   return r;
 }
 
@@ -119,6 +157,7 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
   float halfLen = max(s.posAngle.w, 0.01);
   float halfWd  = max(s.sizeOpacity.x, 0.01);
   float baseOp  = s.sizeOpacity.y;
+  float seed    = s.sizeOpacity.z;
 
   float cs = cos(angle), sn = sin(angle);
   float2 d = p - center;
@@ -126,17 +165,40 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
   float2 scaled = local / float2(halfLen, halfWd);
   float rr = length(scaled);
 
-  float n1 = shaderNoise(p * 4.0 + center * 5.0);
-  float n2 = shaderNoise(p * 12.0 + center * 2.0);
-  float boundary = 1.0 + (n1 - 0.5) * 0.40 + (n2 - 0.5) * 0.18;
-  float falloff = 1.0 - smoothstep(boundary * 0.25, boundary * 1.0, rr);
-  falloff *= falloff;
+  if (rr > 1.5) return r;
+
+  float n1 = shaderNoise(p * 2.5 + center * 5.0) - 0.5;
+  float n2 = shaderNoise(p * 7.0 + center * 11.0 + seed) - 0.5;
+  float n3 = shaderNoise(p * 18.0 + seed * 7.0) - 0.5;
+  float boundary = 1.0 + n1 * 0.50 + n2 * 0.28 + n3 * 0.14;
+
+  float normR = rr / max(boundary, 0.01);
+  float falloff = 1.0 - smoothstep(0.25, 1.05, normR);
+  falloff = pow(max(falloff, 0.0), 1.2);
+
+  float densA = shaderNoise(p * 4.5 + center * 3.0);
+  float densB = shaderNoise(p * 13.0 + seed * 2.3);
+  float density = 0.65 + densA * 0.45 + densB * 0.18;
+  falloff *= density;
+
+  float edgeZone = smoothstep(0.55, 0.82, normR) * (1.0 - smoothstep(0.88, 1.10, normR));
+  float poolNoise = shaderNoise(p * 28.0 + seed) * 0.5 + 0.5;
+  float washExists = smoothstep(0.02, 0.25, falloff);
+  falloff += edgeZone * poolNoise * 0.40 * washExists;
+
+  float grain = shaderNoise(p * 380.0 + seed) - 0.5;
+  falloff *= (1.0 + grain * 0.20);
+
+  float grain2 = shaderNoise(p * 1200.0 + seed * 3.7) - 0.5;
+  falloff *= (1.0 + grain2 * 0.10);
+
+  falloff = clamp(falloff, 0.0, 1.35);
 
   r.coverage    = falloff * baseOp;
   r.alongNorm   = 0.5;
-  r.acrossT     = rr;
-  r.bristleTone = 0;
-  r.heightDelta = r.coverage * 0.03;
+  r.acrossT     = normR;
+  r.bristleTone = grain * 0.4;
+  r.heightDelta = 0;
   return r;
 }
 
@@ -183,6 +245,13 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
   r.coverage    = coverage;
   r.acrossT     = dist / max(effR, 0.001);
   r.heightDelta = h;
+
+  float splatGrainCoarse = shaderNoise(p * 250.0 + seed * 7.0)  - 0.5;
+  float splatGrainFine   = shaderNoise(p * 800.0 + seed * 11.0) - 0.5;
+  float splatGrain = splatGrainCoarse * 0.55 + splatGrainFine * 0.45;
+  r.heightDelta *= (1.0 + splatGrain * 0.65);
+  r.heightDelta = max(r.heightDelta, 0.0);
+
   return r;
 }
 
@@ -192,9 +261,17 @@ inline half3 applyStroke(half3 canvas, constant AbExStroke &s, StrokeResult sr) 
   half cov = half(sr.coverage);
   half3 base = half3(s.color.xyz);
 
-  half tonal = 1.0h + half(sr.bristleTone) * 0.28h;
+  half tonal     = 1.0h + half(sr.bristleTone) * 0.18h;
+  half hueShift  = half(sr.bristleTone) * 0.16h;
+
+  half3 tint = base * tonal;
+  tint.r += hueShift * 0.10h;
+  tint.g -= hueShift * 0.08h;
+  tint.b += hueShift * 0.14h;
+
   half along = half(sr.alongNorm - 0.5) * 0.22h;
-  half3 tint = base * tonal + half3(along, -along * 0.5h, along * 0.65h);
+  tint += half3(along, -along * 0.5h, along * 0.65h);
+
   tint = clamp(tint, 0.0h, 1.0h);
 
   half3 mixed = mix(canvas, tint, cov);
@@ -234,7 +311,8 @@ kernel void abexPaint(texture2d<half, access::read>  colorIn   [[texture(0)]],
   } else {
     color  = colorIn.read(gid).rgb;
     height = heightIn.read(gid).r;
-    color  = mix(color, canvasBase, dryRate);
+    half3 weavedBase = canvasBase - canvasWeave(float2(gid));
+    color  = mix(color, weavedBase, dryRate);
     height *= 0.9996h;
   }
 
@@ -245,9 +323,28 @@ kernel void abexPaint(texture2d<half, access::read>  colorIn   [[texture(0)]],
     else if (type < 1.5) sr = evaluateWash(p, strokes[i]);
     else                 sr = evaluateSplatter(p, strokes[i]);
 
+    bool isWash = (type >= 0.5 && type < 1.5);
+    if (!isWash) {
+      bool isGestural = (type < 0.5);
+      float resistanceMult = isGestural ? 1.6 : 1.0;
+      float resistanceCap  = isGestural ? 0.65 : 0.50;
+      float resistance     = clamp(float(height) * resistanceMult, 0.0, resistanceCap);
+      float adhesion       = 1.0 - resistance;
+
+      float perturb  = float(i) * 17.3 + strokes[i].sizeOpacity.z * 0.03;
+      float microVar = shaderNoise(p * 400.0 + float2(perturb * 13.0,
+                                                       perturb * 7.0));
+      float microMod = 0.78 + microVar * 0.44;
+
+      sr.coverage    *= adhesion * microMod;
+      sr.heightDelta *= adhesion;
+    }
+
     color  = applyStroke(color, strokes[i], sr);
     height = min(height + half(sr.heightDelta), 1.0h);
   }
+
+  if (height < 0.004h) height = 0.0h;
 
   colorOut.write(half4(color, 1.0h), gid);
   heightOut.write(half4(height, 0, 0, 0), gid);
@@ -319,6 +416,23 @@ kernel void abexLight(texture2d<half, access::read>  colorIn   [[texture(0)]],
                               (hD - hU) * bump,
                               1.0));
 
+  float paintMask = smoothstep(0.06, 0.32, hC);
+
+  float2 ng = float2(gid);
+
+  float dn1 = shaderNoise(ng * 0.42)          - 0.5;
+  float dn2 = shaderNoise(ng * 0.42 + 173.0)  - 0.5;
+  float detailAmt = paintMask * 0.45;
+  N = normalize(N + float3(dn1, dn2, 0.0) * detailAmt);
+
+  float2 cvGrad = canvasWeaveGradient(ng);
+  float cvStrength = 0.35 * (1.0 - paintMask * 0.70);
+  N = normalize(N + float3(-cvGrad.x, -cvGrad.y, 0.0) * cvStrength);
+
+  float cg1 = shaderNoise(ng * 1.6)          - 0.5;
+  float cg2 = shaderNoise(ng * 1.6 + 91.0)   - 0.5;
+  N = normalize(N + float3(cg1, cg2, 0.0) * 0.045 * (1.0 - paintMask));
+
   float3 Ldir = normalize(float3(-0.45, 0.60, 0.65));
   float3 V    = float3(0.0, 0.0, 1.0);
   float3 H    = normalize(Ldir + V);
@@ -326,10 +440,10 @@ kernel void abexLight(texture2d<half, access::read>  colorIn   [[texture(0)]],
   float ndl  = max(0.0, dot(N, Ldir));
   float hl   = 0.55 + 0.45 * ndl;
   float ndh  = max(0.0, dot(N, H));
-  float spec = pow(ndh, 32.0);
 
-  float paintMask = smoothstep(0.02, 0.22, hC);
-  spec *= paintMask;
+  float specBroad = pow(ndh, 8.0)  * 0.35;
+  float specTight = pow(ndh, 64.0) * 0.45;
+  float spec = (specBroad + specTight) * paintMask;
 
   float3 warmLight  = float3(1.00, 0.95, 0.82);
   float3 coolShadow = float3(0.82, 0.86, 0.96);

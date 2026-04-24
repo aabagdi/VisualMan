@@ -46,9 +46,12 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var strokeSeed: UInt32 = 0
   var isFirstFrame: Bool = true
 
-  static let canvasColor = SIMD3<Float>(0.95, 0.92, 0.87)
-  static let maxFramesInFlight: UInt64 = 3
+  var songSeed: Float = Float.random(in: 0..<1000)
+  var warmBias: Float = Float.random(in: 0.2..<0.8)
 
+  static let canvasColor = SIMD3<Float>(0.95, 0.92, 0.87)
+
+  static let maxFramesInFlight: UInt64 = 3
   var commandAllocators = [any MTL4CommandAllocator]()
   var commandBuffer: any MTL4CommandBuffer
   var argumentTables: [any MTL4ArgumentTable]
@@ -160,7 +163,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     let params = AbExParams(
       audio: .zero,
       canvas: SIMD4(cc.x, cc.y, cc.z, 0),
-      config: SIMD4(0, 1, 0, 6))
+      config: SIMD4(0, 1, 0, 10))
     renderPaint(encoder: encoder,
                 colorIn: dA, colorOut: dB,
                 heightIn: hA, heightOut: hB,
@@ -183,6 +186,8 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     envelope = .zero
     slowEnvelope = .zero
     smoothedBass = 0
+    songSeed = Float.random(in: 0..<1000)
+    warmBias = Float.random(in: 0.2..<0.8)
   }
 
   private func drainPendingTextureReleases() {
@@ -257,7 +262,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     let energy = (smoothed.x + smoothed.y + smoothed.z) / 3.0
     let dryRate: Float = 0.0003 + energy * 0.0002
     let diffusionRate: Float = 0.010 + energy * 0.015
-    let bumpStrength: Float = 7.0
+    let bumpStrength: Float = 10.0   // raised from 7.0 for more visible impasto
 
     let cc = Self.canvasColor
     let params = AbExParams(
