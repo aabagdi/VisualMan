@@ -216,11 +216,14 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
   
   falloff = clamp(falloff, 0.0, 1.35);
   
+  float thickness = smoothstep(0.08, 0.45, baseOp);
+  float ridgeAmount = mix(0.005, 0.16, hash11(seed * 2.17)) * thickness;
+  
   r.coverage    = falloff * baseOp;
   r.alongNorm   = 0.5;
   r.acrossT     = normR;
   r.bristleTone = grain * 0.4;
-  r.heightDelta = 0;
+  r.heightDelta = edgeZone * poolNoise * ridgeAmount * washExists;
   return r;
 }
 
