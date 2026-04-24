@@ -166,6 +166,65 @@ extension AbstractExpressionismRenderer {
     }
   }
 
+  private func generateSustainedGesturalStroke(
+    energy: Float, focus: SIMD2<Float>, spread: Float, strokes: inout [AbExStroke]
+  ) {
+    guard energy > 0.05
+            && (wallClock - lastGesturalTime) > 0.22
+            && strokes.count < 8
+            && nextSeed() < 0.50 else { return }
+    lastGesturalTime = wallClock
+    let x = focus.x + (nextSeed() - 0.5) * 0.42 * spread
+    let y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
+    let angle = nextSeed() * .pi * 2
+    let halfLen = 0.09 + energy * 0.18 + nextSeed() * 0.07
+    let halfWidth = 0.011 + energy * 0.014 + nextSeed() * 0.007
+    let opacity = 0.65 + energy * 0.25
+    let bristleSeed = nextSeed() * 100
+    let color = pickColorBiased()
+    strokes.append(AbExStroke(
+      posAngle: SIMD4(x, y, angle, halfLen),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
+      color: SIMD4(color.x, color.y, color.z, 0)))
+  }
+
+  private func generateWashStroke(
+    mid: Float, focus: SIMD2<Float>, strokes: inout [AbExStroke]
+  ) {
+    guard mid > 0.04 && (wallClock - lastWashTime) > 0.3 && strokes.count < 8 else { return }
+    lastWashTime = wallClock
+    let x = focus.x * 0.6 + (nextSeed() - 0.5) * 0.55
+    let y = focus.y * 0.6 + (nextSeed() - 0.5) * 1.05
+    let angle = nextSeed() * .pi
+    let halfLen = 0.18 + mid * 0.25
+    let halfWidth = 0.12 + mid * 0.18
+    let opacity = 0.10 + mid * 0.14
+    let bristleSeed = nextSeed() * 100
+    let color = pickColorBiased()
+    strokes.append(AbExStroke(
+      posAngle: SIMD4(x, y, angle, halfLen),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
+      color: SIMD4(color.x, color.y, color.z, 0)))
+  }
+
+  private func generateAtmosphericStroke(
+    energy: Float, focus: SIMD2<Float>, strokes: inout [AbExStroke]
+  ) {
+    guard energy > 0.01 && strokes.count < 8 && nextSeed() < 0.04 else { return }
+    let x = focus.x + (nextSeed() - 0.5) * 0.45
+    let y = focus.y + (nextSeed() - 0.5) * 1.00
+    let angle = time * 0.1 + nextSeed() * .pi
+    let halfLen = 0.20 + nextSeed() * 0.15
+    let halfWidth = 0.14 + nextSeed() * 0.10
+    let opacity: Float = 0.04 + energy * 0.05
+    let bristleSeed = nextSeed() * 100
+    let color = pickColorBiased()
+    strokes.append(AbExStroke(
+      posAngle: SIMD4(x, y, angle, halfLen),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
+      color: SIMD4(color.x, color.y, color.z, 0)))
+  }
+
   func generateStrokes(audio: SIMD3<Float>) -> [AbExStroke] {
     var strokes = [AbExStroke]()
     if resumeSuppressionRemaining > 0 { return strokes }
@@ -178,58 +237,14 @@ extension AbstractExpressionismRenderer {
     let transientFired = generateGesturalStrokes(
       bass: bass, focus: focus, spread: spread, strokes: &strokes)
 
-    if !transientFired
-        && energy > 0.05
-        && (wallClock - lastGesturalTime) > 0.22
-        && strokes.count < 8
-        && nextSeed() < 0.50 {
-      lastGesturalTime = wallClock
-      let x = focus.x + (nextSeed() - 0.5) * 0.42 * spread
-      let y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
-      let angle = nextSeed() * .pi * 2
-      let halfLen = 0.09 + energy * 0.18 + nextSeed() * 0.07
-      let halfWidth = 0.011 + energy * 0.014 + nextSeed() * 0.007
-      let opacity = 0.65 + energy * 0.25
-      let bristleSeed = nextSeed() * 100
-      let color = pickColorBiased()
-      strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, angle, halfLen),
-        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
-        color: SIMD4(color.x, color.y, color.z, 0)))
+    if !transientFired {
+      generateSustainedGesturalStroke(
+        energy: energy, focus: focus, spread: spread, strokes: &strokes)
     }
 
-    if mid > 0.04 && (wallClock - lastWashTime) > 0.3 && strokes.count < 8 {
-      lastWashTime = wallClock
-      let x = focus.x * 0.6 + (nextSeed() - 0.5) * 0.55
-      let y = focus.y * 0.6 + (nextSeed() - 0.5) * 1.05
-      let angle = nextSeed() * .pi
-      let halfLen = 0.18 + mid * 0.25
-      let halfWidth = 0.12 + mid * 0.18
-      let opacity = 0.10 + mid * 0.14
-      let bristleSeed = nextSeed() * 100
-      let color = pickColorBiased()
-      strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, angle, halfLen),
-        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
-        color: SIMD4(color.x, color.y, color.z, 0)))
-    }
-
+    generateWashStroke(mid: mid, focus: focus, strokes: &strokes)
     generateSplatterStrokes(high: high, strokes: &strokes)
-
-    if energy > 0.01 && strokes.count < 8 && nextSeed() < 0.04 {
-      let x = focus.x + (nextSeed() - 0.5) * 0.45
-      let y = focus.y + (nextSeed() - 0.5) * 1.00
-      let angle = time * 0.1 + nextSeed() * .pi
-      let halfLen = 0.20 + nextSeed() * 0.15
-      let halfWidth = 0.14 + nextSeed() * 0.10
-      let opacity: Float = 0.04 + energy * 0.05
-      let bristleSeed = nextSeed() * 100
-      let color = pickColorBiased()
-      strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, angle, halfLen),
-        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
-        color: SIMD4(color.x, color.y, color.z, 0)))
-    }
+    generateAtmosphericStroke(energy: energy, focus: focus, strokes: &strokes)
 
     return strokes
   }
@@ -239,9 +254,9 @@ extension AbstractExpressionismRenderer {
                    heightIn: MTLTexture, heightOut: MTLTexture,
                    params: AbExParams, strokes: [AbExStroke]) {
     encoder.setComputePipelineState(paintPipeline)
-    argumentTable.setTexture(colorIn.gpuResourceID,   index: 0)
-    argumentTable.setTexture(colorOut.gpuResourceID,  index: 1)
-    argumentTable.setTexture(heightIn.gpuResourceID,  index: 2)
+    argumentTable.setTexture(colorIn.gpuResourceID, index: 0)
+    argumentTable.setTexture(colorOut.gpuResourceID, index: 1)
+    argumentTable.setTexture(heightIn.gpuResourceID, index: 2)
     argumentTable.setTexture(heightOut.gpuResourceID, index: 3)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
@@ -262,9 +277,9 @@ extension AbstractExpressionismRenderer {
                      heightIn: MTLTexture, heightOut: MTLTexture,
                      params: AbExParams) {
     encoder.setComputePipelineState(diffusePipeline)
-    argumentTable.setTexture(colorIn.gpuResourceID,   index: 0)
-    argumentTable.setTexture(colorOut.gpuResourceID,  index: 1)
-    argumentTable.setTexture(heightIn.gpuResourceID,  index: 2)
+    argumentTable.setTexture(colorIn.gpuResourceID, index: 0)
+    argumentTable.setTexture(colorOut.gpuResourceID, index: 1)
+    argumentTable.setTexture(heightIn.gpuResourceID, index: 2)
     argumentTable.setTexture(heightOut.gpuResourceID, index: 3)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
@@ -278,7 +293,7 @@ extension AbstractExpressionismRenderer {
                    colorOut: MTLTexture,
                    params: AbExParams) {
     encoder.setComputePipelineState(lightPipeline)
-    argumentTable.setTexture(colorIn.gpuResourceID,  index: 0)
+    argumentTable.setTexture(colorIn.gpuResourceID, index: 0)
     argumentTable.setTexture(heightIn.gpuResourceID, index: 1)
     argumentTable.setTexture(colorOut.gpuResourceID, index: 2)
     argumentTable.setAddress(writeUniform(params), index: 0)
