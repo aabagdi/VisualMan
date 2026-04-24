@@ -74,10 +74,11 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   private var colorMidB: MTLTexture?
   private var colorFrontA: MTLTexture?
   private var colorFrontB: MTLTexture?
-  private var heightA: MTLTexture?
-  private var heightB: MTLTexture?
+  private var heightBackA: MTLTexture?
+  private var heightBackB: MTLTexture?
+  private var heightMFA: MTLTexture?
+  private var heightMFB: MTLTexture?
   private var displayTex: MTLTexture?
-
   private var canvasSize: Int = 0
   private var lastDisplayWidth: Int = 0
   private var lastDisplayHeight: Int = 0
@@ -143,10 +144,15 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     colDesc.usage = [.shaderRead, .shaderWrite]
     colDesc.storageMode = .private
 
-    let hDesc = MTLTextureDescriptor.texture2DDescriptor(
+    let hbDesc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .r16Float, width: 64, height: 64, mipmapped: false)
-    hDesc.usage = [.shaderRead, .shaderWrite]
-    hDesc.storageMode = .private
+    hbDesc.usage = [.shaderRead, .shaderWrite]
+    hbDesc.storageMode = .private
+
+    let hmfDesc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .rg16Float, width: 64, height: 64, mipmapped: false)
+    hmfDesc.usage = [.shaderRead, .shaderWrite]
+    hmfDesc.storageMode = .private
 
     guard let bA = device.makeTexture(descriptor: colDesc),
           let bB = device.makeTexture(descriptor: colDesc),
@@ -154,11 +160,14 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
           let mB = device.makeTexture(descriptor: colDesc),
           let fA = device.makeTexture(descriptor: colDesc),
           let fB = device.makeTexture(descriptor: colDesc),
-          let hA = device.makeTexture(descriptor: hDesc),
-          let hB = device.makeTexture(descriptor: hDesc),
+          let hbA = device.makeTexture(descriptor: hbDesc),
+          let hbB = device.makeTexture(descriptor: hbDesc),
+          let hmfA = device.makeTexture(descriptor: hmfDesc),
+          let hmfB = device.makeTexture(descriptor: hmfDesc),
           let disp = device.makeTexture(descriptor: colDesc) else { return }
 
-    let dummies: [MTLTexture] = [bA, bB, mA, mB, fA, fB, hA, hB, disp]
+    let dummies: [MTLTexture] = [bA, bB, mA, mB, fA, fB,
+                                 hbA, hbB, hmfA, hmfB, disp]
     for t in dummies { residencySet.addAllocation(t) }
     residencySet.commit()
 
@@ -185,13 +194,14 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
                 colorBackIn: bA, colorBackOut: bB,
                 colorMidIn: mA, colorMidOut: mB,
                 colorFrontIn: fA, colorFrontOut: fB,
-                heightIn: hA, heightOut: hB,
+                heightBackIn: hbA, heightBackOut: hbB,
+                heightMFIn: hmfA, heightMFOut: hmfB,
                 params: params, strokes: [])
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     renderCompose(encoder: encoder,
                   colorBack: bB, colorMid: mB, colorFront: fB,
-                  heightTex: hB, output: disp,
-                  params: params)
+                  heightBack: hbB, heightMF: hmfB,
+                  output: disp, params: params)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -227,12 +237,15 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     let canvasExists = colorBackA != nil && colorBackB != nil
         && colorMidA != nil && colorMidB != nil
         && colorFrontA != nil && colorFrontB != nil
-        && heightA != nil && heightB != nil
+        && heightBackA != nil && heightBackB != nil
+        && heightMFA != nil && heightMFB != nil
     let canvasNeedsRebuild = !canvasExists || targetCanvasSize > canvasSize
 
     if canvasNeedsRebuild {
       for old in [colorBackA, colorBackB, colorMidA, colorMidB,
-                  colorFrontA, colorFrontB, heightA, heightB] {
+                  colorFrontA, colorFrontB,
+                  heightBackA, heightBackB,
+                  heightMFA, heightMFB] {
         if let t = old {
           pendingTextureReleases.append((frame: frameNumber, texture: t))
         }
@@ -243,10 +256,15 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
       colDesc.usage = [.shaderRead, .shaderWrite]
       colDesc.storageMode = .private
 
-      let hDesc = MTLTextureDescriptor.texture2DDescriptor(
+      let hbDesc = MTLTextureDescriptor.texture2DDescriptor(
         pixelFormat: .r16Float, width: targetCanvasSize, height: targetCanvasSize, mipmapped: false)
-      hDesc.usage = [.shaderRead, .shaderWrite]
-      hDesc.storageMode = .private
+      hbDesc.usage = [.shaderRead, .shaderWrite]
+      hbDesc.storageMode = .private
+
+      let hmfDesc = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .rg16Float, width: targetCanvasSize, height: targetCanvasSize, mipmapped: false)
+      hmfDesc.usage = [.shaderRead, .shaderWrite]
+      hmfDesc.storageMode = .private
 
       guard let bA = device.makeTexture(descriptor: colDesc),
             let bB = device.makeTexture(descriptor: colDesc),
@@ -254,27 +272,32 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
             let mB = device.makeTexture(descriptor: colDesc),
             let fA = device.makeTexture(descriptor: colDesc),
             let fB = device.makeTexture(descriptor: colDesc),
-            let hA = device.makeTexture(descriptor: hDesc),
-            let hB = device.makeTexture(descriptor: hDesc) else {
+            let hbA = device.makeTexture(descriptor: hbDesc),
+            let hbB = device.makeTexture(descriptor: hbDesc),
+            let hmfA = device.makeTexture(descriptor: hmfDesc),
+            let hmfB = device.makeTexture(descriptor: hmfDesc) else {
         colorBackA = nil; colorBackB = nil
         colorMidA = nil;  colorMidB = nil
         colorFrontA = nil; colorFrontB = nil
-        heightA = nil; heightB = nil
+        heightBackA = nil; heightBackB = nil
+        heightMFA = nil;   heightMFB = nil
         canvasSize = 0
         return false
       }
 
-      for t in [bA, bB, mA, mB, fA, fB, hA, hB] {
+      for t in [bA, bB, mA, mB, fA, fB,
+                hbA, hbB, hmfA, hmfB] {
         residencySet.addAllocation(t)
       }
 
-      colorBackA  = bA; colorBackB  = bB
-      colorMidA   = mA; colorMidB   = mB
-      colorFrontA = fA; colorFrontB = fB
-      heightA     = hA; heightB     = hB
-      canvasSize  = targetCanvasSize
+      colorBackA   = bA;  colorBackB   = bB
+      colorMidA    = mA;  colorMidB    = mB
+      colorFrontA  = fA;  colorFrontB  = fB
+      heightBackA  = hbA; heightBackB  = hbB
+      heightMFA    = hmfA; heightMFB   = hmfB
+      canvasSize   = targetCanvasSize
       isFirstFrame = true
-      currentIsA = true
+      currentIsA   = true
     }
 
     let displayNeedsRebuild = displayTex == nil
@@ -319,15 +342,17 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     guard ensureCanvasTextures(displayWidth: drawableWidth, displayHeight: drawableHeight) else { return nil }
 
     let readA = currentIsA
-    guard let backIn  = readA ? colorBackA  : colorBackB,
-          let backOut = readA ? colorBackB  : colorBackA,
-          let midIn   = readA ? colorMidA   : colorMidB,
-          let midOut  = readA ? colorMidB   : colorMidA,
-          let frontIn = readA ? colorFrontA : colorFrontB,
-          let frontOut = readA ? colorFrontB : colorFrontA,
-          let hIn     = readA ? heightA     : heightB,
-          let hOut    = readA ? heightB     : heightA,
-          let disp    = displayTex else { return nil }
+    guard let backIn    = readA ? colorBackA   : colorBackB,
+          let backOut   = readA ? colorBackB   : colorBackA,
+          let midIn     = readA ? colorMidA    : colorMidB,
+          let midOut    = readA ? colorMidB    : colorMidA,
+          let frontIn   = readA ? colorFrontA  : colorFrontB,
+          let frontOut  = readA ? colorFrontB  : colorFrontA,
+          let hbIn      = readA ? heightBackA  : heightBackB,
+          let hbOut     = readA ? heightBackB  : heightBackA,
+          let hmfIn     = readA ? heightMFA    : heightMFB,
+          let hmfOut    = readA ? heightMFB    : heightMFA,
+          let disp      = displayTex else { return nil }
 
     guard let encoder = beginFrame() else { return nil }
 
@@ -335,7 +360,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
     let energy = (smoothed.x + smoothed.y + smoothed.z) / 3.0
     let dryRate: Float = 0.0003 + energy * 0.0002
-    let bumpStrength: Float = 10.0
+    let bumpStrength: Float = 13.0
 
     cameraPhase += dt * 0.30
     let camPanX: Float = sin(cameraPhase * 0.13) * 0.015
@@ -356,14 +381,15 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
                 colorBackIn: backIn, colorBackOut: backOut,
                 colorMidIn: midIn, colorMidOut: midOut,
                 colorFrontIn: frontIn, colorFrontOut: frontOut,
-                heightIn: hIn, heightOut: hOut,
+                heightBackIn: hbIn, heightBackOut: hbOut,
+                heightMFIn: hmfIn, heightMFOut: hmfOut,
                 params: params, strokes: strokes)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     renderCompose(encoder: encoder,
                   colorBack: backOut, colorMid: midOut, colorFront: frontOut,
-                  heightTex: hOut, output: disp,
-                  params: params)
+                  heightBack: hbOut, heightMF: hmfOut,
+                  output: disp, params: params)
 
     encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
     encoder.endEncoding()

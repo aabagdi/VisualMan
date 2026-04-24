@@ -29,7 +29,7 @@ extension AbstractExpressionismRenderer {
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
     let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 8
+    desc.maxTextureBindCount = 12
     desc.maxBufferBindCount = 2
     var tables = [any MTL4ArgumentTable]()
     for _ in 0..<maxFramesInFlight {

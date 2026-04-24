@@ -59,32 +59,6 @@ extension AbstractExpressionismRenderer {
     return SIMD2(fx, fy)
   }
 
-  private func appendSplatterStrokes(into strokes: inout [AbExStroke], high: Float) {
-    lastSplatterTime = wallClock
-    let sFocus = splatterFocus()
-    let count = high > 0.25 ? 2 : 1
-    for _ in 0..<count where strokes.count < 8 {
-      let isOutlier = nextSeed() < 0.35
-      let x: Float
-      let y: Float
-      if isOutlier {
-        x = (nextSeed() - 0.5) * 1.05
-        y = (nextSeed() - 0.5) * 1.10
-      } else {
-        x = sFocus.x + (nextSeed() - 0.5) * 0.42
-        y = sFocus.y + (nextSeed() - 0.5) * 0.45
-      }
-      let radius = 0.010 + high * 0.024 + nextSeed() * 0.012
-      let opacity = 0.95 + high * 0.05
-      let bristleSeed = nextSeed() * 100
-      let color = pickColorBiased()
-      strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, 0, radius),
-        sizeOpacity: SIMD4(radius, opacity, bristleSeed, 2),
-        color: SIMD4(color.x, color.y, color.z, 0)))
-    }
-  }
-
   private func handleResumeState(gap: Double) {
     let gapResume = gap > 0.2
     let isResume = (lastFrameTime == 0) || gapResume
@@ -134,6 +108,119 @@ extension AbstractExpressionismRenderer {
     return envelope * fade
   }
 
+  private func appendTransientStrokes(into strokes: inout [AbExStroke],
+                                      fired: Bool,
+                                      bass: Float,
+                                      focus: SIMD2<Float>,
+                                      spread: Float) {
+    guard fired else { return }
+    lastGesturalTime = wallClock
+    let count = bass > 0.25 ? 3 : (bass > 0.10 ? 2 : 1)
+    for _ in 0..<count where strokes.count < 8 {
+      let x = focus.x + (nextSeed() - 0.5) * 0.85 * spread
+      let y = focus.y + (nextSeed() - 0.5) * 0.95 * spread
+      let angle = nextSeed() * .pi * 2
+      let halfLen = 0.14 + bass * 0.28 + nextSeed() * 0.10
+      let halfWidth = 0.014 + bass * 0.022 + nextSeed() * 0.010
+      let opacity = 0.85 + bass * 0.15
+      let bristleSeed = nextSeed() * 100
+      let color = pickColorBiased()
+      strokes.append(AbExStroke(
+        posAngle: SIMD4(x, y, angle, halfLen),
+        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
+        color: SIMD4(color.x, color.y, color.z, 0)))
+    }
+  }
+
+  private func appendGesturalStroke(into strokes: inout [AbExStroke],
+                                    transientFired: Bool,
+                                    energy: Float,
+                                    focus: SIMD2<Float>,
+                                    spread: Float) {
+    guard !transientFired,
+          energy > 0.03,
+          (wallClock - lastGesturalTime) > 0.15,
+          strokes.count < 8,
+          nextSeed() < 0.72 else { return }
+    lastGesturalTime = wallClock
+    let x = focus.x + (nextSeed() - 0.5) * 0.88 * spread
+    let y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
+    let angle = nextSeed() * .pi * 2
+    let halfLen = 0.09 + energy * 0.18 + nextSeed() * 0.07
+    let halfWidth = 0.011 + energy * 0.014 + nextSeed() * 0.007
+    let opacity = 0.65 + energy * 0.25
+    let bristleSeed = nextSeed() * 100
+    let color = pickColorBiased()
+    strokes.append(AbExStroke(
+      posAngle: SIMD4(x, y, angle, halfLen),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
+      color: SIMD4(color.x, color.y, color.z, 0)))
+  }
+
+  private func appendWashStroke(into strokes: inout [AbExStroke],
+                                mid: Float,
+                                focus: SIMD2<Float>) {
+    guard mid > 0.04, (wallClock - lastWashTime) > 0.3, strokes.count < 8 else { return }
+    lastWashTime = wallClock
+    let x = focus.x * 0.6 + (nextSeed() - 0.5) * 1.00
+    let y = focus.y * 0.6 + (nextSeed() - 0.5) * 1.05
+    let angle = nextSeed() * .pi
+    let halfLen = 0.18 + mid * 0.25
+    let halfWidth = 0.12 + mid * 0.18
+    let opacity = 0.10 + mid * 0.14
+    let bristleSeed = nextSeed() * 100
+    let color = pickColorBiased()
+    strokes.append(AbExStroke(
+      posAngle: SIMD4(x, y, angle, halfLen),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
+      color: SIMD4(color.x, color.y, color.z, 0)))
+  }
+
+  private func appendSplatterStrokes(into strokes: inout [AbExStroke], high: Float) {
+    guard high > 0.04, (wallClock - lastSplatterTime) > 0.12, strokes.count < 8 else { return }
+    lastSplatterTime = wallClock
+    let sFocus = splatterFocus()
+    let count = high > 0.25 ? 2 : 1
+    for _ in 0..<count where strokes.count < 8 {
+      let isOutlier = nextSeed() < 0.35
+      let x: Float
+      let y: Float
+      if isOutlier {
+        x = (nextSeed() - 0.5) * 1.05
+        y = (nextSeed() - 0.5) * 1.10
+      } else {
+        x = sFocus.x + (nextSeed() - 0.5) * 0.42
+        y = sFocus.y + (nextSeed() - 0.5) * 0.45
+      }
+      let radius = 0.010 + high * 0.024 + nextSeed() * 0.012
+      let opacity = 0.95 + high * 0.05
+      let bristleSeed = nextSeed() * 100
+      let color = pickColorBiased()
+      strokes.append(AbExStroke(
+        posAngle: SIMD4(x, y, 0, radius),
+        sizeOpacity: SIMD4(radius, opacity, bristleSeed, 2),
+        color: SIMD4(color.x, color.y, color.z, 0)))
+    }
+  }
+
+  private func appendAmbientStroke(into strokes: inout [AbExStroke],
+                                   energy: Float,
+                                   focus: SIMD2<Float>) {
+    guard energy > 0.01, strokes.count < 8, nextSeed() < 0.04 else { return }
+    let x = focus.x + (nextSeed() - 0.5) * 0.95
+    let y = focus.y + (nextSeed() - 0.5) * 1.00
+    let angle = time * 0.1 + nextSeed() * .pi
+    let halfLen = 0.20 + nextSeed() * 0.15
+    let halfWidth = 0.14 + nextSeed() * 0.10
+    let opacity: Float = 0.04 + energy * 0.05
+    let bristleSeed = nextSeed() * 100
+    let color = pickColorBiased()
+    strokes.append(AbExStroke(
+      posAngle: SIMD4(x, y, angle, halfLen),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
+      color: SIMD4(color.x, color.y, color.z, 0)))
+  }
+
   func generateStrokes(audio: SIMD3<Float>) -> [AbExStroke] {
     var strokes = [AbExStroke]()
     if resumeSuppressionRemaining > 0 { return strokes }
@@ -148,79 +235,11 @@ extension AbstractExpressionismRenderer {
                       && (wallClock - lastGesturalTime) > 0.10
                       && strokes.count < 8
 
-    if transientFired {
-      lastGesturalTime = wallClock
-      let count = bass > 0.25 ? 3 : (bass > 0.10 ? 2 : 1)
-      for _ in 0..<count where strokes.count < 8 {
-        let x = focus.x + (nextSeed() - 0.5) * 0.85 * spread
-        let y = focus.y + (nextSeed() - 0.5) * 0.95 * spread
-        let angle = nextSeed() * .pi * 2
-        let halfLen = 0.14 + bass * 0.28 + nextSeed() * 0.10
-        let halfWidth = 0.014 + bass * 0.022 + nextSeed() * 0.010
-        let opacity = 0.85 + bass * 0.15
-        let bristleSeed = nextSeed() * 100
-        let color = pickColorBiased()
-        strokes.append(AbExStroke(
-          posAngle: SIMD4(x, y, angle, halfLen),
-          sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
-          color: SIMD4(color.x, color.y, color.z, 0)))
-      }
-    }
-
-    if !transientFired
-        && energy > 0.03
-        && (wallClock - lastGesturalTime) > 0.15
-        && strokes.count < 8
-        && nextSeed() < 0.72 {
-      lastGesturalTime = wallClock
-      let x = focus.x + (nextSeed() - 0.5) * 0.88 * spread
-      let y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
-      let angle = nextSeed() * .pi * 2
-      let halfLen = 0.09 + energy * 0.18 + nextSeed() * 0.07
-      let halfWidth = 0.011 + energy * 0.014 + nextSeed() * 0.007
-      let opacity = 0.65 + energy * 0.25
-      let bristleSeed = nextSeed() * 100
-      let color = pickColorBiased()
-      strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, angle, halfLen),
-        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
-        color: SIMD4(color.x, color.y, color.z, 0)))
-    }
-
-    if mid > 0.04 && (wallClock - lastWashTime) > 0.3 && strokes.count < 8 {
-      lastWashTime = wallClock
-      let x = focus.x * 0.6 + (nextSeed() - 0.5) * 1.00
-      let y = focus.y * 0.6 + (nextSeed() - 0.5) * 1.05
-      let angle = nextSeed() * .pi
-      let halfLen = 0.18 + mid * 0.25
-      let halfWidth = 0.12 + mid * 0.18
-      let opacity = 0.10 + mid * 0.14
-      let bristleSeed = nextSeed() * 100
-      let color = pickColorBiased()
-      strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, angle, halfLen),
-        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
-        color: SIMD4(color.x, color.y, color.z, 0)))
-    }
-
-    if high > 0.04 && (wallClock - lastSplatterTime) > 0.12 && strokes.count < 8 {
-      appendSplatterStrokes(into: &strokes, high: high)
-    }
-
-    if energy > 0.01 && strokes.count < 8 && nextSeed() < 0.04 {
-      let x = focus.x + (nextSeed() - 0.5) * 0.95
-      let y = focus.y + (nextSeed() - 0.5) * 1.00
-      let angle = time * 0.1 + nextSeed() * .pi
-      let halfLen = 0.20 + nextSeed() * 0.15
-      let halfWidth = 0.14 + nextSeed() * 0.10
-      let opacity: Float = 0.04 + energy * 0.05
-      let bristleSeed = nextSeed() * 100
-      let color = pickColorBiased()
-      strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, angle, halfLen),
-        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
-        color: SIMD4(color.x, color.y, color.z, 0)))
-    }
+    appendTransientStrokes(into: &strokes, fired: transientFired, bass: bass, focus: focus, spread: spread)
+    appendGesturalStroke(into: &strokes, transientFired: transientFired, energy: energy, focus: focus, spread: spread)
+    appendWashStroke(into: &strokes, mid: mid, focus: focus)
+    appendSplatterStrokes(into: &strokes, high: high)
+    appendAmbientStroke(into: &strokes, energy: energy, focus: focus)
 
     return strokes
   }
@@ -229,7 +248,8 @@ extension AbstractExpressionismRenderer {
                    colorBackIn: MTLTexture, colorBackOut: MTLTexture,
                    colorMidIn: MTLTexture, colorMidOut: MTLTexture,
                    colorFrontIn: MTLTexture, colorFrontOut: MTLTexture,
-                   heightIn: MTLTexture, heightOut: MTLTexture,
+                   heightBackIn: MTLTexture, heightBackOut: MTLTexture,
+                   heightMFIn: MTLTexture, heightMFOut: MTLTexture,
                    params: AbExParams, strokes: [AbExStroke]) {
     encoder.setComputePipelineState(paintPipeline)
     argumentTable.setTexture(colorBackIn.gpuResourceID, index: 0)
@@ -238,8 +258,10 @@ extension AbstractExpressionismRenderer {
     argumentTable.setTexture(colorMidOut.gpuResourceID, index: 3)
     argumentTable.setTexture(colorFrontIn.gpuResourceID, index: 4)
     argumentTable.setTexture(colorFrontOut.gpuResourceID, index: 5)
-    argumentTable.setTexture(heightIn.gpuResourceID, index: 6)
-    argumentTable.setTexture(heightOut.gpuResourceID, index: 7)
+    argumentTable.setTexture(heightBackIn.gpuResourceID, index: 6)
+    argumentTable.setTexture(heightBackOut.gpuResourceID, index: 7)
+    argumentTable.setTexture(heightMFIn.gpuResourceID, index: 8)
+    argumentTable.setTexture(heightMFOut.gpuResourceID, index: 9)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     if strokes.isEmpty {
@@ -256,14 +278,15 @@ extension AbstractExpressionismRenderer {
 
   func renderCompose(encoder: any MTL4ComputeCommandEncoder,
                      colorBack: MTLTexture, colorMid: MTLTexture, colorFront: MTLTexture,
-                     heightTex: MTLTexture, output: MTLTexture,
-                     params: AbExParams) {
+                     heightBack: MTLTexture, heightMF: MTLTexture,
+                     output: MTLTexture, params: AbExParams) {
     encoder.setComputePipelineState(composePipeline)
     argumentTable.setTexture(colorBack.gpuResourceID, index: 0)
     argumentTable.setTexture(colorMid.gpuResourceID, index: 1)
     argumentTable.setTexture(colorFront.gpuResourceID, index: 2)
-    argumentTable.setTexture(heightTex.gpuResourceID, index: 3)
-    argumentTable.setTexture(output.gpuResourceID, index: 4)
+    argumentTable.setTexture(heightBack.gpuResourceID, index: 3)
+    argumentTable.setTexture(heightMF.gpuResourceID, index: 4)
+    argumentTable.setTexture(output.gpuResourceID, index: 5)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     let tg = MTLSize(width: 16, height: 16, depth: 1)
