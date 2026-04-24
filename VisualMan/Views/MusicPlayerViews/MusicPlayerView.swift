@@ -106,30 +106,32 @@ struct MusicPlayerView: View {
     }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        HStack(spacing: 12) {
-          Button {
-            captureScreenshot()
-          } label: {
-            Image(systemName: "camera")
-          }
-          .disabled(isCapturing)
-          .accessibilityLabel("Capture Screenshot")
+        Button {
+          captureScreenshot()
+        } label: {
+          Image(systemName: "camera")
+        }
+        .disabled(isCapturing)
+        .accessibilityLabel("Capture Screenshot")
+      }
 
-          Menu {
-            ForEach(VMVisualizer.allCases, id: \.self) { type in
-              Button {
-                visualizerSelection.current = type
-              } label: {
-                if type == visualizerSelection.current {
-                  Label(type.rawValue, systemImage: "checkmark")
-                } else {
-                  Text(type.rawValue)
-                }
+      ToolbarSpacer(.fixed, placement: .topBarTrailing)
+
+      ToolbarItem(placement: .topBarTrailing) {
+        Menu {
+          ForEach(VMVisualizer.allCases, id: \.self) { type in
+            Button {
+              visualizerSelection.current = type
+            } label: {
+              if type == visualizerSelection.current {
+                Label(type.rawValue, systemImage: "checkmark")
+              } else {
+                Text(type.rawValue)
               }
             }
-          } label: {
-            Text(visualizerSelection.current.rawValue)
           }
+        } label: {
+          Text(visualizerSelection.current.rawValue)
         }
       }
     }

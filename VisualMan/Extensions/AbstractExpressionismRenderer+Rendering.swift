@@ -2,7 +2,7 @@
 //  AbstractExpressionismRenderer+Rendering.swift
 //  VisualMan
 //
-//  Created by on 4/23/26.
+//  Created by Aadit Bagdi on 4/23/26.
 //
 
 import Metal
@@ -19,6 +19,13 @@ extension AbstractExpressionismRenderer {
     SIMD3(0.05, 0.10, 0.70), SIMD3(0.05, 0.35, 0.65),
     SIMD3(0.10, 0.40, 0.25), SIMD3(0.25, 0.10, 0.50),
     SIMD3(0.02, 0.20, 0.45), SIMD3(0.15, 0.55, 0.35),
+  ]
+  
+  private static let compositionAnchors: [SIMD2<Float>] = [
+    SIMD2(-0.22, 0.24),
+    SIMD2( 0.28, -0.20),
+    SIMD2( 0.08, 0.30),
+    SIMD2(-0.24, -0.12),
   ]
 
   private func nextSeed() -> Float {
@@ -38,16 +45,32 @@ extension AbstractExpressionismRenderer {
   }
 
   private func pickColorBiased() -> SIMD3<Float> {
-    return pickColor(warm: nextSeed() > warmBias)
+    let drifted = 0.5 + sin(time * 0.018 + songSeed * 2.1) * 0.32
+    return pickColor(warm: nextSeed() > drifted)
   }
 
   private func compositionFocus() -> SIMD2<Float> {
-    let t = time + songSeed * 7.3
-    let fx = sin(t * 0.031 + songSeed * 1.7) * 0.26
-           + sin(t * 0.073 + songSeed * 2.9) * 0.14
-    let fy = cos(t * 0.041 + songSeed * 0.9) * 0.32
-           + sin(t * 0.089 + songSeed * 1.3) * 0.18
-    return SIMD2(fx, fy)
+    let t = time * 0.06 + songSeed * 7.3
+    let anchors = Self.compositionAnchors
+    let cycle = Float(anchors.count)
+    let phase = t.truncatingRemainder(dividingBy: cycle)
+    let i0 = Int(phase) % anchors.count
+    let i1 = (i0 + 1) % anchors.count
+    let f = phase - Float(i0)
+    let blend = f * f * (3 - 2 * f)
+
+    let a = anchors[i0]
+    let b = anchors[i1]
+    let lerped = a * (1 - blend) + b * blend
+
+    let jitterX = sin(t * 3.7 + songSeed * 1.7) * 0.04
+    let jitterY = cos(t * 4.1 + songSeed * 2.3) * 0.04
+
+    return lerped + SIMD2(jitterX, jitterY)
+  }
+  
+  private func dominantAngle() -> Float {
+    return time * 0.045 + songSeed * 1.2
   }
 
   private func splatterFocus() -> SIMD2<Float> {
@@ -149,7 +172,10 @@ extension AbstractExpressionismRenderer {
       x = focus.x + (nextSeed() - 0.5) * 0.88 * spread
       y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
     }
-    let angle = nextSeed() * .pi * 2
+    let dom = dominantAngle()
+    let angle = (nextSeed() < 0.55)
+      ? dom + (nextSeed() - 0.5) * 0.9
+      : nextSeed() * .pi * 2
     let halfLen = 0.09 + energy * 0.18 + nextSeed() * 0.07
     let halfWidth = 0.011 + energy * 0.014 + nextSeed() * 0.007
     let opacity = 0.65 + energy * 0.25
@@ -225,10 +251,11 @@ extension AbstractExpressionismRenderer {
   }
 
   private func appendSplatters(to strokes: inout [AbExStroke], high: Float) {
-    guard high > 0.04, (wallClock - lastSplatterTime) > 0.12, strokes.count < 8 else { return }
+    guard high > 0.03, (wallClock - lastSplatterTime) > 0.08, strokes.count < 8 else { return }
     lastSplatterTime = wallClock
     let sFocus = splatterFocus()
-    let count = high > 0.25 ? 2 : 1
+    let count = high > 0.30 ? 3 : (high > 0.15 ? 2 : 1)
+
     for _ in 0..<count where strokes.count < 8 {
       let isOutlier = nextSeed() < 0.35
       let x: Float
@@ -240,14 +267,51 @@ extension AbstractExpressionismRenderer {
         x = sFocus.x + (nextSeed() - 0.5) * 0.42
         y = sFocus.y + (nextSeed() - 0.5) * 0.45
       }
-      let radius = 0.010 + high * 0.024 + nextSeed() * 0.012
-      let opacity = 0.95 + high * 0.05
+
+      let sizeRoll = nextSeed()
+      let radius: Float
+      let opacityBase: Float
+      if sizeRoll < 0.50 {
+        radius = 0.003 + nextSeed() * 0.008
+        opacityBase = 0.90
+      } else if sizeRoll < 0.82 {
+        radius = 0.012 + nextSeed() * 0.018
+        opacityBase = 0.85
+      } else if sizeRoll < 0.97 {
+        radius = 0.032 + nextSeed() * 0.028
+        opacityBase = 0.75
+      } else {
+        radius = 0.065 + nextSeed() * 0.045
+        opacityBase = 0.68
+      }
+      let opacity = opacityBase + high * 0.12
+
+      let shapeRoll = nextSeed()
+      let shapeVariant: Float
+      let angle: Float
+      if radius < 0.012 {
+        shapeVariant = shapeRoll < 0.85 ? 2.0 : 0.0
+        angle = 0
+      } else if shapeRoll < 0.22 {
+        shapeVariant = 1.0
+        let dom = dominantAngle()
+        angle = (nextSeed() < 0.60)
+          ? dom + (nextSeed() - 0.5) * 0.7
+          : nextSeed() * .pi * 2
+      } else if shapeRoll < 0.50 {
+        shapeVariant = 2.0
+        angle = 0
+      } else {
+        shapeVariant = 0.0
+        angle = 0
+      }
+
       let bristleSeed = nextSeed() * 100
       let color = pickColorBiased()
       strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, 0, radius),
+        posAngle: SIMD4(x, y, angle, radius),
         sizeOpacity: SIMD4(radius, opacity, bristleSeed, 2),
-        color: SIMD4(color.x, color.y, color.z, 0)))
+        color: SIMD4(color.x, color.y, color.z, shapeVariant)))
     }
   }
 

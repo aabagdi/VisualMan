@@ -181,12 +181,16 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
   float2 scaled = local / float2(halfLen, halfWd);
   float rr = length(scaled);
   
-  if (rr > 1.5) return r;
+  if (rr > 2.4) return r;
   
-  float n1 = shaderNoise(p * 2.5 + center * 5.0) - 0.5;
-  float n2 = shaderNoise(p * 7.0 + center * 11.0 + seed) - 0.5;
-  float n3 = shaderNoise(p * 18.0 + seed * 7.0) - 0.5;
-  float boundary = 1.0 + n1 * 0.50 + n2 * 0.28 + n3 * 0.14;
+  float b1 = shaderSimplex2D(p * 3.2 + center * 5.0);
+  float b2 = shaderSimplex2D(p * 7.0 + center * 11.0 + seed);
+  float b3 = shaderNoise(p * 18.0 + seed * 7.0) - 0.5;
+
+  float tendrilRaw = shaderSimplex2D(local * 6.0 + seed * 3.7);
+  float tendril = smoothstep(0.28, 0.72, tendrilRaw) * 0.38;
+
+  float boundary = 1.0 + b1 * 0.55 + b2 * 0.25 + b3 * 0.12 + tendril;
   
   float normR = rr / max(boundary, 0.01);
   float falloff = 1.0 - smoothstep(0.25, 1.05, normR);
@@ -200,7 +204,7 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
   float edgeZone = smoothstep(0.55, 0.82, normR) * (1.0 - smoothstep(0.88, 1.10, normR));
   float poolNoise = shaderNoise(p * 28.0 + seed) * 0.5 + 0.5;
   float washExists = smoothstep(0.02, 0.25, falloff);
-  falloff += edgeZone * poolNoise * 0.40 * washExists;
+  falloff += edgeZone * poolNoise * 0.60 * washExists;
   
   float grain = shaderNoise(p * 380.0 + seed) - 0.5;
   falloff *= (1.0 + grain * 0.20);
@@ -221,23 +225,39 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
 inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
   StrokeResult r; r.coverage = 0; r.heightDelta = 0;
   r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0;
-  
+
   float2 center = s.posAngle.xy;
   float radius  = max(s.posAngle.w, 0.002);
   float baseOp  = s.sizeOpacity.y;
   float seed    = s.sizeOpacity.z;
-  
+  float shape   = s.color.w;
+
   float2 d = p - center;
+
+  if (shape > 0.5 && shape < 1.5) {
+    float sA = s.posAngle.z;
+    float cs = cos(sA), sn = sin(sA);
+    float2 localD = float2(d.x * cs + d.y * sn, -d.x * sn + d.y * cs);
+    localD.x *= 0.22;
+    d = localD;
+  }
+
   float dist = length(d);
-  
+
   if (dist > radius * 3.0) return r;
-  
+
   float ang = atan2(d.y, d.x);
-  float nLobe = 3.0 + floor(hash11(seed * 1.31) * 4.0);
-  float lobe = sin(ang * nLobe + seed * 11.0) * 0.18
-  + cos(ang * (nLobe + 2.0) + seed * 7.0) * 0.10;
-  float en = shaderSimplex2D(float2(ang * 2.0, seed * 3.0)) * 0.15;
-  float effR = radius * (1.0 + lobe + en);
+
+  float effR;
+  if (shape > 1.5) {
+    effR = radius;
+  } else {
+    float nLobe = 3.0 + floor(hash11(seed * 1.31) * 4.0);
+    float lobe = sin(ang * nLobe + seed * 11.0) * 0.18
+               + cos(ang * (nLobe + 2.0) + seed * 7.0) * 0.10;
+    float en = shaderSimplex2D(float2(ang * 2.0, seed * 3.0)) * 0.15;
+    effR = radius * (1.0 + lobe + en);
+  }
   
   float typeRoll = hash11(seed * 1.77);
   float mainHeight;
