@@ -368,29 +368,33 @@ kernel void abexPaint(
     hMid   = hMF.r;
     hFront = hMF.g;
     
-    {
-      half aPres = smoothstep(0.15h, 0.85h, back.a);
-      half tPres = smoothstep(0.05h, 0.40h, hBack);
-      half pres  = min(aPres, tPres);
-      half df    = 1.0h - dryRate * (1.0h - pres);
-      back.a *= df;
-      hBack  *= df;
-    }
-    {
-      half aPres = smoothstep(0.15h, 0.85h, mid.a);
-      half tPres = smoothstep(0.05h, 0.40h, hMid);
-      half pres  = min(aPres, tPres);
-      half df    = 1.0h - dryRate * (1.0h - pres);
-      mid.a *= df;
-      hMid  *= df;
-    }
-    {
-      half aPres = smoothstep(0.15h, 0.85h, front.a);
-      half tPres = smoothstep(0.05h, 0.40h, hFront);
-      half pres  = min(aPres, tPres);
-      half df    = 1.0h - dryRate * (1.0h - pres);
-      front.a *= df;
-      hFront  *= df;
+    if (back.a > 0.001h || hBack > 0.001h ||
+        mid.a  > 0.001h || hMid  > 0.001h ||
+        front.a > 0.001h || hFront > 0.001h) {
+      {
+        half aPres = smoothstep(0.15h, 0.85h, back.a);
+        half tPres = smoothstep(0.05h, 0.40h, hBack);
+        half pres  = min(aPres, tPres);
+        half df    = 1.0h - dryRate * (1.0h - pres);
+        back.a *= df;
+        hBack  *= df;
+      }
+      {
+        half aPres = smoothstep(0.15h, 0.85h, mid.a);
+        half tPres = smoothstep(0.05h, 0.40h, hMid);
+        half pres  = min(aPres, tPres);
+        half df    = 1.0h - dryRate * (1.0h - pres);
+        mid.a *= df;
+        hMid  *= df;
+      }
+      {
+        half aPres = smoothstep(0.15h, 0.85h, front.a);
+        half tPres = smoothstep(0.05h, 0.40h, hFront);
+        half pres  = min(aPres, tPres);
+        half df    = 1.0h - dryRate * (1.0h - pres);
+        front.a *= df;
+        hFront  *= df;
+      }
     }
   }
   
@@ -628,10 +632,6 @@ kernel void abexCompose(
   float2 cvGrad = canvasWeaveGradient(ng);
   half cvStrength = 0.35h * (1.0h - paintMask * 0.70h);
   N = normalize(N + half3(half(-cvGrad.x), half(-cvGrad.y), 0.0h) * cvStrength);
-  
-  half cg1 = half(shaderNoise(ng * 1.6)        ) - 0.5h;
-  half cg2 = half(shaderNoise(ng * 1.6 + 91.0) ) - 0.5h;
-  N = normalize(N + half3(cg1, cg2, 0.0h) * 0.045h * (1.0h - paintMask));
   
   const half3 Ldir = normalize(half3(-0.45h, 0.60h, 0.65h));
   const half3 V    = half3(0.0h, 0.0h, 1.0h);

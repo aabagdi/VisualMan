@@ -113,8 +113,16 @@ extension AbstractExpressionismRenderer {
     lastGesturalTime = wallClock
     let count = bass > 0.25 ? 3 : (bass > 0.10 ? 2 : 1)
     for _ in 0..<count where strokes.count < 8 {
-      let x = focus.x + (nextSeed() - 0.5) * 0.85 * spread
-      let y = focus.y + (nextSeed() - 0.5) * 0.95 * spread
+      let isOutlier = nextSeed() < 0.22
+      let x: Float
+      let y: Float
+      if isOutlier {
+        x = (nextSeed() - 0.5) * 1.00
+        y = (nextSeed() - 0.5) * 1.05
+      } else {
+        x = focus.x + (nextSeed() - 0.5) * 0.85 * spread
+        y = focus.y + (nextSeed() - 0.5) * 0.95 * spread
+      }
       let angle = nextSeed() * .pi * 2
       let halfLen = 0.14 + bass * 0.28 + nextSeed() * 0.10
       let halfWidth = 0.014 + bass * 0.022 + nextSeed() * 0.010
