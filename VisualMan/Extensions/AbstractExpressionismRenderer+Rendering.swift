@@ -43,8 +43,8 @@ extension AbstractExpressionismRenderer {
 
   private func compositionFocus() -> SIMD2<Float> {
     let t = time + songSeed * 7.3
-    let fx = sin(t * 0.031 + songSeed * 1.7) * 0.13
-           + sin(t * 0.073 + songSeed * 2.9) * 0.08
+    let fx = sin(t * 0.031 + songSeed * 1.7) * 0.26
+           + sin(t * 0.073 + songSeed * 2.9) * 0.14
     let fy = cos(t * 0.041 + songSeed * 0.9) * 0.32
            + sin(t * 0.089 + songSeed * 1.3) * 0.18
     return SIMD2(fx, fy)
@@ -52,11 +52,37 @@ extension AbstractExpressionismRenderer {
 
   private func splatterFocus() -> SIMD2<Float> {
     let t = time + songSeed * 11.9
-    let fx = sin(t * 0.45 + songSeed * 3.1) * 0.18
-           + cos(t * 1.10 + songSeed * 5.7) * 0.08
+    let fx = sin(t * 0.45 + songSeed * 3.1) * 0.32
+           + cos(t * 1.10 + songSeed * 5.7) * 0.14
     let fy = cos(t * 0.38 + songSeed * 2.3) * 0.38
            + sin(t * 0.95 + songSeed * 4.1) * 0.15
     return SIMD2(fx, fy)
+  }
+
+  private func appendSplatterStrokes(into strokes: inout [AbExStroke], high: Float) {
+    lastSplatterTime = wallClock
+    let sFocus = splatterFocus()
+    let count = high > 0.25 ? 2 : 1
+    for _ in 0..<count where strokes.count < 8 {
+      let isOutlier = nextSeed() < 0.35
+      let x: Float
+      let y: Float
+      if isOutlier {
+        x = (nextSeed() - 0.5) * 1.05
+        y = (nextSeed() - 0.5) * 1.10
+      } else {
+        x = sFocus.x + (nextSeed() - 0.5) * 0.42
+        y = sFocus.y + (nextSeed() - 0.5) * 0.45
+      }
+      let radius = 0.010 + high * 0.024 + nextSeed() * 0.012
+      let opacity = 0.95 + high * 0.05
+      let bristleSeed = nextSeed() * 100
+      let color = pickColorBiased()
+      strokes.append(AbExStroke(
+        posAngle: SIMD4(x, y, 0, radius),
+        sizeOpacity: SIMD4(radius, opacity, bristleSeed, 2),
+        color: SIMD4(color.x, color.y, color.z, 0)))
+    }
   }
 
   private func handleResumeState(gap: Double) {
@@ -117,34 +143,42 @@ extension AbstractExpressionismRenderer {
     let focus = compositionFocus()
     let spread: Float = 0.85 + energy * 0.5
 
-    let transientFired = appendGesturalTransient(&strokes, bass: bass, focus: focus, spread: spread)
-    if !transientFired {
-      appendGesturalFill(&strokes, energy: energy, focus: focus, spread: spread)
+    let bassTransient = bass > smoothedBass * 1.15 && bass > 0.025
+    let transientFired = bassTransient
+                      && (wallClock - lastGesturalTime) > 0.10
+                      && strokes.count < 8
+
+    if transientFired {
+      lastGesturalTime = wallClock
+      let count = bass > 0.25 ? 3 : (bass > 0.10 ? 2 : 1)
+      for _ in 0..<count where strokes.count < 8 {
+        let x = focus.x + (nextSeed() - 0.5) * 0.85 * spread
+        let y = focus.y + (nextSeed() - 0.5) * 0.95 * spread
+        let angle = nextSeed() * .pi * 2
+        let halfLen = 0.14 + bass * 0.28 + nextSeed() * 0.10
+        let halfWidth = 0.014 + bass * 0.022 + nextSeed() * 0.010
+        let opacity = 0.85 + bass * 0.15
+        let bristleSeed = nextSeed() * 100
+        let color = pickColorBiased()
+        strokes.append(AbExStroke(
+          posAngle: SIMD4(x, y, angle, halfLen),
+          sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
+          color: SIMD4(color.x, color.y, color.z, 0)))
+      }
     }
-    appendWash(&strokes, mid: mid, focus: focus)
-    appendSplatter(&strokes, high: high)
-    appendFineDetail(&strokes, energy: energy, focus: focus)
 
-    return strokes
-  }
-
-  private func appendGesturalTransient(_ strokes: inout [AbExStroke],
-                                       bass: Float,
-                                       focus: SIMD2<Float>,
-                                       spread: Float) -> Bool {
-    let bassTransient = bass > smoothedBass * 1.25 && bass > 0.04
-    guard bassTransient
-            && (wallClock - lastGesturalTime) > 0.13
-            && strokes.count < 8 else { return false }
-    lastGesturalTime = wallClock
-    let count = bass > 0.25 ? 3 : (bass > 0.12 ? 2 : 1)
-    for _ in 0..<count where strokes.count < 8 {
-      let x = focus.x + (nextSeed() - 0.5) * 0.40 * spread
-      let y = focus.y + (nextSeed() - 0.5) * 0.95 * spread
+    if !transientFired
+        && energy > 0.03
+        && (wallClock - lastGesturalTime) > 0.15
+        && strokes.count < 8
+        && nextSeed() < 0.72 {
+      lastGesturalTime = wallClock
+      let x = focus.x + (nextSeed() - 0.5) * 0.88 * spread
+      let y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
       let angle = nextSeed() * .pi * 2
-      let halfLen = 0.14 + bass * 0.28 + nextSeed() * 0.10
-      let halfWidth = 0.014 + bass * 0.022 + nextSeed() * 0.010
-      let opacity = 0.85 + bass * 0.15
+      let halfLen = 0.09 + energy * 0.18 + nextSeed() * 0.07
+      let halfWidth = 0.011 + energy * 0.014 + nextSeed() * 0.007
+      let opacity = 0.65 + energy * 0.25
       let bristleSeed = nextSeed() * 100
       let color = pickColorBiased()
       strokes.append(AbExStroke(
@@ -152,90 +186,43 @@ extension AbstractExpressionismRenderer {
         sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
         color: SIMD4(color.x, color.y, color.z, 0)))
     }
-    return true
-  }
 
-  private func appendGesturalFill(_ strokes: inout [AbExStroke],
-                                  energy: Float,
-                                  focus: SIMD2<Float>,
-                                  spread: Float) {
-    guard energy > 0.05
-            && (wallClock - lastGesturalTime) > 0.22
-            && strokes.count < 8
-            && nextSeed() < 0.50 else { return }
-    lastGesturalTime = wallClock
-    let x = focus.x + (nextSeed() - 0.5) * 0.42 * spread
-    let y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
-    let angle = nextSeed() * .pi * 2
-    let halfLen = 0.09 + energy * 0.18 + nextSeed() * 0.07
-    let halfWidth = 0.011 + energy * 0.014 + nextSeed() * 0.007
-    let opacity = 0.65 + energy * 0.25
-    let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
-    strokes.append(AbExStroke(
-      posAngle: SIMD4(x, y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
-      color: SIMD4(color.x, color.y, color.z, 0)))
-  }
-
-  private func appendWash(_ strokes: inout [AbExStroke], mid: Float, focus: SIMD2<Float>) {
-    guard mid > 0.04 && (wallClock - lastWashTime) > 0.3 && strokes.count < 8 else { return }
-    lastWashTime = wallClock
-    let x = focus.x * 0.6 + (nextSeed() - 0.5) * 0.55
-    let y = focus.y * 0.6 + (nextSeed() - 0.5) * 1.05
-    let angle = nextSeed() * .pi
-    let halfLen = 0.18 + mid * 0.25
-    let halfWidth = 0.12 + mid * 0.18
-    let opacity = 0.10 + mid * 0.14
-    let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
-    strokes.append(AbExStroke(
-      posAngle: SIMD4(x, y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
-      color: SIMD4(color.x, color.y, color.z, 0)))
-  }
-
-  private func appendSplatter(_ strokes: inout [AbExStroke], high: Float) {
-    guard high > 0.04 && (wallClock - lastSplatterTime) > 0.12 && strokes.count < 8 else { return }
-    lastSplatterTime = wallClock
-    let sFocus = splatterFocus()
-    let count = high > 0.25 ? 2 : 1
-    for _ in 0..<count where strokes.count < 8 {
-      let isOutlier = nextSeed() < 0.35
-      let x: Float
-      let y: Float
-      if isOutlier {
-        x = (nextSeed() - 0.5) * 0.50
-        y = (nextSeed() - 0.5) * 1.10
-      } else {
-        x = sFocus.x + (nextSeed() - 0.5) * 0.22
-        y = sFocus.y + (nextSeed() - 0.5) * 0.45
-      }
-      let radius = 0.010 + high * 0.024 + nextSeed() * 0.012
-      let opacity = 0.85 + high * 0.15
+    if mid > 0.04 && (wallClock - lastWashTime) > 0.3 && strokes.count < 8 {
+      lastWashTime = wallClock
+      let x = focus.x * 0.6 + (nextSeed() - 0.5) * 1.00
+      let y = focus.y * 0.6 + (nextSeed() - 0.5) * 1.05
+      let angle = nextSeed() * .pi
+      let halfLen = 0.18 + mid * 0.25
+      let halfWidth = 0.12 + mid * 0.18
+      let opacity = 0.10 + mid * 0.14
       let bristleSeed = nextSeed() * 100
       let color = pickColorBiased()
       strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, 0, radius),
-        sizeOpacity: SIMD4(radius, opacity, bristleSeed, 2),
+        posAngle: SIMD4(x, y, angle, halfLen),
+        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
         color: SIMD4(color.x, color.y, color.z, 0)))
     }
-  }
 
-  private func appendFineDetail(_ strokes: inout [AbExStroke], energy: Float, focus: SIMD2<Float>) {
-    guard energy > 0.01 && strokes.count < 8 && nextSeed() < 0.04 else { return }
-    let x = focus.x + (nextSeed() - 0.5) * 0.45
-    let y = focus.y + (nextSeed() - 0.5) * 1.00
-    let angle = time * 0.1 + nextSeed() * .pi
-    let halfLen = 0.20 + nextSeed() * 0.15
-    let halfWidth = 0.14 + nextSeed() * 0.10
-    let opacity: Float = 0.04 + energy * 0.05
-    let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
-    strokes.append(AbExStroke(
-      posAngle: SIMD4(x, y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
-      color: SIMD4(color.x, color.y, color.z, 0)))
+    if high > 0.04 && (wallClock - lastSplatterTime) > 0.12 && strokes.count < 8 {
+      appendSplatterStrokes(into: &strokes, high: high)
+    }
+
+    if energy > 0.01 && strokes.count < 8 && nextSeed() < 0.04 {
+      let x = focus.x + (nextSeed() - 0.5) * 0.95
+      let y = focus.y + (nextSeed() - 0.5) * 1.00
+      let angle = time * 0.1 + nextSeed() * .pi
+      let halfLen = 0.20 + nextSeed() * 0.15
+      let halfWidth = 0.14 + nextSeed() * 0.10
+      let opacity: Float = 0.04 + energy * 0.05
+      let bristleSeed = nextSeed() * 100
+      let color = pickColorBiased()
+      strokes.append(AbExStroke(
+        posAngle: SIMD4(x, y, angle, halfLen),
+        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
+        color: SIMD4(color.x, color.y, color.z, 0)))
+    }
+
+    return strokes
   }
 
   func renderPaint(encoder: any MTL4ComputeCommandEncoder,

@@ -247,9 +247,12 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
     grainAmount = 0.30;
   }
 
-  float falloff = 1.0 - smoothstep(effR * 0.80, effR * 1.02, dist);
-  float coverage = falloff * baseOp;
-  float h = coverage * mainHeight;
+  float heightFalloff = 1.0 - smoothstep(effR * 0.80, effR * 1.02, dist);
+  float bleedEnd = effR * mix(1.70, 1.35, smoothstep(0.15, 0.70, mainHeight));
+  float colorFalloff = 1.0 - smoothstep(effR * 1.02, bleedEnd, dist);
+
+  float coverage = colorFalloff * baseOp;
+  float h = heightFalloff * baseOp * mainHeight;
 
   float satR = radius * 0.20;
   for (int k = 0; k < 4; k++) {
@@ -259,10 +262,12 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
     float sSize = satR * (0.4 + hash11(kk + 7.7) * 1.3);
     float2 sc = center + float2(cos(a), sin(a)) * ring;
     float sd = length(p - sc);
-    float sf = 1.0 - smoothstep(sSize * 0.70, sSize * 1.0, sd);
-    if (sf * baseOp > coverage) {
-      coverage = sf * baseOp;
-      h        = coverage * mainHeight * 0.80;
+    float sHeight = 1.0 - smoothstep(sSize * 0.70, sSize * 1.00, sd);
+    float sBleedEnd = sSize * mix(1.55, 1.25, smoothstep(0.15, 0.70, mainHeight));
+    float sColor = 1.0 - smoothstep(sSize * 1.00, sBleedEnd, sd);
+    if (sColor * baseOp > coverage) {
+      coverage = sColor * baseOp;
+      h        = sHeight * baseOp * mainHeight * 0.25;
     }
   }
 
@@ -313,8 +318,7 @@ kernel void abexPaint(
   if (gid.x >= w || gid.y >= h) return;
 
   float2 uv = (float2(gid) + 0.5) / float2(w, h);
-  float aspect = float(w) / float(h);
-  float2 p = (uv - 0.5) * float2(aspect, 1.0);
+  float2 p = uv - 0.5;
 
   bool isFirstFrame = params.config.y > 0.5;
   int  strokeCount  = int(params.config.z);
@@ -334,13 +338,16 @@ kernel void abexPaint(
     front  = colorFrontIn.read(gid);
     height = heightIn.read(gid).r;
 
-    half decay = 1.0h - dryRate;
-    back  *= decay;
-    mid   *= decay;
-    front *= decay;
+    half paintPresence = max(back.a, max(mid.a, front.a));
+    half alphaPres     = smoothstep(0.15h, 0.85h, paintPresence);
+    half thicknessPres = smoothstep(0.05h, 0.40h, height);
+    half pres          = min(alphaPres, thicknessPres);
+    half decayFactor   = 1.0h - half(dryRate) * (1.0h - pres);
 
-    half preservation = 0.9994h + smoothstep(0.0h, 0.7h, height) * 0.0005h;
-    height *= preservation;
+    back.a  *= decayFactor;
+    mid.a   *= decayFactor;
+    front.a *= decayFactor;
+    height  *= decayFactor;
   }
 
   for (int i = 0; i < strokeCount && i < 8; i++) {
@@ -359,13 +366,16 @@ kernel void abexPaint(
       float resistance     = clamp(float(height) * resistanceMult, 0.0, resistanceCap);
       float adhesion       = 1.0 - resistance;
 
-      float perturb  = float(i) * 17.3 + strokes[i].sizeOpacity.z * 0.03;
-      float microVar = shaderNoise(p * 400.0 + float2(perturb * 13.0,
-                                                       perturb * 7.0));
-      float microMod = 0.78 + microVar * 0.44;
-
-      sr.coverage    *= adhesion * microMod;
+      sr.coverage    *= adhesion;
       sr.heightDelta *= adhesion;
+
+      if (isGestural) {
+        float perturb  = float(i) * 17.3 + strokes[i].sizeOpacity.z * 0.03;
+        float microVar = shaderNoise(p * 400.0 + float2(perturb * 13.0,
+                                                         perturb * 7.0));
+        float microMod = 0.78 + microVar * 0.44;
+        sr.coverage *= microMod;
+      }
     }
 
     if (sr.coverage < 0.002) continue;
@@ -374,17 +384,20 @@ kernel void abexPaint(
     half  cov  = half(sr.coverage);
 
     if (isWash) {
-      half effective = cov * (1.0h - back.a);
-      back.rgb += tint * effective;
-      back.a   += effective;
+      half oldAmount = back.a * (1.0h - cov);
+      half total     = oldAmount + cov;
+      back.rgb = (back.rgb * oldAmount + tint * cov) / max(total, 0.001h);
+      back.a   = total;
     } else if (type < 0.5) {
-      half effective = cov * (1.0h - mid.a);
-      mid.rgb += tint * effective;
-      mid.a   += effective;
+      half oldAmount = mid.a * (1.0h - cov);
+      half total     = oldAmount + cov;
+      mid.rgb = (mid.rgb * oldAmount + tint * cov) / max(total, 0.001h);
+      mid.a   = total;
     } else {
-      half effective = cov * (1.0h - front.a);
-      front.rgb += tint * effective;
-      front.a   += effective;
+      half oldAmount = front.a * (1.0h - cov);
+      half total     = oldAmount + cov;
+      front.rgb = (front.rgb * oldAmount + tint * cov) / max(total, 0.001h);
+      front.a   = total;
     }
 
     height = min(height + half(sr.heightDelta), 1.0h);
@@ -411,12 +424,18 @@ kernel void abexCompose(
     constant AbExParams &params               [[buffer(0)]],
     uint2 gid [[thread_position_in_grid]])
 {
-  uint w = output.get_width();
-  uint h = output.get_height();
-  if (gid.x >= w || gid.y >= h) return;
+  uint dispW = output.get_width();
+  uint dispH = output.get_height();
+  if (gid.x >= dispW || gid.y >= dispH) return;
 
-  float2 size = float2(w, h);
-  float2 uv = (float2(gid) + 0.5) / size;
+  uint canvW = colorBack.get_width();
+  uint canvH = colorBack.get_height();
+  float2 canvSize = float2(canvW, canvH);
+  float2 dispSize = float2(dispW, dispH);
+
+  float2 displayPx = float2(gid) + 0.5;
+  float2 canvasPx  = displayPx + (canvSize - dispSize) * 0.5;
+  float2 uv = canvasPx / canvSize;
   float2 centered = uv - 0.5;
 
   float panX = params.camera.x;
@@ -424,37 +443,25 @@ kernel void abexCompose(
   float zoom = params.camera.z;
   centered /= zoom;
 
-  const float pBack   = 0.25;
-  const float pMid    = 0.55;
-  const float pFront  = 1.00;
-  const float pHeight = 0.70;
+  float2 uvAll = clamp(centered + float2(panX, panY) + 0.5, 0.0, 1.0);
+  uint2 pxAll  = min(uint2(uvAll * canvSize), uint2(canvW - 1, canvH - 1));
 
-  float2 uvBack   = clamp(centered + float2(panX, panY) * pBack   + 0.5, 0.0, 1.0);
-  float2 uvMid    = clamp(centered + float2(panX, panY) * pMid    + 0.5, 0.0, 1.0);
-  float2 uvFront  = clamp(centered + float2(panX, panY) * pFront  + 0.5, 0.0, 1.0);
-  float2 uvHeight = clamp(centered + float2(panX, panY) * pHeight + 0.5, 0.0, 1.0);
+  half4 back  = colorBack.read(pxAll);
+  half4 mid   = colorMid.read(pxAll);
+  half4 front = colorFront.read(pxAll);
 
-  uint2 pxBack   = min(uint2(uvBack   * size), uint2(w - 1, h - 1));
-  uint2 pxMid    = min(uint2(uvMid    * size), uint2(w - 1, h - 1));
-  uint2 pxFront  = min(uint2(uvFront  * size), uint2(w - 1, h - 1));
-  uint2 pxHeight = min(uint2(uvHeight * size), uint2(w - 1, h - 1));
-
-  half4 back  = colorBack.read(pxBack);
-  half4 mid   = colorMid.read(pxMid);
-  half4 front = colorFront.read(pxFront);
-
-  half3 canvasBase = half3(params.canvas.xyz) - canvasWeave(float2(gid));
+  half3 canvasBase = half3(params.canvas.xyz) - canvasWeave(canvasPx);
 
   half3 result = canvasBase;
-  result = back.rgb  + result * (1.0h - back.a);
-  result = mid.rgb   + result * (1.0h - mid.a);
-  result = front.rgb + result * (1.0h - front.a);
+  result = mix(result, back.rgb,  back.a);
+  result = mix(result, mid.rgb,   mid.a);
+  result = mix(result, front.rgb, front.a);
 
-  float hC = float(heightTex.read(pxHeight).r);
-  int2 hxL = clamp(int2(pxHeight) + int2(-1,  0), int2(0), int2(w - 1, h - 1));
-  int2 hxR = clamp(int2(pxHeight) + int2( 1,  0), int2(0), int2(w - 1, h - 1));
-  int2 hxD = clamp(int2(pxHeight) + int2( 0, -1), int2(0), int2(w - 1, h - 1));
-  int2 hxU = clamp(int2(pxHeight) + int2( 0,  1), int2(0), int2(w - 1, h - 1));
+  float hC = float(heightTex.read(pxAll).r);
+  int2 hxL = clamp(int2(pxAll) + int2(-1,  0), int2(0), int2(canvW - 1, canvH - 1));
+  int2 hxR = clamp(int2(pxAll) + int2( 1,  0), int2(0), int2(canvW - 1, canvH - 1));
+  int2 hxD = clamp(int2(pxAll) + int2( 0, -1), int2(0), int2(canvW - 1, canvH - 1));
+  int2 hxU = clamp(int2(pxAll) + int2( 0,  1), int2(0), int2(canvW - 1, canvH - 1));
 
   float hL = float(heightTex.read(uint2(hxL)).r);
   float hR = float(heightTex.read(uint2(hxR)).r);
@@ -462,19 +469,38 @@ kernel void abexCompose(
   float hU = float(heightTex.read(uint2(hxU)).r);
 
   float bump = params.config.w;
-  float3 N = normalize(float3((hL - hR) * bump, (hD - hU) * bump, 1.0));
 
-  float paintMask = smoothstep(0.06, 0.32, hC);
+  float maxGrad = 0.12;
+  float gradX = clamp(hR - hL, -maxGrad, maxGrad);
+  float gradY = clamp(hU - hD, -maxGrad, maxGrad);
+  float3 N = normalize(float3(-gradX * bump, -gradY * bump, 1.0));
 
-  float2 ng = float2(gid);
-  float dn1 = shaderNoise(ng * 0.42)         - 0.5;
-  float dn2 = shaderNoise(ng * 0.42 + 173.0) - 0.5;
-  N = normalize(N + float3(dn1, dn2, 0.0) * (paintMask * 0.45));
+  float paintMask = smoothstep(0.02, 0.15, hC);
 
-  float thickMask = smoothstep(0.40, 0.85, hC);
-  float cr1 = shaderNoise(ng * 1.15 + 37.0) - 0.5;
-  float cr2 = shaderNoise(ng * 2.70 + 91.0) - 0.5;
-  N = normalize(N + float3(cr1, cr2, 0.0) * (thickMask * 0.38));
+  float2 ng = canvasPx;
+
+  float nx1 = shaderNoise(ng * 0.32         ) - 0.5;
+  float ny1 = shaderNoise(ng * 0.32 + 173.0 ) - 0.5;
+  float nx2 = shaderNoise(ng * 0.85 +  61.0 ) - 0.5;
+  float ny2 = shaderNoise(ng * 0.85 + 239.0 ) - 0.5;
+  float nx3 = shaderNoise(ng * 1.95 + 127.0 ) - 0.5;
+  float ny3 = shaderNoise(ng * 1.95 + 331.0 ) - 0.5;
+
+  float rgx = abs(shaderNoise(ng * 0.60 + 413.0) - 0.5) * 2.0 - 0.5;
+  float rgy = abs(shaderNoise(ng * 0.60 + 587.0) - 0.5) * 2.0 - 0.5;
+
+  float activity = 0.40 + 0.60 * shaderNoise(ng * 0.09 + 313.0);
+
+  float thickScale = smoothstep(0.04, 0.55, hC);
+  float bodyAmp = paintMask * activity * (0.28 + 0.52 * thickScale);
+
+  float px = nx1 * 0.55 + nx2 * 0.35 + nx3 * 0.22 + rgx * 0.50;
+  float py = ny1 * 0.55 + ny2 * 0.35 + ny3 * 0.22 + rgy * 0.50;
+  N = normalize(N + float3(px, py, 0.0) * bodyAmp);
+
+  float fn1 = shaderNoise(ng * 4.20 + 671.0) - 0.5;
+  float fn2 = shaderNoise(ng * 4.20 + 829.0) - 0.5;
+  N = normalize(N + float3(fn1, fn2, 0.0) * paintMask * 0.14);
 
   float2 cvGrad = canvasWeaveGradient(ng);
   float cvStrength = 0.35 * (1.0 - paintMask * 0.70);
@@ -489,11 +515,11 @@ kernel void abexCompose(
   float3 H    = normalize(Ldir + V);
 
   float ndl = max(0.0, dot(N, Ldir));
-  float hl  = 0.55 + 0.45 * ndl;
+  float hl  = 0.72 + 0.28 * ndl;
   float ndh = max(0.0, dot(N, H));
 
-  float specBroad = pow(ndh, 8.0)  * 0.35;
-  float specTight = pow(ndh, 64.0) * 0.45;
+  float specBroad = pow(ndh, 6.0)  * 0.18;
+  float specTight = pow(ndh, 16.0) * 0.14;
   float spec = (specBroad + specTight) * paintMask;
 
   float3 warmLight  = float3(1.00, 0.95, 0.82);
@@ -501,7 +527,9 @@ kernel void abexCompose(
   float3 lightTint  = mix(coolShadow, warmLight, hl);
 
   float3 rgb = float3(result) * lightTint * hl;
-  rgb += spec * warmLight * 0.55;
+
+  float3 specColor = mix(warmLight, float3(result), 0.90);
+  rgb += spec * specColor * 0.40;
 
   float gmag = length(float2(hR - hL, hU - hD));
   float rim  = smoothstep(0.12, 0.45, gmag) * paintMask;

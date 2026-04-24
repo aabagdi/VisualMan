@@ -78,8 +78,9 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   private var heightB: MTLTexture?
   private var displayTex: MTLTexture?
 
-  private var lastDrawableWidth: Int = 0
-  private var lastDrawableHeight: Int = 0
+  private var canvasSize: Int = 0
+  private var lastDisplayWidth: Int = 0
+  private var lastDisplayHeight: Int = 0
 
   var currentIsA: Bool = true
 
@@ -219,64 +220,90 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     drainPendingReleases(&pendingTextureReleases)
   }
 
-  private func ensureCanvasTextures(width: Int, height: Int) -> Bool {
-    if width == lastDrawableWidth && height == lastDrawableHeight
-        && colorBackA != nil && colorBackB != nil
+  private func ensureCanvasTextures(displayWidth: Int, displayHeight: Int) -> Bool {
+    let requestedCanvasSize = max(displayWidth, displayHeight)
+    let targetCanvasSize = max(canvasSize, requestedCanvasSize)
+
+    let canvasExists = colorBackA != nil && colorBackB != nil
         && colorMidA != nil && colorMidB != nil
         && colorFrontA != nil && colorFrontB != nil
         && heightA != nil && heightB != nil
-        && displayTex != nil {
-      return true
-    }
+    let canvasNeedsRebuild = !canvasExists || targetCanvasSize > canvasSize
 
-    for old in [colorBackA, colorBackB, colorMidA, colorMidB,
-                colorFrontA, colorFrontB, heightA, heightB, displayTex] {
-      if let t = old {
-        pendingTextureReleases.append((frame: frameNumber, texture: t))
+    if canvasNeedsRebuild {
+      for old in [colorBackA, colorBackB, colorMidA, colorMidB,
+                  colorFrontA, colorFrontB, heightA, heightB] {
+        if let t = old {
+          pendingTextureReleases.append((frame: frameNumber, texture: t))
+        }
       }
+
+      let colDesc = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .bgra8Unorm, width: targetCanvasSize, height: targetCanvasSize, mipmapped: false)
+      colDesc.usage = [.shaderRead, .shaderWrite]
+      colDesc.storageMode = .private
+
+      let hDesc = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .r16Float, width: targetCanvasSize, height: targetCanvasSize, mipmapped: false)
+      hDesc.usage = [.shaderRead, .shaderWrite]
+      hDesc.storageMode = .private
+
+      guard let bA = device.makeTexture(descriptor: colDesc),
+            let bB = device.makeTexture(descriptor: colDesc),
+            let mA = device.makeTexture(descriptor: colDesc),
+            let mB = device.makeTexture(descriptor: colDesc),
+            let fA = device.makeTexture(descriptor: colDesc),
+            let fB = device.makeTexture(descriptor: colDesc),
+            let hA = device.makeTexture(descriptor: hDesc),
+            let hB = device.makeTexture(descriptor: hDesc) else {
+        colorBackA = nil; colorBackB = nil
+        colorMidA = nil;  colorMidB = nil
+        colorFrontA = nil; colorFrontB = nil
+        heightA = nil; heightB = nil
+        canvasSize = 0
+        return false
+      }
+
+      for t in [bA, bB, mA, mB, fA, fB, hA, hB] {
+        residencySet.addAllocation(t)
+      }
+
+      colorBackA  = bA; colorBackB  = bB
+      colorMidA   = mA; colorMidB   = mB
+      colorFrontA = fA; colorFrontB = fB
+      heightA     = hA; heightB     = hB
+      canvasSize  = targetCanvasSize
+      isFirstFrame = true
+      currentIsA = true
     }
 
-    let colDesc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
-    colDesc.usage = [.shaderRead, .shaderWrite]
-    colDesc.storageMode = .private
+    let displayNeedsRebuild = displayTex == nil
+        || displayWidth != lastDisplayWidth
+        || displayHeight != lastDisplayHeight
 
-    let hDesc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .r16Float, width: width, height: height, mipmapped: false)
-    hDesc.usage = [.shaderRead, .shaderWrite]
-    hDesc.storageMode = .private
-
-    guard let bA = device.makeTexture(descriptor: colDesc),
-          let bB = device.makeTexture(descriptor: colDesc),
-          let mA = device.makeTexture(descriptor: colDesc),
-          let mB = device.makeTexture(descriptor: colDesc),
-          let fA = device.makeTexture(descriptor: colDesc),
-          let fB = device.makeTexture(descriptor: colDesc),
-          let hA = device.makeTexture(descriptor: hDesc),
-          let hB = device.makeTexture(descriptor: hDesc),
-          let disp = device.makeTexture(descriptor: colDesc) else {
-      colorBackA = nil; colorBackB = nil
-      colorMidA = nil;  colorMidB = nil
-      colorFrontA = nil; colorFrontB = nil
-      heightA = nil; heightB = nil; displayTex = nil
-      lastDrawableWidth = 0; lastDrawableHeight = 0
-      return false
+    if displayNeedsRebuild {
+      if let old = displayTex {
+        pendingTextureReleases.append((frame: frameNumber, texture: old))
+      }
+      let dispDesc = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .bgra8Unorm, width: displayWidth, height: displayHeight, mipmapped: false)
+      dispDesc.usage = [.shaderRead, .shaderWrite]
+      dispDesc.storageMode = .private
+      guard let disp = device.makeTexture(descriptor: dispDesc) else {
+        displayTex = nil
+        lastDisplayWidth = 0; lastDisplayHeight = 0
+        return false
+      }
+      residencySet.addAllocation(disp)
+      displayTex = disp
+      lastDisplayWidth = displayWidth
+      lastDisplayHeight = displayHeight
     }
 
-    for t in [bA, bB, mA, mB, fA, fB, hA, hB, disp] {
-      residencySet.addAllocation(t)
+    if canvasNeedsRebuild || displayNeedsRebuild {
+      residencySet.commit()
     }
-    residencySet.commit()
 
-    colorBackA  = bA; colorBackB  = bB
-    colorMidA   = mA; colorMidB   = mB
-    colorFrontA = fA; colorFrontB = fB
-    heightA     = hA; heightB     = hB
-    displayTex  = disp
-    lastDrawableWidth  = width
-    lastDrawableHeight = height
-    isFirstFrame = true
-    currentIsA = true
     return true
   }
 
@@ -289,7 +316,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
     let smoothed = processAudio(bass: bass, mid: mid, high: high)
 
-    guard ensureCanvasTextures(width: drawableWidth, height: drawableHeight) else { return nil }
+    guard ensureCanvasTextures(displayWidth: drawableWidth, displayHeight: drawableHeight) else { return nil }
 
     let readA = currentIsA
     guard let backIn  = readA ? colorBackA  : colorBackB,
