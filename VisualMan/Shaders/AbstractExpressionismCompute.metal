@@ -194,8 +194,11 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
   
   float boundary = 1.0 + b1 * 0.55 + b2 * 0.25 + b3 * 0.12 + tendril;
   
+  float thickness = smoothstep(0.08, 0.55, baseOp);
   float normR = rr / max(boundary, 0.01);
-  float falloff = 1.0 - smoothstep(0.25, 1.05, normR);
+  float innerEdge = mix(0.25, 0.82, thickness);
+  float outerEdge = mix(1.05, 1.02, thickness);
+  float falloff = 1.0 - smoothstep(innerEdge, outerEdge, normR);
   falloff = pow(max(falloff, 0.0), 1.2);
   
   float densA = shaderNoise(p * 4.5 + center * 3.0);
@@ -216,8 +219,7 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
   
   falloff = clamp(falloff, 0.0, 1.35);
   
-  float thickness = smoothstep(0.08, 0.45, baseOp);
-  float ridgeAmount = mix(0.005, 0.16, hash11(seed * 2.17)) * thickness;
+  float ridgeAmount = mix(0.005, 0.55, hash11(seed * 2.17)) * thickness;
   
   r.coverage    = falloff * baseOp;
   r.alongNorm   = 0.5;

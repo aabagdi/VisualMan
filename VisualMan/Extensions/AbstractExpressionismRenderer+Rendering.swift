@@ -239,17 +239,21 @@ extension AbstractExpressionismRenderer {
     let x = focus.x * 0.6 + (nextSeed() - 0.5) * 1.00
     let y = focus.y * 0.6 + (nextSeed() - 0.5) * 1.05
     let angle = nextSeed() * .pi
-    let halfLen = 0.18 + mid * 0.25
-    let halfWidth = 0.12 + mid * 0.18
     let concentrationRoll = nextSeed()
     let opacity: Float
-    if concentrationRoll < 0.15 {
-      opacity = 0.28 + mid * 0.22 + nextSeed() * 0.12
-    } else if concentrationRoll < 0.55 {
-      opacity = 0.14 + mid * 0.16 + nextSeed() * 0.06
+    let sizeMult: Float
+    if concentrationRoll < 0.08 {
+      opacity  = 0.55 + mid * 0.35 + nextSeed() * 0.08
+      sizeMult = 1.6 + nextSeed() * 0.35
+    } else if concentrationRoll < 0.45 {
+      opacity  = 0.14 + mid * 0.16 + nextSeed() * 0.06
+      sizeMult = 1.0
     } else {
-      opacity = 0.06 + mid * 0.12 + nextSeed() * 0.04
+      opacity  = 0.06 + mid * 0.12 + nextSeed() * 0.04
+      sizeMult = 0.85
     }
+    let halfLen = (0.18 + mid * 0.25) * sizeMult
+    let halfWidth = (0.12 + mid * 0.18) * sizeMult
     let bristleSeed = nextSeed() * 100
     let color = pickColorBiased()
     strokes.append(AbExStroke(
