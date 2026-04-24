@@ -13,6 +13,7 @@ struct AbExParams {
   float4 audio;
   float4 canvas;
   float4 config;
+  float4 camera;
 };
 
 struct AbExStroke {
@@ -27,27 +28,18 @@ inline float hash11(float x) {
   x *= x + x;
   return fract(x);
 }
-inline float hash21(float2 p) {
-  p = fract(p * float2(443.897, 441.423));
-  p += dot(p, p.yx + 19.19);
-  return fract((p.x + p.y) * p.x);
-}
 
 inline half canvasWeave(float2 pixelPos) {
   float threadX = sin(pixelPos.x * 0.85) * 0.5 + 0.5;
   float threadY = sin(pixelPos.y * 0.85) * 0.5 + 0.5;
   float weave = threadX * threadY;
-
   float fiber = shaderNoise(pixelPos * 0.18);
-
   float irregular = shaderNoise(pixelPos * 0.04);
-
   return half(weave * 0.045 + fiber * 0.020 + irregular * 0.012);
 }
 
 inline float2 canvasWeaveGradient(float2 pixelPos) {
-  float cX = 0.85;
-  float cY = 0.85;
+  float cX = 0.85, cY = 0.85;
   float sinX = sin(pixelPos.x * cX);
   float sinY = sin(pixelPos.y * cY);
   float cosX = cos(pixelPos.x * cX);
@@ -93,13 +85,31 @@ inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s) {
 
   float sAlong = (alongT + 1.0) * 0.5;
 
+  float wetRoll = hash11(seed * 2.39);
+  float paintLoadScale;
+  float strokeWetness;
+  float baselineDryness;
+  if (wetRoll < 0.35) {
+    paintLoadScale  = 0.55;
+    strokeWetness   = 0.12 + wetRoll * 0.48;
+    baselineDryness = 0.55;
+  } else if (wetRoll < 0.75) {
+    paintLoadScale  = 0.95 + hash11(seed * 3.71) * 0.10;
+    strokeWetness   = 0.70 + hash11(seed * 3.71) * 0.35;
+    baselineDryness = 0.0;
+  } else {
+    paintLoadScale  = 1.00;
+    strokeWetness   = 1.15 + hash11(seed * 5.83) * 0.40;
+    baselineDryness = -0.20;
+  }
+
   float paintLoad = exp(-sAlong * 1.5) + 0.22;
-  paintLoad = min(paintLoad, 1.0);
+  paintLoad = min(paintLoad * paintLoadScale, 1.0);
 
   float impastoLoad = exp(-sAlong * 3.8);
   impastoLoad += exp(-sAlong * 10.0) * 0.25;
 
-  float dryness = smoothstep(0.15, 0.95, sAlong);
+  float dryness = clamp(smoothstep(0.15, 0.95, sAlong) + baselineDryness, 0.0, 1.0);
 
   float startTaper = smoothstep(-1.10, -0.88, alongT);
   float endTaper   = smoothstep(1.25, 0.30, alongT);
@@ -135,7 +145,7 @@ inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s) {
   r.bristleTone = (bStrength - 0.65) * 1.4;
 
   float ridge = 0.30 + 0.9 * pow(bProfile, 0.75);
-  r.heightDelta = widthProfile * impastoLoad * lengthMask * baseOp * ridge * 0.95;
+  r.heightDelta = widthProfile * impastoLoad * lengthMask * baseOp * ridge * strokeWetness;
 
   float grainMed    = shaderNoise(p * 300.0  + center * 10.0) - 0.5;
   float grainCoarse = shaderNoise(p * 650.0  + center * 20.0) - 0.5;
@@ -223,9 +233,23 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
   float en = (shaderNoise(float2(ang * 2.0, seed * 3.0)) - 0.5) * 0.3;
   float effR = radius * (1.0 + lobe + en);
 
+  float typeRoll = hash11(seed * 1.77);
+  float mainHeight;
+  float grainAmount;
+  if (typeRoll < 0.38) {
+    mainHeight  = 0.04 + typeRoll * 0.28;
+    grainAmount = 0.90;
+  } else if (typeRoll < 0.75) {
+    mainHeight  = 0.48 + hash11(seed * 3.13) * 0.25;
+    grainAmount = 0.65;
+  } else {
+    mainHeight  = 0.90 + hash11(seed * 5.71) * 0.30;
+    grainAmount = 0.30;
+  }
+
   float falloff = 1.0 - smoothstep(effR * 0.80, effR * 1.02, dist);
   float coverage = falloff * baseOp;
-  float h = coverage * 0.70;
+  float h = coverage * mainHeight;
 
   float satR = radius * 0.20;
   for (int k = 0; k < 4; k++) {
@@ -238,7 +262,7 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
     float sf = 1.0 - smoothstep(sSize * 0.70, sSize * 1.0, sd);
     if (sf * baseOp > coverage) {
       coverage = sf * baseOp;
-      h        = coverage * 0.55;
+      h        = coverage * mainHeight * 0.80;
     }
   }
 
@@ -249,18 +273,14 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
   float splatGrainCoarse = shaderNoise(p * 250.0 + seed * 7.0)  - 0.5;
   float splatGrainFine   = shaderNoise(p * 800.0 + seed * 11.0) - 0.5;
   float splatGrain = splatGrainCoarse * 0.55 + splatGrainFine * 0.45;
-  r.heightDelta *= (1.0 + splatGrain * 0.65);
+  r.heightDelta *= (1.0 + splatGrain * grainAmount);
   r.heightDelta = max(r.heightDelta, 0.0);
 
   return r;
 }
 
-inline half3 applyStroke(half3 canvas, constant AbExStroke &s, StrokeResult sr) {
-  if (sr.coverage < 0.002) return canvas;
-
-  half cov = half(sr.coverage);
+inline half3 strokeTint(constant AbExStroke &s, StrokeResult sr) {
   half3 base = half3(s.color.xyz);
-
   half tonal     = 1.0h + half(sr.bristleTone) * 0.18h;
   half hueShift  = half(sr.bristleTone) * 0.16h;
 
@@ -272,48 +292,55 @@ inline half3 applyStroke(half3 canvas, constant AbExStroke &s, StrokeResult sr) 
   half along = half(sr.alongNorm - 0.5) * 0.22h;
   tint += half3(along, -along * 0.5h, along * 0.65h);
 
-  tint = clamp(tint, 0.0h, 1.0h);
-
-  half3 mixed = mix(canvas, tint, cov);
-
-  half darken = cov * (1.0h - half((canvas.r + canvas.g + canvas.b)) * 0.33h);
-  mixed *= (1.0h - darken * 0.07h);
-
-  return clamp(mixed, 0.0h, 1.0h);
+  return clamp(tint, 0.0h, 1.0h);
 }
 
-kernel void abexPaint(texture2d<half, access::read>  colorIn   [[texture(0)]],
-                      texture2d<half, access::write> colorOut  [[texture(1)]],
-                      texture2d<half, access::read>  heightIn  [[texture(2)]],
-                      texture2d<half, access::write> heightOut [[texture(3)]],
-                      constant AbExParams &params              [[buffer(0)]],
-                      constant AbExStroke *strokes             [[buffer(1)]],
-                      uint2 gid [[thread_position_in_grid]]) {
-  uint w = colorOut.get_width();
-  uint h = colorOut.get_height();
+kernel void abexPaint(
+    texture2d<half, access::read>  colorBackIn   [[texture(0)]],
+    texture2d<half, access::write> colorBackOut  [[texture(1)]],
+    texture2d<half, access::read>  colorMidIn    [[texture(2)]],
+    texture2d<half, access::write> colorMidOut   [[texture(3)]],
+    texture2d<half, access::read>  colorFrontIn  [[texture(4)]],
+    texture2d<half, access::write> colorFrontOut [[texture(5)]],
+    texture2d<half, access::read>  heightIn      [[texture(6)]],
+    texture2d<half, access::write> heightOut     [[texture(7)]],
+    constant AbExParams &params                  [[buffer(0)]],
+    constant AbExStroke *strokes                 [[buffer(1)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+  uint w = colorBackOut.get_width();
+  uint h = colorBackOut.get_height();
   if (gid.x >= w || gid.y >= h) return;
 
   float2 uv = (float2(gid) + 0.5) / float2(w, h);
   float aspect = float(w) / float(h);
   float2 p = (uv - 0.5) * float2(aspect, 1.0);
 
-  half3 canvasBase = half3(params.canvas.xyz);
-  int   strokeCount = int(params.config.z);
-  bool  isFirstFrame = params.config.y > 0.5;
-  half  dryRate = half(params.canvas.w);
+  bool isFirstFrame = params.config.y > 0.5;
+  int  strokeCount  = int(params.config.z);
+  half dryRate      = half(params.canvas.w);
 
-  half3 color;
+  half4 back, mid, front;
   half  height;
 
   if (isFirstFrame) {
-    color  = canvasBase - canvasWeave(float2(gid));
+    back  = half4(0);
+    mid   = half4(0);
+    front = half4(0);
     height = 0.0h;
   } else {
-    color  = colorIn.read(gid).rgb;
+    back   = colorBackIn.read(gid);
+    mid    = colorMidIn.read(gid);
+    front  = colorFrontIn.read(gid);
     height = heightIn.read(gid).r;
-    half3 weavedBase = canvasBase - canvasWeave(float2(gid));
-    color  = mix(color, weavedBase, dryRate);
-    height *= 0.9996h;
+
+    half decay = 1.0h - dryRate;
+    back  *= decay;
+    mid   *= decay;
+    front *= decay;
+
+    half preservation = 0.9994h + smoothstep(0.0h, 0.7h, height) * 0.0005h;
+    height *= preservation;
   }
 
   for (int i = 0; i < strokeCount && i < 8; i++) {
@@ -324,6 +351,7 @@ kernel void abexPaint(texture2d<half, access::read>  colorIn   [[texture(0)]],
     else                 sr = evaluateSplatter(p, strokes[i]);
 
     bool isWash = (type >= 0.5 && type < 1.5);
+
     if (!isWash) {
       bool isGestural = (type < 0.5);
       float resistanceMult = isGestural ? 1.6 : 1.0;
@@ -340,106 +368,129 @@ kernel void abexPaint(texture2d<half, access::read>  colorIn   [[texture(0)]],
       sr.heightDelta *= adhesion;
     }
 
-    color  = applyStroke(color, strokes[i], sr);
+    if (sr.coverage < 0.002) continue;
+
+    half3 tint = strokeTint(strokes[i], sr);
+    half  cov  = half(sr.coverage);
+
+    if (isWash) {
+      half effective = cov * (1.0h - back.a);
+      back.rgb += tint * effective;
+      back.a   += effective;
+    } else if (type < 0.5) {
+      half effective = cov * (1.0h - mid.a);
+      mid.rgb += tint * effective;
+      mid.a   += effective;
+    } else {
+      half effective = cov * (1.0h - front.a);
+      front.rgb += tint * effective;
+      front.a   += effective;
+    }
+
     height = min(height + half(sr.heightDelta), 1.0h);
   }
 
   if (height < 0.004h) height = 0.0h;
 
-  colorOut.write(half4(color, 1.0h), gid);
+  back.a  = clamp(back.a,  0.0h, 1.0h);
+  mid.a   = clamp(mid.a,   0.0h, 1.0h);
+  front.a = clamp(front.a, 0.0h, 1.0h);
+
+  colorBackOut.write(back, gid);
+  colorMidOut.write(mid, gid);
+  colorFrontOut.write(front, gid);
   heightOut.write(half4(height, 0, 0, 0), gid);
 }
 
-kernel void abexDiffuse(texture2d<half, access::read>  colorIn   [[texture(0)]],
-                        texture2d<half, access::write> colorOut  [[texture(1)]],
-                        texture2d<half, access::read>  heightIn  [[texture(2)]],
-                        texture2d<half, access::write> heightOut [[texture(3)]],
-                        constant AbExParams &params              [[buffer(0)]],
-                        uint2 gid [[thread_position_in_grid]]) {
-  int w = int(colorIn.get_width());
-  int h = int(colorIn.get_height());
-  if (int(gid.x) >= w || int(gid.y) >= h) return;
+kernel void abexCompose(
+    texture2d<half, access::read>  colorBack  [[texture(0)]],
+    texture2d<half, access::read>  colorMid   [[texture(1)]],
+    texture2d<half, access::read>  colorFront [[texture(2)]],
+    texture2d<half, access::read>  heightTex  [[texture(3)]],
+    texture2d<half, access::write> output     [[texture(4)]],
+    constant AbExParams &params               [[buffer(0)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+  uint w = output.get_width();
+  uint h = output.get_height();
+  if (gid.x >= w || gid.y >= h) return;
 
-  half3 center = colorIn.read(gid).rgb;
-  half height  = heightIn.read(gid).r;
+  float2 size = float2(w, h);
+  float2 uv = (float2(gid) + 0.5) / size;
+  float2 centered = uv - 0.5;
 
-  heightOut.write(half4(height, 0, 0, 0), gid);
+  float panX = params.camera.x;
+  float panY = params.camera.y;
+  float zoom = params.camera.z;
+  centered /= zoom;
 
-  float baseDiff = params.config.x;
-  float wet = 1.0 - smoothstep(0.04, 0.25, float(height));
-  float diffusion = baseDiff * wet;
+  const float pBack   = 0.25;
+  const float pMid    = 0.55;
+  const float pFront  = 1.00;
+  const float pHeight = 0.70;
 
-  if (diffusion < 0.0005) {
-    colorOut.write(half4(center, 1.0h), gid);
-    return;
-  }
+  float2 uvBack   = clamp(centered + float2(panX, panY) * pBack   + 0.5, 0.0, 1.0);
+  float2 uvMid    = clamp(centered + float2(panX, panY) * pMid    + 0.5, 0.0, 1.0);
+  float2 uvFront  = clamp(centered + float2(panX, panY) * pFront  + 0.5, 0.0, 1.0);
+  float2 uvHeight = clamp(centered + float2(panX, panY) * pHeight + 0.5, 0.0, 1.0);
 
-  half3 sum = 0.0h;
-  half  wsum = 0.0h;
-  for (int dy = -1; dy <= 1; dy++) {
-    for (int dx = -1; dx <= 1; dx++) {
-      int2 sp = clamp(int2(gid) + int2(dx, dy), int2(0), int2(w - 1, h - 1));
-      half wt = (dx == 0 && dy == 0) ? 4.0h : ((dx == 0 || dy == 0) ? 2.0h : 1.0h);
-      sum  += colorIn.read(uint2(sp)).rgb * wt;
-      wsum += wt;
-    }
-  }
-  half3 blurred = sum / wsum;
-  half3 result  = mix(center, blurred, half(diffusion));
-  colorOut.write(half4(result, 1.0h), gid);
-}
+  uint2 pxBack   = min(uint2(uvBack   * size), uint2(w - 1, h - 1));
+  uint2 pxMid    = min(uint2(uvMid    * size), uint2(w - 1, h - 1));
+  uint2 pxFront  = min(uint2(uvFront  * size), uint2(w - 1, h - 1));
+  uint2 pxHeight = min(uint2(uvHeight * size), uint2(w - 1, h - 1));
 
-kernel void abexLight(texture2d<half, access::read>  colorIn   [[texture(0)]],
-                      texture2d<half, access::read>  heightIn  [[texture(1)]],
-                      texture2d<half, access::write> colorOut  [[texture(2)]],
-                      constant AbExParams &params              [[buffer(0)]],
-                      uint2 gid [[thread_position_in_grid]]) {
-  int w = int(colorIn.get_width());
-  int h = int(colorIn.get_height());
-  if (int(gid.x) >= w || int(gid.y) >= h) return;
+  half4 back  = colorBack.read(pxBack);
+  half4 mid   = colorMid.read(pxMid);
+  half4 front = colorFront.read(pxFront);
 
-  half3 base = colorIn.read(gid).rgb;
+  half3 canvasBase = half3(params.canvas.xyz) - canvasWeave(float2(gid));
 
-  int2 cL = clamp(int2(gid) + int2(-1,  0), int2(0), int2(w - 1, h - 1));
-  int2 cR = clamp(int2(gid) + int2( 1,  0), int2(0), int2(w - 1, h - 1));
-  int2 cD = clamp(int2(gid) + int2( 0, -1), int2(0), int2(w - 1, h - 1));
-  int2 cU = clamp(int2(gid) + int2( 0,  1), int2(0), int2(w - 1, h - 1));
+  half3 result = canvasBase;
+  result = back.rgb  + result * (1.0h - back.a);
+  result = mid.rgb   + result * (1.0h - mid.a);
+  result = front.rgb + result * (1.0h - front.a);
 
-  float hC = float(heightIn.read(gid).r);
-  float hL = float(heightIn.read(uint2(cL)).r);
-  float hR = float(heightIn.read(uint2(cR)).r);
-  float hD = float(heightIn.read(uint2(cD)).r);
-  float hU = float(heightIn.read(uint2(cU)).r);
+  float hC = float(heightTex.read(pxHeight).r);
+  int2 hxL = clamp(int2(pxHeight) + int2(-1,  0), int2(0), int2(w - 1, h - 1));
+  int2 hxR = clamp(int2(pxHeight) + int2( 1,  0), int2(0), int2(w - 1, h - 1));
+  int2 hxD = clamp(int2(pxHeight) + int2( 0, -1), int2(0), int2(w - 1, h - 1));
+  int2 hxU = clamp(int2(pxHeight) + int2( 0,  1), int2(0), int2(w - 1, h - 1));
+
+  float hL = float(heightTex.read(uint2(hxL)).r);
+  float hR = float(heightTex.read(uint2(hxR)).r);
+  float hD = float(heightTex.read(uint2(hxD)).r);
+  float hU = float(heightTex.read(uint2(hxU)).r);
 
   float bump = params.config.w;
-  float3 N = normalize(float3((hL - hR) * bump,
-                              (hD - hU) * bump,
-                              1.0));
+  float3 N = normalize(float3((hL - hR) * bump, (hD - hU) * bump, 1.0));
 
   float paintMask = smoothstep(0.06, 0.32, hC);
 
   float2 ng = float2(gid);
+  float dn1 = shaderNoise(ng * 0.42)         - 0.5;
+  float dn2 = shaderNoise(ng * 0.42 + 173.0) - 0.5;
+  N = normalize(N + float3(dn1, dn2, 0.0) * (paintMask * 0.45));
 
-  float dn1 = shaderNoise(ng * 0.42)          - 0.5;
-  float dn2 = shaderNoise(ng * 0.42 + 173.0)  - 0.5;
-  float detailAmt = paintMask * 0.45;
-  N = normalize(N + float3(dn1, dn2, 0.0) * detailAmt);
+  float thickMask = smoothstep(0.40, 0.85, hC);
+  float cr1 = shaderNoise(ng * 1.15 + 37.0) - 0.5;
+  float cr2 = shaderNoise(ng * 2.70 + 91.0) - 0.5;
+  N = normalize(N + float3(cr1, cr2, 0.0) * (thickMask * 0.38));
 
   float2 cvGrad = canvasWeaveGradient(ng);
   float cvStrength = 0.35 * (1.0 - paintMask * 0.70);
   N = normalize(N + float3(-cvGrad.x, -cvGrad.y, 0.0) * cvStrength);
 
-  float cg1 = shaderNoise(ng * 1.6)          - 0.5;
-  float cg2 = shaderNoise(ng * 1.6 + 91.0)   - 0.5;
+  float cg1 = shaderNoise(ng * 1.6)        - 0.5;
+  float cg2 = shaderNoise(ng * 1.6 + 91.0) - 0.5;
   N = normalize(N + float3(cg1, cg2, 0.0) * 0.045 * (1.0 - paintMask));
 
   float3 Ldir = normalize(float3(-0.45, 0.60, 0.65));
   float3 V    = float3(0.0, 0.0, 1.0);
   float3 H    = normalize(Ldir + V);
 
-  float ndl  = max(0.0, dot(N, Ldir));
-  float hl   = 0.55 + 0.45 * ndl;
-  float ndh  = max(0.0, dot(N, H));
+  float ndl = max(0.0, dot(N, Ldir));
+  float hl  = 0.55 + 0.45 * ndl;
+  float ndh = max(0.0, dot(N, H));
 
   float specBroad = pow(ndh, 8.0)  * 0.35;
   float specTight = pow(ndh, 64.0) * 0.45;
@@ -447,15 +498,15 @@ kernel void abexLight(texture2d<half, access::read>  colorIn   [[texture(0)]],
 
   float3 warmLight  = float3(1.00, 0.95, 0.82);
   float3 coolShadow = float3(0.82, 0.86, 0.96);
-  float3 tint       = mix(coolShadow, warmLight, hl);
+  float3 lightTint  = mix(coolShadow, warmLight, hl);
 
-  float3 rgb = float3(base) * tint * hl;
+  float3 rgb = float3(result) * lightTint * hl;
   rgb += spec * warmLight * 0.55;
 
   float gmag = length(float2(hR - hL, hU - hD));
   float rim  = smoothstep(0.12, 0.45, gmag) * paintMask;
-  rgb -= rim * 0.08 * float3(base);
+  rgb -= rim * 0.08 * float3(result);
 
   rgb = saturate(rgb);
-  colorOut.write(half4(half3(rgb), 1.0h), gid);
+  output.write(half4(half3(rgb), 1.0h), gid);
 }

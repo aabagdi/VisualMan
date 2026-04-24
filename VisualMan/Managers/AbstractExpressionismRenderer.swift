@@ -13,6 +13,7 @@ struct AbExParams {
   var audio: SIMD4<Float>
   var canvas: SIMD4<Float>
   var config: SIMD4<Float>
+  var camera: SIMD4<Float>
 }
 
 struct AbExStroke {
@@ -27,8 +28,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   let commandQueue: any MTL4CommandQueue
 
   var paintPipeline: MTLComputePipelineState
-  var diffusePipeline: MTLComputePipelineState
-  var lightPipeline: MTLComputePipelineState
+  var composePipeline: MTLComputePipelineState
 
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
@@ -49,9 +49,11 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var songSeed: Float = Float.random(in: 0..<1000)
   var warmBias: Float = Float.random(in: 0.2..<0.8)
 
-  static let canvasColor = SIMD3<Float>(0.95, 0.92, 0.87)
+  var cameraPhase: Float = 0
 
+  static let canvasColor = SIMD3<Float>(0.95, 0.92, 0.87)
   static let maxFramesInFlight: UInt64 = 3
+
   var commandAllocators = [any MTL4CommandAllocator]()
   var commandBuffer: any MTL4CommandBuffer
   var argumentTables: [any MTL4ArgumentTable]
@@ -66,13 +68,20 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
   var currentUniformBuffer: MTLBuffer
 
-  private var canvasA: MTLTexture?
-  private var canvasB: MTLTexture?
+  private var colorBackA: MTLTexture?
+  private var colorBackB: MTLTexture?
+  private var colorMidA: MTLTexture?
+  private var colorMidB: MTLTexture?
+  private var colorFrontA: MTLTexture?
+  private var colorFrontB: MTLTexture?
   private var heightA: MTLTexture?
   private var heightB: MTLTexture?
   private var displayTex: MTLTexture?
+
   private var lastDrawableWidth: Int = 0
   private var lastDrawableHeight: Int = 0
+
+  var currentIsA: Bool = true
 
   var resumeSuppressionRemaining: Float = 0
   var resumeFadeIn: Float = 1.0
@@ -109,7 +118,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     guard let argumentTables = Self.createArgumentTables(device: device) else { return nil }
 
     let setDesc = MTLResidencySetDescriptor()
-    setDesc.initialCapacity = 6
+    setDesc.initialCapacity = 10
     guard let residencySet = try? device.makeResidencySet(descriptor: setDesc) else { return nil }
 
     self.device = device
@@ -121,8 +130,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     self.currentUniformBuffer = firstUniformBuffer
     self.argumentTables = argumentTables
     self.paintPipeline   = pipelines.paint
-    self.diffusePipeline = pipelines.diffuse
-    self.lightPipeline   = pipelines.light
+    self.composePipeline = pipelines.compose
     self.residencySet = residencySet
 
     configureResidencySet()
@@ -139,12 +147,18 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     hDesc.usage = [.shaderRead, .shaderWrite]
     hDesc.storageMode = .private
 
-    guard let dA = device.makeTexture(descriptor: colDesc),
-          let dB = device.makeTexture(descriptor: colDesc),
+    guard let bA = device.makeTexture(descriptor: colDesc),
+          let bB = device.makeTexture(descriptor: colDesc),
+          let mA = device.makeTexture(descriptor: colDesc),
+          let mB = device.makeTexture(descriptor: colDesc),
+          let fA = device.makeTexture(descriptor: colDesc),
+          let fB = device.makeTexture(descriptor: colDesc),
           let hA = device.makeTexture(descriptor: hDesc),
-          let hB = device.makeTexture(descriptor: hDesc) else { return }
+          let hB = device.makeTexture(descriptor: hDesc),
+          let disp = device.makeTexture(descriptor: colDesc) else { return }
 
-    [dA, dB, hA, hB].forEach { residencySet.addAllocation($0) }
+    let dummies: [MTLTexture] = [bA, bB, mA, mB, fA, fB, hA, hB, disp]
+    for t in dummies { residencySet.addAllocation(t) }
     residencySet.commit()
 
     let warmupFrame: UInt64 = 1
@@ -163,11 +177,21 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     let params = AbExParams(
       audio: .zero,
       canvas: SIMD4(cc.x, cc.y, cc.z, 0),
-      config: SIMD4(0, 1, 0, 10))
+      config: SIMD4(0, 1, 0, 10),
+      camera: SIMD4(0, 0, 1, 0))
+
     renderPaint(encoder: encoder,
-                colorIn: dA, colorOut: dB,
+                colorBackIn: bA, colorBackOut: bB,
+                colorMidIn: mA, colorMidOut: mB,
+                colorFrontIn: fA, colorFrontOut: fB,
                 heightIn: hA, heightOut: hB,
                 params: params, strokes: [])
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    renderCompose(encoder: encoder,
+                  colorBack: bB, colorMid: mB, colorFront: fB,
+                  heightTex: hB, output: disp,
+                  params: params)
+
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
     commandQueue.commit([commandBuffer])
@@ -175,7 +199,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     frameNumber = warmupFrame
 
     sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 1000)
-    [dA, dB, hA, hB].forEach { residencySet.removeAllocation($0) }
+    for t in dummies { residencySet.removeAllocation(t) }
     residencySet.commit()
   }
 
@@ -188,6 +212,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     smoothedBass = 0
     songSeed = Float.random(in: 0..<1000)
     warmBias = Float.random(in: 0.2..<0.8)
+    cameraPhase = 0
   }
 
   private func drainPendingTextureReleases() {
@@ -195,15 +220,17 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   }
 
   private func ensureCanvasTextures(width: Int, height: Int) -> Bool {
-    if width == lastDrawableWidth
-        && height == lastDrawableHeight
-        && canvasA != nil && canvasB != nil
+    if width == lastDrawableWidth && height == lastDrawableHeight
+        && colorBackA != nil && colorBackB != nil
+        && colorMidA != nil && colorMidB != nil
+        && colorFrontA != nil && colorFrontB != nil
         && heightA != nil && heightB != nil
         && displayTex != nil {
       return true
     }
 
-    for old in [canvasA, canvasB, heightA, heightB, displayTex] {
+    for old in [colorBackA, colorBackB, colorMidA, colorMidB,
+                colorFrontA, colorFrontB, heightA, heightB, displayTex] {
       if let t = old {
         pendingTextureReleases.append((frame: frameNumber, texture: t))
       }
@@ -219,25 +246,37 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     hDesc.usage = [.shaderRead, .shaderWrite]
     hDesc.storageMode = .private
 
-    guard let cA = device.makeTexture(descriptor: colDesc),
-          let cB = device.makeTexture(descriptor: colDesc),
+    guard let bA = device.makeTexture(descriptor: colDesc),
+          let bB = device.makeTexture(descriptor: colDesc),
+          let mA = device.makeTexture(descriptor: colDesc),
+          let mB = device.makeTexture(descriptor: colDesc),
+          let fA = device.makeTexture(descriptor: colDesc),
+          let fB = device.makeTexture(descriptor: colDesc),
           let hA = device.makeTexture(descriptor: hDesc),
           let hB = device.makeTexture(descriptor: hDesc),
           let disp = device.makeTexture(descriptor: colDesc) else {
-      canvasA = nil; canvasB = nil; heightA = nil; heightB = nil; displayTex = nil
+      colorBackA = nil; colorBackB = nil
+      colorMidA = nil;  colorMidB = nil
+      colorFrontA = nil; colorFrontB = nil
+      heightA = nil; heightB = nil; displayTex = nil
       lastDrawableWidth = 0; lastDrawableHeight = 0
       return false
     }
 
-    [cA, cB, hA, hB, disp].forEach { residencySet.addAllocation($0) }
+    for t in [bA, bB, mA, mB, fA, fB, hA, hB, disp] {
+      residencySet.addAllocation(t)
+    }
     residencySet.commit()
 
-    canvasA = cA; canvasB = cB
-    heightA = hA; heightB = hB
-    displayTex = disp
-    lastDrawableWidth = width
+    colorBackA  = bA; colorBackB  = bB
+    colorMidA   = mA; colorMidB   = mB
+    colorFrontA = fA; colorFrontB = fB
+    heightA     = hA; heightB     = hB
+    displayTex  = disp
+    lastDrawableWidth  = width
     lastDrawableHeight = height
     isFirstFrame = true
+    currentIsA = true
     return true
   }
 
@@ -250,10 +289,18 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
     let smoothed = processAudio(bass: bass, mid: mid, high: high)
 
-    guard ensureCanvasTextures(width: drawableWidth, height: drawableHeight),
-          let cA = canvasA, let cB = canvasB,
-          let hA = heightA, let hB = heightB,
-          let disp = displayTex else { return nil }
+    guard ensureCanvasTextures(width: drawableWidth, height: drawableHeight) else { return nil }
+
+    let readA = currentIsA
+    guard let backIn  = readA ? colorBackA  : colorBackB,
+          let backOut = readA ? colorBackB  : colorBackA,
+          let midIn   = readA ? colorMidA   : colorMidB,
+          let midOut  = readA ? colorMidB   : colorMidA,
+          let frontIn = readA ? colorFrontA : colorFrontB,
+          let frontOut = readA ? colorFrontB : colorFrontA,
+          let hIn     = readA ? heightA     : heightB,
+          let hOut    = readA ? heightB     : heightA,
+          let disp    = displayTex else { return nil }
 
     guard let encoder = beginFrame() else { return nil }
 
@@ -261,39 +308,41 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
     let energy = (smoothed.x + smoothed.y + smoothed.z) / 3.0
     let dryRate: Float = 0.0003 + energy * 0.0002
-    let diffusionRate: Float = 0.010 + energy * 0.015
-    let bumpStrength: Float = 10.0   // raised from 7.0 for more visible impasto
+    let bumpStrength: Float = 10.0
+
+    cameraPhase += dt * 0.30
+    let camPanX: Float = sin(cameraPhase * 0.13) * 0.015
+                       + sin(cameraPhase * 0.29) * 0.006
+    let camPanY: Float = cos(cameraPhase * 0.17) * 0.010
+                       + sin(cameraPhase * 0.37) * 0.005
+    let camZoom: Float = 1.0 + sin(cameraPhase * 0.20) * 0.020
+                             + cos(cameraPhase * 0.43) * 0.008
 
     let cc = Self.canvasColor
     let params = AbExParams(
       audio: SIMD4(time, smoothed.x, smoothed.y, smoothed.z),
       canvas: SIMD4(cc.x, cc.y, cc.z, dryRate),
-      config: SIMD4(diffusionRate,
-                    isFirstFrame ? 1.0 : 0.0,
-                    Float(strokes.count),
-                    bumpStrength))
+      config: SIMD4(0, isFirstFrame ? 1.0 : 0.0, Float(strokes.count), bumpStrength),
+      camera: SIMD4(camPanX, camPanY, camZoom, 0))
 
     renderPaint(encoder: encoder,
-                colorIn: cA, colorOut: cB,
-                heightIn: hA, heightOut: hB,
+                colorBackIn: backIn, colorBackOut: backOut,
+                colorMidIn: midIn, colorMidOut: midOut,
+                colorFrontIn: frontIn, colorFrontOut: frontOut,
+                heightIn: hIn, heightOut: hOut,
                 params: params, strokes: strokes)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    renderDiffuse(encoder: encoder,
-                  colorIn: cB, colorOut: cA,
-                  heightIn: hB, heightOut: hA,
+    renderCompose(encoder: encoder,
+                  colorBack: backOut, colorMid: midOut, colorFront: frontOut,
+                  heightTex: hOut, output: disp,
                   params: params)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    renderLight(encoder: encoder,
-                colorIn: cA, heightIn: hA,
-                colorOut: disp,
-                params: params)
 
     encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
     encoder.endEncoding()
 
     isFirstFrame = false
+    currentIsA.toggle()
     return disp
   }
 }
