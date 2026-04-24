@@ -2,7 +2,7 @@
 //  AbstractExpressionismRenderer+Rendering.swift
 //  VisualMan
 //
-//  Created by Aadit Bagdi on 4/23/26.
+//  Created by on 4/23/26.
 //
 
 import Metal
@@ -20,7 +20,7 @@ extension AbstractExpressionismRenderer {
     SIMD3(0.10, 0.40, 0.25), SIMD3(0.25, 0.10, 0.50),
     SIMD3(0.02, 0.20, 0.45), SIMD3(0.15, 0.55, 0.35),
   ]
-  
+
   private static let compositionAnchors: [SIMD2<Float>] = [
     SIMD2(-0.22, 0.24),
     SIMD2( 0.28, -0.20),
@@ -49,6 +49,21 @@ extension AbstractExpressionismRenderer {
     return pickColor(warm: nextSeed() > drifted)
   }
 
+  private func pickDurability(permanentChance: Float, stickyChance: Float) -> Float {
+    let r = nextSeed()
+    if r < permanentChance {
+      return 0.80 + nextSeed() * 0.15
+    } else if r < permanentChance + stickyChance {
+      return 0.35 + nextSeed() * 0.30
+    } else {
+      return 0
+    }
+  }
+
+  private func packColorW(shape: Float, durability: Float) -> Float {
+    return shape + durability
+  }
+
   private func compositionFocus() -> SIMD2<Float> {
     let t = time * 0.06 + songSeed * 7.3
     let anchors = Self.compositionAnchors
@@ -68,7 +83,7 @@ extension AbstractExpressionismRenderer {
 
     return lerped + SIMD2(jitterX, jitterY)
   }
-  
+
   private func dominantAngle() -> Float {
     return time * 0.045 + songSeed * 1.2
   }
@@ -152,10 +167,11 @@ extension AbstractExpressionismRenderer {
       let opacity = 0.85 + bass * 0.15
       let bristleSeed = nextSeed() * 100
       let color = pickColorBiased()
+      let dur = pickDurability(permanentChance: 0.08, stickyChance: 0.22)
       strokes.append(AbExStroke(
         posAngle: SIMD4(x, y, angle, halfLen),
         sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
-        color: SIMD4(color.x, color.y, color.z, 0)))
+        color: SIMD4(color.x, color.y, color.z, packColorW(shape: 0, durability: dur))))
     }
   }
 
@@ -181,10 +197,11 @@ extension AbstractExpressionismRenderer {
     let opacity = 0.65 + energy * 0.25
     let bristleSeed = nextSeed() * 100
     let color = pickColorBiased()
+    let dur = pickDurability(permanentChance: 0.03, stickyChance: 0.15)
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
-      color: SIMD4(color.x, color.y, color.z, 0)))
+      color: SIMD4(color.x, color.y, color.z, packColorW(shape: 0, durability: dur))))
   }
 
   private func appendRogueStroke(to strokes: inout [AbExStroke], energy: Float) {
@@ -215,7 +232,7 @@ extension AbstractExpressionismRenderer {
         color: SIMD4(color.x, color.y, color.z, 0)))
     }
   }
-  
+
   private func appendWash(to strokes: inout [AbExStroke], mid: Float, focus: SIMD2<Float>) {
     guard mid > 0.04, (wallClock - lastWashTime) > 0.3, strokes.count < 8 else { return }
     lastWashTime = wallClock
@@ -308,10 +325,11 @@ extension AbstractExpressionismRenderer {
 
       let bristleSeed = nextSeed() * 100
       let color = pickColorBiased()
+      let dur = pickDurability(permanentChance: 0.12, stickyChance: 0.28)
       strokes.append(AbExStroke(
         posAngle: SIMD4(x, y, angle, radius),
         sizeOpacity: SIMD4(radius, opacity, bristleSeed, 2),
-        color: SIMD4(color.x, color.y, color.z, shapeVariant)))
+        color: SIMD4(color.x, color.y, color.z, packColorW(shape: shapeVariant, durability: dur))))
     }
   }
 
