@@ -34,8 +34,7 @@ inline half canvasWeave(float2 pixelPos) {
   float threadY = sin(pixelPos.y * 0.85) * 0.5 + 0.5;
   float weave = threadX * threadY;
   float fiber = shaderNoise(pixelPos * 0.18);
-  float irregular = shaderNoise(pixelPos * 0.04);
-  return half(weave * 0.045 + fiber * 0.020 + irregular * 0.012);
+  return half(weave * 0.045 + fiber * 0.020 * 0.012);
 }
 
 inline float2 canvasWeaveGradient(float2 pixelPos) {
@@ -549,7 +548,6 @@ kernel void abexCompose(
   half gmag;
   
   if (hC < 0.01) {
-    // Fast path: unpainted — skip the 4 neighbor height reads and bump math
     N         = half3(0.0h, 0.0h, 1.0h);
     paintMask = 0.0h;
     midGrad   = float2(0.0);
@@ -589,16 +587,8 @@ kernel void abexCompose(
   float2 ng = canvasPx;
   
   if (paintMask > 0.04h) {
-    
-    half activity   = 0.40h + 0.60h * half(shaderNoise(ng * 0.022 + 313.0));
-    half styleRidge = smoothstep(0.30h, 0.75h,
-                                 half(shaderNoise(ng * 0.015 + 811.0)));
-    
-    float2 warp = float2(
-                         shaderSimplex2D(ng * 0.040 + 211.0),
-                         shaderSimplex2D(ng * 0.040 + 397.0)
-                         ) * 11.0;
-    float2 wng = ng + warp;
+    half activity   = 0.75h;
+    half styleRidge = 0.55h;
     
     float midGmag = length(midGrad);
     float2 gdir = (midGmag > 0.001) ? (midGrad / midGmag) : float2(1.0, 0.0);
@@ -608,8 +598,8 @@ kernel void abexCompose(
     float sAlong  = float(mix(1.0h, 1.55h, dirStrength));
     float sAcross = float(mix(1.0h, 0.65h, dirStrength));
     
-    float u = dot(wng, gdir)  * sAlong;
-    float v = dot(wng, gperp) * sAcross;
+    float u = dot(ng, gdir)  * sAlong;
+    float v = dot(ng, gperp) * sAcross;
     float2 dng = gdir * u + gperp * v;
     
     half nx1 = half(shaderSimplex2D(dng * 0.233         )) * 0.5h;

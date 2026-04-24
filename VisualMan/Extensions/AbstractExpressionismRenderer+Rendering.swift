@@ -139,8 +139,16 @@ extension AbstractExpressionismRenderer {
   private func appendGesturalStroke(to strokes: inout [AbExStroke],
                                     energy: Float, focus: SIMD2<Float>, spread: Float) {
     lastGesturalTime = wallClock
-    let x = focus.x + (nextSeed() - 0.5) * 0.88 * spread
-    let y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
+    let isOutlier = nextSeed() < 0.28
+    let x: Float
+    let y: Float
+    if isOutlier {
+      x = (nextSeed() - 0.5) * 1.00
+      y = (nextSeed() - 0.5) * 1.05
+    } else {
+      x = focus.x + (nextSeed() - 0.5) * 0.88 * spread
+      y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
+    }
     let angle = nextSeed() * .pi * 2
     let halfLen = 0.09 + energy * 0.18 + nextSeed() * 0.07
     let halfWidth = 0.011 + energy * 0.014 + nextSeed() * 0.007
@@ -153,6 +161,35 @@ extension AbstractExpressionismRenderer {
       color: SIMD4(color.x, color.y, color.z, 0)))
   }
 
+  private func appendRogueStroke(to strokes: inout [AbExStroke], energy: Float) {
+    guard strokes.count < 8, nextSeed() < 0.06 else { return }
+
+    let x = (nextSeed() - 0.5) * 1.05
+    let y = (nextSeed() - 0.5) * 1.10
+    let angle = nextSeed() * .pi * 2
+    let typeRoll = nextSeed()
+    let color = pickColorBiased()
+
+    if typeRoll < 0.55 {
+      let halfLen = 0.10 + nextSeed() * 0.22
+      let halfWidth = 0.009 + nextSeed() * 0.010
+      let opacity: Float = 0.70 + nextSeed() * 0.20
+      let bristleSeed = nextSeed() * 100
+      strokes.append(AbExStroke(
+        posAngle: SIMD4(x, y, angle, halfLen),
+        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
+        color: SIMD4(color.x, color.y, color.z, 0)))
+    } else {
+      let radius = 0.006 + nextSeed() * 0.014
+      let opacity: Float = 0.85 + nextSeed() * 0.15
+      let bristleSeed = nextSeed() * 100
+      strokes.append(AbExStroke(
+        posAngle: SIMD4(x, y, 0, radius),
+        sizeOpacity: SIMD4(radius, opacity, bristleSeed, 2),
+        color: SIMD4(color.x, color.y, color.z, 0)))
+    }
+  }
+  
   private func appendWash(to strokes: inout [AbExStroke], mid: Float, focus: SIMD2<Float>) {
     guard mid > 0.04, (wallClock - lastWashTime) > 0.3, strokes.count < 8 else { return }
     lastWashTime = wallClock
@@ -241,6 +278,7 @@ extension AbstractExpressionismRenderer {
     appendWash(to: &strokes, mid: mid, focus: focus)
     appendSplatters(to: &strokes, high: high)
     appendAmbientWash(to: &strokes, energy: energy, focus: focus)
+    appendRogueStroke(to: &strokes, energy: energy)
 
     return strokes
   }
