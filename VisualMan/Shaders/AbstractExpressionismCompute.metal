@@ -80,7 +80,7 @@ inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s) {
   if (alongT < -1.15 || alongT > 1.25 || abs(acrossT) > 1.35) return r;
 
   float wob = sin(alongT * (3.0 + hash11(seed) * 3.0) + seed * 17.0) * 0.15;
-  wob += (shaderNoise(float2(alongT * 2.2, seed)) - 0.5) * 0.35;
+  wob += shaderSimplex2D(float2(alongT * 2.2, seed)) * 0.175;
   acrossT += wob;
 
   float sAlong = (alongT + 1.0) * 0.5;
@@ -237,7 +237,7 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
   float nLobe = 3.0 + floor(hash11(seed * 1.31) * 4.0);
   float lobe = sin(ang * nLobe + seed * 11.0) * 0.18
              + cos(ang * (nLobe + 2.0) + seed * 7.0) * 0.10;
-  float en = (shaderNoise(float2(ang * 2.0, seed * 3.0)) - 0.5) * 0.3;
+  float en = shaderSimplex2D(float2(ang * 2.0, seed * 3.0)) * 0.15;
   float effR = radius * (1.0 + lobe + en);
 
   float typeRoll = hash11(seed * 1.77);
