@@ -75,4 +75,103 @@ inline float shaderFBM(float2 p, int octaves, float2x2 rot = float2x2(1,0,0,1), 
   return value;
 }
 
+constant float2 SHADER_OS2_GRAD[32] = {
+  float2( 0.130526192220052,  0.991444861373810),
+  float2( 0.382683432365090,  0.923879532511287),
+  float2( 0.608761429008721,  0.793353340291235),
+  float2( 0.793353340291235,  0.608761429008721),
+  float2( 0.923879532511287,  0.382683432365090),
+  float2( 0.991444861373810,  0.130526192220052),
+  float2( 0.991444861373810, -0.130526192220052),
+  float2( 0.923879532511287, -0.382683432365090),
+  float2( 0.793353340291235, -0.608761429008721),
+  float2( 0.608761429008721, -0.793353340291235),
+  float2( 0.382683432365090, -0.923879532511287),
+  float2( 0.130526192220052, -0.991444861373810),
+  float2(-0.130526192220052, -0.991444861373810),
+  float2(-0.382683432365090, -0.923879532511287),
+  float2(-0.608761429008721, -0.793353340291235),
+  float2(-0.793353340291235, -0.608761429008721),
+  float2(-0.923879532511287, -0.382683432365090),
+  float2(-0.991444861373810, -0.130526192220052),
+  float2(-0.991444861373810,  0.130526192220052),
+  float2(-0.923879532511287,  0.382683432365090),
+  float2(-0.793353340291235,  0.608761429008721),
+  float2(-0.608761429008721,  0.793353340291235),
+  float2(-0.382683432365090,  0.923879532511287),
+  float2(-0.130526192220052,  0.991444861373810),
+  float2( 0.130526192220052,  0.991444861373810),
+  float2( 0.382683432365090,  0.923879532511287),
+  float2( 0.608761429008721,  0.793353340291235),
+  float2( 0.793353340291235,  0.608761429008721),
+  float2( 0.923879532511287,  0.382683432365090),
+  float2( 0.991444861373810,  0.130526192220052),
+  float2( 0.991444861373810, -0.130526192220052),
+  float2( 0.923879532511287, -0.382683432365090),
+};
+
+inline int shader_os2_gradIndex(int ix, int iy) {
+  int h = ix * 0x27d4eb2d ^ iy * 0x6b8b4567;
+  h ^= h >> 15;
+  h *= 0x2c1b3c6d;
+  h ^= h >> 12;
+  h *= 0xd168aaad;
+  h ^= h >> 16;
+  return h & 31;
+}
+
+inline float shader_os2_contrib(int ix, int iy, float dx, float dy) {
+  float a = 2.0 / 3.0 - dx * dx - dy * dy;
+  if (a <= 0.0) return 0.0;
+  float a2 = a * a;
+  float2 g = SHADER_OS2_GRAD[shader_os2_gradIndex(ix, iy)];
+  return a2 * a2 * (g.x * dx + g.y * dy);
+}
+
+inline float shaderSimplex2D(float2 pos) {
+  const float SKEW   = 0.366025403784439;
+  const float UNSKEW = 0.211324865405187;
+
+  float s = (pos.x + pos.y) * SKEW;
+  float xs = pos.x + s;
+  float ys = pos.y + s;
+
+  int xsb = int(floor(xs));
+  int ysb = int(floor(ys));
+
+  float xsi = xs - float(xsb);
+  float ysi = ys - float(ysb);
+
+  float ti = float(xsb + ysb) * UNSKEW;
+  float dx0 = pos.x - (float(xsb) - ti);
+  float dy0 = pos.y - (float(ysb) - ti);
+
+  float value = 0.0;
+
+  value += shader_os2_contrib(xsb, ysb, dx0, dy0);
+
+  value += shader_os2_contrib(xsb + 1, ysb,
+                              dx0 - 1.0 + UNSKEW, dy0 + UNSKEW);
+
+  value += shader_os2_contrib(xsb, ysb + 1,
+                              dx0 + UNSKEW, dy0 - 1.0 + UNSKEW);
+
+  value += shader_os2_contrib(xsb + 1, ysb + 1,
+                              dx0 - 1.0 + 2.0 * UNSKEW, dy0 - 1.0 + 2.0 * UNSKEW);
+
+  if (xsi + ysi > 1.0) {
+    value += shader_os2_contrib(xsb + 2, ysb + 1,
+                                dx0 - 2.0 + 3.0 * UNSKEW, dy0 - 1.0 + 3.0 * UNSKEW);
+    value += shader_os2_contrib(xsb + 1, ysb + 2,
+                                dx0 - 1.0 + 3.0 * UNSKEW, dy0 - 2.0 + 3.0 * UNSKEW);
+  } else {
+    value += shader_os2_contrib(xsb - 1, ysb,
+                                dx0 + 1.0 - UNSKEW, dy0 - UNSKEW);
+    value += shader_os2_contrib(xsb, ysb - 1,
+                                dx0 - UNSKEW, dy0 + 1.0 - UNSKEW);
+  }
+
+  return 18.24196194486065 * value;
+}
+
 #endif

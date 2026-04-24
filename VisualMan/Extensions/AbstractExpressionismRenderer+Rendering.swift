@@ -2,7 +2,7 @@
 //  AbstractExpressionismRenderer+Rendering.swift
 //  VisualMan
 //
-//  Created by Aadit Bagdi on 4/23/26.
+//  Created by on 4/23/26.
 //
 
 import Metal
@@ -108,12 +108,8 @@ extension AbstractExpressionismRenderer {
     return envelope * fade
   }
 
-  private func appendTransientStrokes(into strokes: inout [AbExStroke],
-                                      fired: Bool,
-                                      bass: Float,
-                                      focus: SIMD2<Float>,
-                                      spread: Float) {
-    guard fired else { return }
+  private func appendBassTransientStrokes(to strokes: inout [AbExStroke],
+                                          bass: Float, focus: SIMD2<Float>, spread: Float) {
     lastGesturalTime = wallClock
     let count = bass > 0.25 ? 3 : (bass > 0.10 ? 2 : 1)
     for _ in 0..<count where strokes.count < 8 {
@@ -132,16 +128,8 @@ extension AbstractExpressionismRenderer {
     }
   }
 
-  private func appendGesturalStroke(into strokes: inout [AbExStroke],
-                                    transientFired: Bool,
-                                    energy: Float,
-                                    focus: SIMD2<Float>,
-                                    spread: Float) {
-    guard !transientFired,
-          energy > 0.03,
-          (wallClock - lastGesturalTime) > 0.15,
-          strokes.count < 8,
-          nextSeed() < 0.72 else { return }
+  private func appendGesturalStroke(to strokes: inout [AbExStroke],
+                                    energy: Float, focus: SIMD2<Float>, spread: Float) {
     lastGesturalTime = wallClock
     let x = focus.x + (nextSeed() - 0.5) * 0.88 * spread
     let y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
@@ -157,9 +145,7 @@ extension AbstractExpressionismRenderer {
       color: SIMD4(color.x, color.y, color.z, 0)))
   }
 
-  private func appendWashStroke(into strokes: inout [AbExStroke],
-                                mid: Float,
-                                focus: SIMD2<Float>) {
+  private func appendWash(to strokes: inout [AbExStroke], mid: Float, focus: SIMD2<Float>) {
     guard mid > 0.04, (wallClock - lastWashTime) > 0.3, strokes.count < 8 else { return }
     lastWashTime = wallClock
     let x = focus.x * 0.6 + (nextSeed() - 0.5) * 1.00
@@ -176,7 +162,24 @@ extension AbstractExpressionismRenderer {
       color: SIMD4(color.x, color.y, color.z, 0)))
   }
 
-  private func appendSplatterStrokes(into strokes: inout [AbExStroke], high: Float) {
+  private func appendAmbientWash(to strokes: inout [AbExStroke],
+                                 energy: Float, focus: SIMD2<Float>) {
+    guard energy > 0.01, strokes.count < 8, nextSeed() < 0.04 else { return }
+    let x = focus.x + (nextSeed() - 0.5) * 0.95
+    let y = focus.y + (nextSeed() - 0.5) * 1.00
+    let angle = time * 0.1 + nextSeed() * .pi
+    let halfLen = 0.20 + nextSeed() * 0.15
+    let halfWidth = 0.14 + nextSeed() * 0.10
+    let opacity: Float = 0.04 + energy * 0.05
+    let bristleSeed = nextSeed() * 100
+    let color = pickColorBiased()
+    strokes.append(AbExStroke(
+      posAngle: SIMD4(x, y, angle, halfLen),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
+      color: SIMD4(color.x, color.y, color.z, 0)))
+  }
+
+  private func appendSplatters(to strokes: inout [AbExStroke], high: Float) {
     guard high > 0.04, (wallClock - lastSplatterTime) > 0.12, strokes.count < 8 else { return }
     lastSplatterTime = wallClock
     let sFocus = splatterFocus()
@@ -203,24 +206,6 @@ extension AbstractExpressionismRenderer {
     }
   }
 
-  private func appendAmbientStroke(into strokes: inout [AbExStroke],
-                                   energy: Float,
-                                   focus: SIMD2<Float>) {
-    guard energy > 0.01, strokes.count < 8, nextSeed() < 0.04 else { return }
-    let x = focus.x + (nextSeed() - 0.5) * 0.95
-    let y = focus.y + (nextSeed() - 0.5) * 1.00
-    let angle = time * 0.1 + nextSeed() * .pi
-    let halfLen = 0.20 + nextSeed() * 0.15
-    let halfWidth = 0.14 + nextSeed() * 0.10
-    let opacity: Float = 0.04 + energy * 0.05
-    let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
-    strokes.append(AbExStroke(
-      posAngle: SIMD4(x, y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
-      color: SIMD4(color.x, color.y, color.z, 0)))
-  }
-
   func generateStrokes(audio: SIMD3<Float>) -> [AbExStroke] {
     var strokes = [AbExStroke]()
     if resumeSuppressionRemaining > 0 { return strokes }
@@ -235,11 +220,19 @@ extension AbstractExpressionismRenderer {
                       && (wallClock - lastGesturalTime) > 0.10
                       && strokes.count < 8
 
-    appendTransientStrokes(into: &strokes, fired: transientFired, bass: bass, focus: focus, spread: spread)
-    appendGesturalStroke(into: &strokes, transientFired: transientFired, energy: energy, focus: focus, spread: spread)
-    appendWashStroke(into: &strokes, mid: mid, focus: focus)
-    appendSplatterStrokes(into: &strokes, high: high)
-    appendAmbientStroke(into: &strokes, energy: energy, focus: focus)
+    if transientFired {
+      appendBassTransientStrokes(to: &strokes, bass: bass, focus: focus, spread: spread)
+    }
+    if !transientFired
+        && energy > 0.03
+        && (wallClock - lastGesturalTime) > 0.15
+        && strokes.count < 8
+        && nextSeed() < 0.72 {
+      appendGesturalStroke(to: &strokes, energy: energy, focus: focus, spread: spread)
+    }
+    appendWash(to: &strokes, mid: mid, focus: focus)
+    appendSplatters(to: &strokes, high: high)
+    appendAmbientWash(to: &strokes, energy: energy, focus: focus)
 
     return strokes
   }
@@ -292,5 +285,92 @@ extension AbstractExpressionismRenderer {
     let tg = MTLSize(width: 16, height: 16, depth: 1)
     let grid = MTLSize(width: output.width, height: output.height, depth: 1)
     encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
+  }
+
+  private struct PingPongTextures {
+    let backIn: MTLTexture, backOut: MTLTexture
+    let midIn: MTLTexture, midOut: MTLTexture
+    let frontIn: MTLTexture, frontOut: MTLTexture
+    let hbIn: MTLTexture, hbOut: MTLTexture
+    let hmfIn: MTLTexture, hmfOut: MTLTexture
+    let display: MTLTexture
+  }
+
+  private func currentPingPongTextures() -> PingPongTextures? {
+    let readA = currentIsA
+    guard let backIn    = readA ? colorBackA   : colorBackB,
+          let backOut   = readA ? colorBackB   : colorBackA,
+          let midIn     = readA ? colorMidA    : colorMidB,
+          let midOut    = readA ? colorMidB    : colorMidA,
+          let frontIn   = readA ? colorFrontA  : colorFrontB,
+          let frontOut  = readA ? colorFrontB  : colorFrontA,
+          let hbIn      = readA ? heightBackA  : heightBackB,
+          let hbOut     = readA ? heightBackB  : heightBackA,
+          let hmfIn     = readA ? heightMFA    : heightMFB,
+          let hmfOut    = readA ? heightMFB    : heightMFA,
+          let disp      = displayTex else { return nil }
+    return PingPongTextures(backIn: backIn, backOut: backOut,
+                            midIn: midIn, midOut: midOut,
+                            frontIn: frontIn, frontOut: frontOut,
+                            hbIn: hbIn, hbOut: hbOut,
+                            hmfIn: hmfIn, hmfOut: hmfOut,
+                            display: disp)
+  }
+
+  private func buildFrameParams(smoothed: SIMD3<Float>, strokeCount: Int) -> AbExParams {
+    let energy = (smoothed.x + smoothed.y + smoothed.z) / 3.0
+    let dryRate: Float = 0.0003 + energy * 0.0002
+    let bumpStrength: Float = 13.0
+
+    cameraPhase += dt * 0.30
+    let camPanX: Float = sin(cameraPhase * 0.13) * 0.015
+                       + sin(cameraPhase * 0.29) * 0.006
+    let camPanY: Float = cos(cameraPhase * 0.17) * 0.010
+                       + sin(cameraPhase * 0.37) * 0.005
+    let camZoom: Float = 1.0 + sin(cameraPhase * 0.20) * 0.020
+                             + cos(cameraPhase * 0.43) * 0.008
+
+    let cc = Self.canvasColor
+    return AbExParams(
+      audio: SIMD4(time, smoothed.x, smoothed.y, smoothed.z),
+      canvas: SIMD4(cc.x, cc.y, cc.z, dryRate),
+      config: SIMD4(0, isFirstFrame ? 1.0 : 0.0, Float(strokeCount), bumpStrength),
+      camera: SIMD4(camPanX, camPanY, camZoom, 0))
+  }
+
+  func encodeFrame(bass: Float,
+                   mid: Float,
+                   high: Float,
+                   drawableWidth: Int,
+                   drawableHeight: Int) -> MTLTexture? {
+    drainPendingTextureReleases()
+    let smoothed = processAudio(bass: bass, mid: mid, high: high)
+    guard ensureCanvasTextures(displayWidth: drawableWidth, displayHeight: drawableHeight),
+          let tex = currentPingPongTextures(),
+          let encoder = beginFrame() else { return nil }
+
+    let strokes = generateStrokes(audio: smoothed)
+    let params = buildFrameParams(smoothed: smoothed, strokeCount: strokes.count)
+
+    renderPaint(encoder: encoder,
+                colorBackIn: tex.backIn, colorBackOut: tex.backOut,
+                colorMidIn: tex.midIn, colorMidOut: tex.midOut,
+                colorFrontIn: tex.frontIn, colorFrontOut: tex.frontOut,
+                heightBackIn: tex.hbIn, heightBackOut: tex.hbOut,
+                heightMFIn: tex.hmfIn, heightMFOut: tex.hmfOut,
+                params: params, strokes: strokes)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    renderCompose(encoder: encoder,
+                  colorBack: tex.backOut, colorMid: tex.midOut, colorFront: tex.frontOut,
+                  heightBack: tex.hbOut, heightMF: tex.hmfOut,
+                  output: tex.display, params: params)
+
+    encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
+    encoder.endEncoding()
+
+    isFirstFrame = false
+    currentIsA.toggle()
+    return tex.display
   }
 }

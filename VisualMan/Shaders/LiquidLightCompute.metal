@@ -56,119 +56,20 @@ constant float2x2 ROT1 = float2x2( 0.7974,  0.6034, -0.6034,  0.7974);
 constant float2x2 ROT2 = float2x2(-0.4161,  0.9093, -0.9093, -0.4161);
 constant float2x2 ROT3 = float2x2( 0.2837, -0.9589,  0.9589,  0.2837);
 
-constant float2 OS2_GRAD[32] = {
-  float2( 0.130526192220052,  0.991444861373810),
-  float2( 0.382683432365090,  0.923879532511287),
-  float2( 0.608761429008721,  0.793353340291235),
-  float2( 0.793353340291235,  0.608761429008721),
-  float2( 0.923879532511287,  0.382683432365090),
-  float2( 0.991444861373810,  0.130526192220052),
-  float2( 0.991444861373810, -0.130526192220052),
-  float2( 0.923879532511287, -0.382683432365090),
-  float2( 0.793353340291235, -0.608761429008721),
-  float2( 0.608761429008721, -0.793353340291235),
-  float2( 0.382683432365090, -0.923879532511287),
-  float2( 0.130526192220052, -0.991444861373810),
-  float2(-0.130526192220052, -0.991444861373810),
-  float2(-0.382683432365090, -0.923879532511287),
-  float2(-0.608761429008721, -0.793353340291235),
-  float2(-0.793353340291235, -0.608761429008721),
-  float2(-0.923879532511287, -0.382683432365090),
-  float2(-0.991444861373810, -0.130526192220052),
-  float2(-0.991444861373810,  0.130526192220052),
-  float2(-0.923879532511287,  0.382683432365090),
-  float2(-0.793353340291235,  0.608761429008721),
-  float2(-0.608761429008721,  0.793353340291235),
-  float2(-0.382683432365090,  0.923879532511287),
-  float2(-0.130526192220052,  0.991444861373810),
-  float2( 0.130526192220052,  0.991444861373810),
-  float2( 0.382683432365090,  0.923879532511287),
-  float2( 0.608761429008721,  0.793353340291235),
-  float2( 0.793353340291235,  0.608761429008721),
-  float2( 0.923879532511287,  0.382683432365090),
-  float2( 0.991444861373810,  0.130526192220052),
-  float2( 0.991444861373810, -0.130526192220052),
-  float2( 0.923879532511287, -0.382683432365090),
-};
-
-inline int os2_gradIndex(int ix, int iy) {
-  int h = ix * 0x27d4eb2d ^ iy * 0x6b8b4567;
-  h ^= h >> 15;
-  h *= 0x2c1b3c6d;
-  h ^= h >> 12;
-  h *= 0xd168aaad;
-  h ^= h >> 16;
-  return h & 31;
-}
-
-inline float os2_contrib(int ix, int iy, float dx, float dy) {
-  float a = 2.0 / 3.0 - dx * dx - dy * dy;
-  if (a <= 0.0) return 0.0;
-  float a2 = a * a;
-  float2 g = OS2_GRAD[os2_gradIndex(ix, iy)];
-  return a2 * a2 * (g.x * dx + g.y * dy);
-}
-
-inline float snoise(float2 pos) {
-  const float SKEW   = 0.366025403784439;
-  const float UNSKEW = 0.211324865405187;
-
-  float s = (pos.x + pos.y) * SKEW;
-  float xs = pos.x + s;
-  float ys = pos.y + s;
-
-  int xsb = int(floor(xs));
-  int ysb = int(floor(ys));
-
-  float xsi = xs - float(xsb);
-  float ysi = ys - float(ysb);
-
-  float ti = float(xsb + ysb) * UNSKEW;
-  float dx0 = pos.x - (float(xsb) - ti);
-  float dy0 = pos.y - (float(ysb) - ti);
-
-  float value = 0.0;
-
-  value += os2_contrib(xsb, ysb, dx0, dy0);
-
-  value += os2_contrib(xsb + 1, ysb,
-                       dx0 - 1.0 + UNSKEW, dy0 + UNSKEW);
-
-  value += os2_contrib(xsb, ysb + 1,
-                       dx0 + UNSKEW, dy0 - 1.0 + UNSKEW);
-
-  value += os2_contrib(xsb + 1, ysb + 1,
-                       dx0 - 1.0 + 2.0 * UNSKEW, dy0 - 1.0 + 2.0 * UNSKEW);
-
-  if (xsi + ysi > 1.0) {
-    value += os2_contrib(xsb + 2, ysb + 1,
-                         dx0 - 2.0 + 3.0 * UNSKEW, dy0 - 1.0 + 3.0 * UNSKEW);
-    value += os2_contrib(xsb + 1, ysb + 2,
-                         dx0 - 1.0 + 3.0 * UNSKEW, dy0 - 2.0 + 3.0 * UNSKEW);
-  } else {
-    value += os2_contrib(xsb - 1, ysb,
-                         dx0 + 1.0 - UNSKEW, dy0 - UNSKEW);
-    value += os2_contrib(xsb, ysb - 1,
-                         dx0 - UNSKEW, dy0 + 1.0 - UNSKEW);
-  }
-
-  return 18.24196194486065 * value;
-}
-
 inline float2 liquidWarp(float2 p, float time, float intensity) {
   float2 pX1 = ROT1 * p;
   float2 pY1 = ROT2 * p;
   float2 q = float2(
-    snoise(pX1 + time * 0.04),
-    snoise(pY1 + float2(5.2, 1.3) + time * 0.035)
+    shaderSimplex2D(pX1 + time * 0.04),
+    shaderSimplex2D(pY1 + float2(5.2, 1.3) + time * 0.035)
   );
 
   float2 warped = p + 3.0 * q;
   float2 rX = ROT2 * warped;
   float2 rY = ROT3 * warped;
   float2 r = float2(
-    snoise(rX + float2(1.7, 9.2) + time * 0.025),
-    snoise(rY + float2(8.3, 2.8) + time * 0.03)
+    shaderSimplex2D(rX + float2(1.7, 9.2) + time * 0.025),
+    shaderSimplex2D(rY + float2(8.3, 2.8) + time * 0.03)
   );
 
   return p + r * intensity;
@@ -284,12 +185,12 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
 
   float2 warped = liquidWarp(coords, time, warpIntensity);
 
-  float scaleField = snoise(p * 1.2 + time * 0.015) * 0.45 + 1.0;
+  float scaleField = shaderSimplex2D(p * 1.2 + time * 0.015) * 0.45 + 1.0;
 
   VoronoiResult v1 = voronoi(warped * (0.9 * scaleField) + flowSpeed * 0.25);
   VoronoiResult v2 = voronoi(warped * (1.4 * scaleField) + float2(4.0, 8.0) + flowSpeed * 0.18);
 
-  float paletteField = snoise(p * 0.6 + time * 0.02) * 0.5 + 0.5;
+  float paletteField = shaderSimplex2D(p * 0.6 + time * 0.02) * 0.5 + 0.5;
   float cellVariation1 = v1.cellID * 0.25;
   float cellVariation2 = v2.cellID * 0.25;
   float cellPhase1 = colorShift * (0.3 + v1.cellID * 0.7);

@@ -145,6 +145,7 @@ inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s) {
   r.bristleTone = (bStrength - 0.65) * 1.4;
 
   float ridge = 0.30 + 0.9 * pow(bProfile, 0.75);
+
   float bristleHeight = mix(0.50, 1.40, bStrength);
   r.heightDelta = widthProfile * impastoLoad * lengthMask * baseOp
                 * ridge * strokeWetness * bristleHeight;
@@ -264,11 +265,13 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
     float sSize = satR * (0.4 + hash11(kk + 7.7) * 1.3);
     float2 sc = center + float2(cos(a), sin(a)) * ring;
     float sd = length(p - sc);
+
     float sHeight = 1.0 - smoothstep(sSize * 0.70, sSize * 1.00, sd);
     float sBleedEnd = sSize * mix(1.55, 1.25, smoothstep(0.15, 0.70, mainHeight));
     float sColor = 1.0 - smoothstep(sSize * 1.00, sBleedEnd, sd);
     if (sColor * baseOp > coverage) {
       coverage = sColor * baseOp;
+
       h        = sHeight * baseOp * mainHeight * 0.25;
     }
   }
@@ -360,6 +363,7 @@ kernel void abexPaint(
     mid    = colorMidIn.read(gid);
     front  = colorFrontIn.read(gid);
     hBack  = heightBackIn.read(gid).r;
+
     half2 hMF = heightMFIn.read(gid).rg;
     hMid   = hMF.r;
     hFront = hMF.g;
@@ -426,16 +430,19 @@ kernel void abexPaint(
       float brushId = strokes[i].sizeOpacity.z;
       float heightVar;
       if (isGestural) {
+
         float sAng = strokes[i].posAngle.z;
         float2 pRel = p - strokes[i].posAngle.xy;
         float cA = cos(sAng);
         float sA = sin(sAng);
         float along  =  pRel.x * cA + pRel.y * sA;
         float across = -pRel.x * sA + pRel.y * cA;
+
         float n = shaderNoise(float2(across * 520.0 + brushId * 7.0,
                                      along  * 42.0  + brushId * 13.0));
         heightVar = 0.70 + n * 0.60;
       } else {
+
         float2 spRel = p - strokes[i].posAngle.xy;
         float n = shaderNoise(spRel * 85.0
                               + float2(brushId * 7.0, brushId * 13.0));
@@ -566,14 +573,15 @@ kernel void abexCompose(
   float2 ng = canvasPx;
 
   if (paintMask > 0.005h) {
+
     half activity   = 0.40h + 0.60h * half(shaderNoise(ng * 0.022 + 313.0));
     half styleRidge = smoothstep(0.30h, 0.75h,
                                  half(shaderNoise(ng * 0.015 + 811.0)));
 
     float2 warp = float2(
-      shaderNoise(ng * 0.040 + 211.0) - 0.5,
-      shaderNoise(ng * 0.040 + 397.0) - 0.5
-    ) * 22.0;
+      shaderSimplex2D(ng * 0.040 + 211.0),
+      shaderSimplex2D(ng * 0.040 + 397.0)
+    ) * 11.0;
     float2 wng = ng + warp;
 
     float midGmag = length(midGrad);
@@ -588,13 +596,13 @@ kernel void abexCompose(
     float v = dot(wng, gperp) * sAcross;
     float2 dng = gdir * u + gperp * v;
 
-    half nx1 = half(shaderNoise(dng * 0.233         )) - 0.5h;
-    half ny1 = half(shaderNoise(dng * 0.233 + 173.0 )) - 0.5h;
-    half nx2 = half(shaderNoise(dng * 0.547 +  61.0 )) - 0.5h;
-    half ny2 = half(shaderNoise(dng * 0.547 + 239.0 )) - 0.5h;
+    half nx1 = half(shaderSimplex2D(dng * 0.233         )) * 0.5h;
+    half ny1 = half(shaderSimplex2D(dng * 0.233 + 173.0 )) * 0.5h;
+    half nx2 = half(shaderSimplex2D(dng * 0.547 +  61.0 )) * 0.5h;
+    half ny2 = half(shaderSimplex2D(dng * 0.547 + 239.0 )) * 0.5h;
 
-    half rgx = abs(half(shaderNoise(dng * 0.379 + 413.0)) - 0.5h) * 2.0h - 0.5h;
-    half rgy = abs(half(shaderNoise(dng * 0.379 + 587.0)) - 0.5h) * 2.0h - 0.5h;
+    half rgx = abs(half(shaderSimplex2D(dng * 0.379 + 413.0))) - 0.5h;
+    half rgy = abs(half(shaderSimplex2D(dng * 0.379 + 587.0))) - 0.5h;
 
     half thickScale = smoothstep(0.04h, 0.55h, half(hC));
     half bodyAmp = paintMask * activity * (0.22h + 0.38h * thickScale);
@@ -624,6 +632,7 @@ kernel void abexCompose(
   const half3 H    = normalize(Ldir + V);
 
   half ndl = max(0.0h, dot(N, Ldir));
+
   half hl  = 0.72h + 0.28h * ndl;
 
   const half3 warmLight  = half3(1.00h, 0.95h, 0.82h);
@@ -634,6 +643,7 @@ kernel void abexCompose(
 
   if (paintMask > 0.005h) {
     half ndh = max(0.0h, dot(N, H));
+
     half specBroad = pow(ndh, 6.0h)  * 0.18h;
     half specTight = pow(ndh, 16.0h) * 0.14h;
     half spec = (specBroad + specTight) * paintMask;
