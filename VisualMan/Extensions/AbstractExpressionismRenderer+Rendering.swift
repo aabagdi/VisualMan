@@ -59,23 +59,14 @@ extension AbstractExpressionismRenderer {
   }
 
   func renderPaint(encoder: any MTL4ComputeCommandEncoder,
-                   colorBackIn: MTLTexture, colorBackOut: MTLTexture,
-                   colorMidIn: MTLTexture, colorMidOut: MTLTexture,
-                   colorFrontIn: MTLTexture, colorFrontOut: MTLTexture,
-                   heightBackIn: MTLTexture, heightBackOut: MTLTexture,
-                   heightMFIn: MTLTexture, heightMFOut: MTLTexture,
+                   colorIn: MTLTexture, colorOut: MTLTexture,
+                   hwIn: MTLTexture, hwOut: MTLTexture,
                    params: AbExParams, strokes: [AbExStroke]) {
     encoder.setComputePipelineState(paintPipeline)
-    argumentTable.setTexture(colorBackIn.gpuResourceID, index: 0)
-    argumentTable.setTexture(colorBackOut.gpuResourceID, index: 1)
-    argumentTable.setTexture(colorMidIn.gpuResourceID, index: 2)
-    argumentTable.setTexture(colorMidOut.gpuResourceID, index: 3)
-    argumentTable.setTexture(colorFrontIn.gpuResourceID, index: 4)
-    argumentTable.setTexture(colorFrontOut.gpuResourceID, index: 5)
-    argumentTable.setTexture(heightBackIn.gpuResourceID, index: 6)
-    argumentTable.setTexture(heightBackOut.gpuResourceID, index: 7)
-    argumentTable.setTexture(heightMFIn.gpuResourceID, index: 8)
-    argumentTable.setTexture(heightMFOut.gpuResourceID, index: 9)
+    argumentTable.setTexture(colorIn.gpuResourceID, index: 0)
+    argumentTable.setTexture(colorOut.gpuResourceID, index: 1)
+    argumentTable.setTexture(hwIn.gpuResourceID, index: 2)
+    argumentTable.setTexture(hwOut.gpuResourceID, index: 3)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     if strokes.isEmpty {
@@ -86,21 +77,17 @@ extension AbstractExpressionismRenderer {
     }
 
     let tg = MTLSize(width: 16, height: 16, depth: 1)
-    let grid = MTLSize(width: colorBackOut.width, height: colorBackOut.height, depth: 1)
+    let grid = MTLSize(width: colorOut.width, height: colorOut.height, depth: 1)
     encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
   }
 
   func renderCompose(encoder: any MTL4ComputeCommandEncoder,
-                     colorBack: MTLTexture, colorMid: MTLTexture, colorFront: MTLTexture,
-                     heightBack: MTLTexture, heightMF: MTLTexture,
+                     color: MTLTexture, heightWet: MTLTexture,
                      output: MTLTexture, params: AbExParams) {
     encoder.setComputePipelineState(composePipeline)
-    argumentTable.setTexture(colorBack.gpuResourceID, index: 0)
-    argumentTable.setTexture(colorMid.gpuResourceID, index: 1)
-    argumentTable.setTexture(colorFront.gpuResourceID, index: 2)
-    argumentTable.setTexture(heightBack.gpuResourceID, index: 3)
-    argumentTable.setTexture(heightMF.gpuResourceID, index: 4)
-    argumentTable.setTexture(output.gpuResourceID, index: 5)
+    argumentTable.setTexture(color.gpuResourceID, index: 0)
+    argumentTable.setTexture(heightWet.gpuResourceID, index: 1)
+    argumentTable.setTexture(output.gpuResourceID, index: 2)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     let tg = MTLSize(width: 16, height: 16, depth: 1)
@@ -109,39 +96,27 @@ extension AbstractExpressionismRenderer {
   }
 
   private struct PingPongTextures {
-    let backIn: MTLTexture, backOut: MTLTexture
-    let midIn: MTLTexture, midOut: MTLTexture
-    let frontIn: MTLTexture, frontOut: MTLTexture
-    let hbIn: MTLTexture, hbOut: MTLTexture
-    let hmfIn: MTLTexture, hmfOut: MTLTexture
+    let colorIn: MTLTexture, colorOut: MTLTexture
+    let hwIn: MTLTexture, hwOut: MTLTexture
     let display: MTLTexture
   }
 
   private func currentPingPongTextures() -> PingPongTextures? {
     let readA = currentIsA
-    guard let backIn    = readA ? colorBackA   : colorBackB,
-          let backOut   = readA ? colorBackB   : colorBackA,
-          let midIn     = readA ? colorMidA    : colorMidB,
-          let midOut    = readA ? colorMidB    : colorMidA,
-          let frontIn   = readA ? colorFrontA  : colorFrontB,
-          let frontOut  = readA ? colorFrontB  : colorFrontA,
-          let hbIn      = readA ? heightBackA  : heightBackB,
-          let hbOut     = readA ? heightBackB  : heightBackA,
-          let hmfIn     = readA ? heightMFA    : heightMFB,
-          let hmfOut    = readA ? heightMFB    : heightMFA,
-          let disp      = displayTex else { return nil }
-    return PingPongTextures(backIn: backIn, backOut: backOut,
-                            midIn: midIn, midOut: midOut,
-                            frontIn: frontIn, frontOut: frontOut,
-                            hbIn: hbIn, hbOut: hbOut,
-                            hmfIn: hmfIn, hmfOut: hmfOut,
+    guard let cIn   = readA ? colorA     : colorB,
+          let cOut  = readA ? colorB     : colorA,
+          let hwIn  = readA ? heightWetA : heightWetB,
+          let hwOut = readA ? heightWetB : heightWetA,
+          let disp  = displayTex else { return nil }
+    return PingPongTextures(colorIn: cIn, colorOut: cOut,
+                            hwIn: hwIn, hwOut: hwOut,
                             display: disp)
   }
 
   private func buildFrameParams(smoothed: SIMD3<Float>, strokeCount: Int) -> AbExParams {
     let energy = (smoothed.x + smoothed.y + smoothed.z) / 3.0
     let dryRate: Float = 0.0003 + energy * 0.0002
-    let bumpStrength: Float = 13.0
+    let bumpStrength: Float = 22.0
 
     cameraPhase += dt * 0.30
     let camPanX: Float = sin(cameraPhase * 0.13) * 0.015
@@ -174,17 +149,13 @@ extension AbstractExpressionismRenderer {
     let params = buildFrameParams(smoothed: smoothed, strokeCount: strokes.count)
 
     renderPaint(encoder: encoder,
-                colorBackIn: tex.backIn, colorBackOut: tex.backOut,
-                colorMidIn: tex.midIn, colorMidOut: tex.midOut,
-                colorFrontIn: tex.frontIn, colorFrontOut: tex.frontOut,
-                heightBackIn: tex.hbIn, heightBackOut: tex.hbOut,
-                heightMFIn: tex.hmfIn, heightMFOut: tex.hmfOut,
+                colorIn: tex.colorIn, colorOut: tex.colorOut,
+                hwIn: tex.hwIn, hwOut: tex.hwOut,
                 params: params, strokes: strokes)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     renderCompose(encoder: encoder,
-                  colorBack: tex.backOut, colorMid: tex.midOut, colorFront: tex.frontOut,
-                  heightBack: tex.hbOut, heightMF: tex.hmfOut,
+                  color: tex.colorOut, heightWet: tex.hwOut,
                   output: tex.display, params: params)
 
     encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)

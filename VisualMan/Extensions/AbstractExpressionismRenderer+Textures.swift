@@ -16,17 +16,9 @@ extension AbstractExpressionismRenderer {
     return desc
   }
 
-  private static func makeHeightBackDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
+  private static func makeHeightWetDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .r16Float, width: width, height: height, mipmapped: false)
-    desc.usage = [.shaderRead, .shaderWrite]
-    desc.storageMode = .private
-    return desc
-  }
-
-  private static func makeHeightMFDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
-    let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .rg16Float, width: width, height: height, mipmapped: false)
+      pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
     return desc
@@ -37,10 +29,7 @@ extension AbstractExpressionismRenderer {
   }
 
   private func queueCurrentCanvasForRelease() {
-    for old in [colorBackA, colorBackB, colorMidA, colorMidB,
-                colorFrontA, colorFrontB,
-                heightBackA, heightBackB,
-                heightMFA, heightMFB] {
+    for old in [colorA, colorB, heightWetA, heightWetB] {
       if let t = old {
         pendingTextureReleases.append((frame: frameNumber, texture: t))
       }
@@ -48,11 +37,8 @@ extension AbstractExpressionismRenderer {
   }
 
   private func clearCanvasTextures() {
-    colorBackA = nil; colorBackB = nil
-    colorMidA = nil;  colorMidB = nil
-    colorFrontA = nil; colorFrontB = nil
-    heightBackA = nil; heightBackB = nil
-    heightMFA = nil;   heightMFB = nil
+    colorA = nil; colorB = nil
+    heightWetA = nil; heightWetB = nil
     canvasSize = 0
   }
 
@@ -60,35 +46,25 @@ extension AbstractExpressionismRenderer {
     queueCurrentCanvasForRelease()
 
     let colDesc = Self.makeCanvasDescriptor(width: size, height: size)
-    let hbDesc = Self.makeHeightBackDescriptor(width: size, height: size)
-    let hmfDesc = Self.makeHeightMFDescriptor(width: size, height: size)
+    let hwDesc = Self.makeHeightWetDescriptor(width: size, height: size)
 
-    guard let bA = device.makeTexture(descriptor: colDesc),
-          let bB = device.makeTexture(descriptor: colDesc),
-          let mA = device.makeTexture(descriptor: colDesc),
-          let mB = device.makeTexture(descriptor: colDesc),
-          let fA = device.makeTexture(descriptor: colDesc),
-          let fB = device.makeTexture(descriptor: colDesc),
-          let hbA = device.makeTexture(descriptor: hbDesc),
-          let hbB = device.makeTexture(descriptor: hbDesc),
-          let hmfA = device.makeTexture(descriptor: hmfDesc),
-          let hmfB = device.makeTexture(descriptor: hmfDesc) else {
+    guard let cA = device.makeTexture(descriptor: colDesc),
+          let cB = device.makeTexture(descriptor: colDesc),
+          let hwA = device.makeTexture(descriptor: hwDesc),
+          let hwB = device.makeTexture(descriptor: hwDesc) else {
       clearCanvasTextures()
       return false
     }
 
-    for t in [bA, bB, mA, mB, fA, fB, hbA, hbB, hmfA, hmfB] {
+    for t in [cA, cB, hwA, hwB] {
       residencySet.addAllocation(t)
     }
 
-    colorBackA   = bA;  colorBackB   = bB
-    colorMidA    = mA;  colorMidB    = mB
-    colorFrontA  = fA;  colorFrontB  = fB
-    heightBackA  = hbA; heightBackB  = hbB
-    heightMFA    = hmfA; heightMFB   = hmfB
-    canvasSize   = size
+    colorA = cA; colorB = cB
+    heightWetA = hwA; heightWetB = hwB
+    canvasSize = size
     isFirstFrame = true
-    currentIsA   = true
+    currentIsA = true
     return true
   }
 
@@ -113,11 +89,8 @@ extension AbstractExpressionismRenderer {
     let requestedCanvasSize = max(displayWidth, displayHeight)
     let targetCanvasSize = max(canvasSize, requestedCanvasSize)
 
-    let canvasExists = colorBackA != nil && colorBackB != nil
-        && colorMidA != nil && colorMidB != nil
-        && colorFrontA != nil && colorFrontB != nil
-        && heightBackA != nil && heightBackB != nil
-        && heightMFA != nil && heightMFB != nil
+    let canvasExists = colorA != nil && colorB != nil
+        && heightWetA != nil && heightWetB != nil
     let canvasNeedsRebuild = !canvasExists || targetCanvasSize > canvasSize
 
     if canvasNeedsRebuild {
@@ -141,37 +114,28 @@ extension AbstractExpressionismRenderer {
 
   private struct WarmUpTextures {
     let color: [MTLTexture]
-    let heightBack: [MTLTexture]
-    let heightMF: [MTLTexture]
+    let heightWet: [MTLTexture]
     let display: MTLTexture
   }
 
   private func makeWarmUpTextures() -> WarmUpTextures? {
     let colDesc = Self.makeCanvasDescriptor(width: 64, height: 64)
-    let hbDesc = Self.makeHeightBackDescriptor(width: 64, height: 64)
-    let hmfDesc = Self.makeHeightMFDescriptor(width: 64, height: 64)
+    let hwDesc = Self.makeHeightWetDescriptor(width: 64, height: 64)
 
-    guard let bA = device.makeTexture(descriptor: colDesc),
-          let bB = device.makeTexture(descriptor: colDesc),
-          let mA = device.makeTexture(descriptor: colDesc),
-          let mB = device.makeTexture(descriptor: colDesc),
-          let fA = device.makeTexture(descriptor: colDesc),
-          let fB = device.makeTexture(descriptor: colDesc),
-          let hbA = device.makeTexture(descriptor: hbDesc),
-          let hbB = device.makeTexture(descriptor: hbDesc),
-          let hmfA = device.makeTexture(descriptor: hmfDesc),
-          let hmfB = device.makeTexture(descriptor: hmfDesc),
+    guard let cA = device.makeTexture(descriptor: colDesc),
+          let cB = device.makeTexture(descriptor: colDesc),
+          let hwA = device.makeTexture(descriptor: hwDesc),
+          let hwB = device.makeTexture(descriptor: hwDesc),
           let disp = device.makeTexture(descriptor: colDesc) else { return nil }
 
-    return WarmUpTextures(color: [bA, bB, mA, mB, fA, fB],
-                          heightBack: [hbA, hbB],
-                          heightMF: [hmfA, hmfB],
+    return WarmUpTextures(color: [cA, cB],
+                          heightWet: [hwA, hwB],
                           display: disp)
   }
 
   func warmUpGPU() {
     guard let tex = makeWarmUpTextures() else { return }
-    let dummies = tex.color + tex.heightBack + tex.heightMF + [tex.display]
+    let dummies = tex.color + tex.heightWet + [tex.display]
     for t in dummies { residencySet.addAllocation(t) }
     residencySet.commit()
 
@@ -195,16 +159,12 @@ extension AbstractExpressionismRenderer {
       camera: SIMD4(0, 0, 1, 0))
 
     renderPaint(encoder: encoder,
-                colorBackIn: tex.color[0], colorBackOut: tex.color[1],
-                colorMidIn: tex.color[2], colorMidOut: tex.color[3],
-                colorFrontIn: tex.color[4], colorFrontOut: tex.color[5],
-                heightBackIn: tex.heightBack[0], heightBackOut: tex.heightBack[1],
-                heightMFIn: tex.heightMF[0], heightMFOut: tex.heightMF[1],
+                colorIn: tex.color[0], colorOut: tex.color[1],
+                hwIn: tex.heightWet[0], hwOut: tex.heightWet[1],
                 params: params, strokes: [])
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     renderCompose(encoder: encoder,
-                  colorBack: tex.color[1], colorMid: tex.color[3], colorFront: tex.color[5],
-                  heightBack: tex.heightBack[1], heightMF: tex.heightMF[1],
+                  color: tex.color[1], heightWet: tex.heightWet[1],
                   output: tex.display, params: params)
 
     encoder.endEncoding()

@@ -42,6 +42,10 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var lastGesturalTime: Float = -10
   var lastWashTime: Float = -10
   var lastSplatterTime: Float = -10
+  var lastKnifeTime: Float = -10
+  var lastPollockTime: Float = -10
+  var lastDebugTrailTime: Float = -10
+  var pollockEventCounter: Int = 0
   var hueOffset: Float = 0
   var strokeSeed: UInt32 = 0
   var isFirstFrame: Bool = true
@@ -68,18 +72,10 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
   var currentUniformBuffer: MTLBuffer
 
-  var colorBackA: MTLTexture?
-  var colorBackB: MTLTexture?
-  var colorMidA: MTLTexture?
-  var colorMidB: MTLTexture?
-  var colorFrontA: MTLTexture?
-  var colorFrontB: MTLTexture?
-
-  var heightBackA: MTLTexture?
-  var heightBackB: MTLTexture?
-
-  var heightMFA: MTLTexture?
-  var heightMFB: MTLTexture?
+  var colorA: MTLTexture?
+  var colorB: MTLTexture?
+  var heightWetA: MTLTexture?
+  var heightWetB: MTLTexture?
 
   var displayTex: MTLTexture?
 

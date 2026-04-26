@@ -21,6 +21,9 @@ extension AbstractExpressionismRenderer {
     lastGesturalTime = -10
     lastWashTime = -10
     lastSplatterTime = -10
+    lastKnifeTime = -10
+    lastPollockTime = -10
+    pollockEventCounter = 0
 
     hueOffset = 0
     strokeSeed = 0
