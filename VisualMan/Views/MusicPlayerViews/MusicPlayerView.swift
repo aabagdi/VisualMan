@@ -10,7 +10,7 @@ import SwiftUI
 struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
   @State private var isTapped: Bool = false
-  @State private var isCapturing = false
+  @State private var snapshotter = VisualizerSnapshotter()
   @State private var showScreenshotToast = false
   @State private var toastDismissTask: Task<Void, Never>?
 
@@ -64,7 +64,6 @@ struct MusicPlayerView: View {
         viewModel: viewModel,
         isTapped: $isTapped
       )
-      .opacity(isCapturing ? 0 : 1)
 
       Text("Screenshot Saved")
         .font(.subheadline)
@@ -80,7 +79,7 @@ struct MusicPlayerView: View {
         .allowsHitTesting(false)
     }
     .toolbar(.hidden, for: .tabBar)
-    .toolbar(isCapturing ? .hidden : .visible, for: .navigationBar)
+    .environment(snapshotter)
     .onAppear {
       viewModel.start(audioSources: _audioSources, startingIndex: _startingIndex)
     }
@@ -111,7 +110,6 @@ struct MusicPlayerView: View {
         } label: {
           Image(systemName: "camera")
         }
-        .disabled(isCapturing)
         .accessibilityLabel("Capture Screenshot")
       }
 
@@ -138,17 +136,16 @@ struct MusicPlayerView: View {
   }
 
   private func captureScreenshot() {
-    isCapturing = true
-    let success = VisualizerSnapshot.capture()
-    isCapturing = false
-    guard success else { return }
+    Task { @MainActor in
+      guard await snapshotter.capture() else { return }
 
-    toastDismissTask?.cancel()
-    showScreenshotToast = true
-    toastDismissTask = Task { @MainActor in
-      try? await Task.sleep(for: .seconds(2))
-      guard !Task.isCancelled else { return }
-      showScreenshotToast = false
+      toastDismissTask?.cancel()
+      showScreenshotToast = true
+      toastDismissTask = Task { @MainActor in
+        try? await Task.sleep(for: .seconds(2))
+        guard !Task.isCancelled else { return }
+        showScreenshotToast = false
+      }
     }
   }
 }

@@ -13,11 +13,15 @@ struct VisualizerContainerView: View {
   let audioLevels: [1024 of Float]
   let waveform: [1024 of Float]
   let albumArt: UIImage?
-  
+
+  @Environment(VisualizerSnapshotter.self) private var snapshotter
+
   var body: some View {
-    resolvedView
+    VisualizerSnapshotHost(snapshotter: snapshotter) {
+      resolvedView
+    }
   }
-  
+
   private var resolvedView: AnyView {
     switch currentVisualizer {
     case .bars:
