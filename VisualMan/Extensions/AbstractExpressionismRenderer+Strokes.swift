@@ -308,6 +308,7 @@ extension AbstractExpressionismRenderer {
 
   func generateStrokes(audio: SIMD3<Float>) -> [AbExStroke] {
     var strokes = [AbExStroke]()
+    if !isPlaying { return strokes }
     if resumeSuppressionRemaining > 0 { return strokes }
 
     let bass = audio.x, mid = audio.y, high = audio.z

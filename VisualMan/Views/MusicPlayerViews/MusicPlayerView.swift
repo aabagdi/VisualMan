@@ -104,6 +104,19 @@ struct MusicPlayerView: View {
       }
     }
     .toolbar {
+      if visualizerSelection.current == .abstractExpressionism {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            rendererCache.renderer(AbstractExpressionismRenderer.self)?.reset()
+          } label: {
+            Image(systemName: "trash")
+          }
+          .accessibilityLabel("Clear Canvas")
+        }
+
+        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+      }
+
       ToolbarItem(placement: .topBarTrailing) {
         Button {
           captureScreenshot()
@@ -162,7 +175,8 @@ private struct AudioReactiveVisualizerLayer: View {
       visualizerBars: audioManager.visualizerBars,
       audioLevels: audioManager.audioLevels,
       waveform: audioManager.waveform,
-      albumArt: albumArt
+      albumArt: albumArt,
+      isPlaying: audioManager.isPlaying
     )
   }
 }

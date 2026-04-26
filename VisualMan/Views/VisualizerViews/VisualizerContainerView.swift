@@ -13,6 +13,7 @@ struct VisualizerContainerView: View {
   let audioLevels: [1024 of Float]
   let waveform: [1024 of Float]
   let albumArt: UIImage?
+  let isPlaying: Bool
 
   @Environment(VisualizerSnapshotter.self) private var snapshotter
 
@@ -57,7 +58,7 @@ struct VisualizerContainerView: View {
     case .gameOfLife:
       return AnyView(GameOfLifeVisualizerView(audioLevels: audioLevels))
     case .abstractExpressionism:
-      return AnyView(AbstractExpressionismVisualizerView(audioLevels: audioLevels))
+      return AnyView(AbstractExpressionismVisualizerView(audioLevels: audioLevels, isPlaying: isPlaying))
     }
   }
 }

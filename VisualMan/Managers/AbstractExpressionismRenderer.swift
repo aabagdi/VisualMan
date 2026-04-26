@@ -89,6 +89,10 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var resumeFadeIn: Float = 1.0
   static let resumeFadeDuration: Float = 0.8
 
+  var isPlaying: Bool = true
+
+  var pendingClearFrames: Int = 0
+
   var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
   static func create(device: MTLDevice) async -> AbstractExpressionismRenderer? {

@@ -37,5 +37,7 @@ extension AbstractExpressionismRenderer {
     currentIsA = true
 
     cameraPhase = 0
+
+    pendingClearFrames = Int(Self.maxFramesInFlight) + 1
   }
 }

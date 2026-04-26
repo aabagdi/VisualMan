@@ -118,7 +118,9 @@ extension AbstractExpressionismRenderer {
     let dryRate: Float = 0.0003 + energy * 0.0002
     let bumpStrength: Float = 22.0
 
-    cameraPhase += dt * 0.30
+    if isPlaying {
+      cameraPhase += dt * 0.30
+    }
     let camPanX: Float = sin(cameraPhase * 0.13) * 0.015
                        + sin(cameraPhase * 0.29) * 0.006
     let camPanY: Float = cos(cameraPhase * 0.17) * 0.010
@@ -145,7 +147,13 @@ extension AbstractExpressionismRenderer {
           let tex = currentPingPongTextures(),
           let encoder = beginFrame() else { return nil }
 
-    let strokes = generateStrokes(audio: smoothed)
+    let isClearing = pendingClearFrames > 0
+    if isClearing {
+      pendingClearFrames -= 1
+      isFirstFrame = true
+    }
+
+    let strokes = isClearing ? [] : generateStrokes(audio: smoothed)
     let params = buildFrameParams(smoothed: smoothed, strokeCount: strokes.count)
 
     renderPaint(encoder: encoder,
