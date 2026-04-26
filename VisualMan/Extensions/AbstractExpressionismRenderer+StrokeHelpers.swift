@@ -48,12 +48,19 @@ extension AbstractExpressionismRenderer {
     return pickColor(warm: nextSeed() > drifted)
   }
 
+  private static let permanentDurabilityBase: Float = 0.80
+  private static let permanentDurabilityJitter: Float = 0.15
+  private static let stickyDurabilityBase: Float = 0.35
+  private static let stickyDurabilityJitter: Float = 0.30
+
   func pickDurability(permanentChance: Float, stickyChance: Float) -> Float {
+    assert(permanentChance + stickyChance <= 1,
+           "permanentChance + stickyChance must be <= 1; got \(permanentChance + stickyChance)")
     let r = nextSeed()
     if r < permanentChance {
-      return 0.80 + nextSeed() * 0.15
+      return Self.permanentDurabilityBase + nextSeed() * Self.permanentDurabilityJitter
     } else if r < permanentChance + stickyChance {
-      return 0.35 + nextSeed() * 0.30
+      return Self.stickyDurabilityBase + nextSeed() * Self.stickyDurabilityJitter
     } else {
       return 0
     }
