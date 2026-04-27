@@ -75,13 +75,11 @@ extension AbstractExpressionismRenderer {
 
   private func appendRogueStroke(to strokes: inout [AbExStroke], energy: Float) {
     guard strokes.count < 12, nextSeed() < 0.0035 else { return }
-
     let x = (nextSeed() - 0.5) * 1.05
     let y = (nextSeed() - 0.5) * 1.10
     let angle = nextSeed() * .pi * 2
     let typeRoll = nextSeed()
     let color = pickColorBiased()
-
     if typeRoll < 0.55 {
       let halfLen = 0.10 + nextSeed() * 0.22
       let halfWidth = 0.009 + nextSeed() * 0.010
@@ -107,9 +105,7 @@ extension AbstractExpressionismRenderer {
     guard energy > 0.04, strokes.count < 12,
           (wallClock - lastPollockTime) > 1.0 else { return }
     lastPollockTime = wallClock
-
     pollockEventCounter &+= 1
-
     let canvasIsEmpty = wallClock < 5.0
     let trailColor: SIMD3<Float>
     if canvasIsEmpty {
@@ -124,13 +120,11 @@ extension AbstractExpressionismRenderer {
 
     let count = energy > 0.18 ? 2 : 1
     let eventID = UInt32(bitPattern: Int32(pollockEventCounter))
-
     for trailIdx in 0..<count where strokes.count < 12 {
       let tIdx = UInt32(trailIdx)
       let x = (trailHash(eventID, tIdx &* 0x9e3779b9) - 0.5) * 0.40
       let y = (trailHash(eventID, tIdx &* 0xc6a4a793) - 0.5) * 0.90
       let angle = trailHash(eventID, tIdx &* 0x85ebca77) * .pi * 2
-
       let widthRoll = nextSeed()
       let topWidth: Float
       let length: Float
@@ -147,7 +141,6 @@ extension AbstractExpressionismRenderer {
 
       let opacity: Float = 0.95 + nextSeed() * 0.05
       let bristleSeed = nextSeed() * 100
-
       strokes.append(AbExStroke(
         posAngle: SIMD4(x, y, angle, length),
         sizeOpacity: SIMD4(topWidth, opacity, bristleSeed, 3),
@@ -288,7 +281,6 @@ extension AbstractExpressionismRenderer {
           strokes.count < 12,
           nextSeed() < 0.85 else { return }
     lastKnifeTime = wallClock
-
     let isOutlier = nextSeed() < 0.30
     var pos: SIMD2<Float>
     if isOutlier {
@@ -299,18 +291,15 @@ extension AbstractExpressionismRenderer {
       pos = applyDensityBias(at: suggested, dispersion: 0.30)
     }
     let x = pos.x, y = pos.y
-
     let local = localStrokeAngle(at: pos)
     let angle = (nextSeed() < 0.75)
       ? local + (nextSeed() - 0.5) * 0.5
       : nextSeed() * .pi * 2
-
     let halfLen = 0.22 + nextSeed() * 0.22 + energy * 0.18
     let halfWidth = 0.011 + nextSeed() * 0.010
     let opacity: Float = 0.78 + nextSeed() * 0.20 + energy * 0.05
     let bristleSeed = nextSeed() * 100
     let color = pickColorBiased()
-
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 4),
@@ -326,19 +315,13 @@ extension AbstractExpressionismRenderer {
           strokes.count < 12,
           nextSeed() < 0.75 else { return }
     lastScumbleTime = wallClock
-
     let x = focus.x + (nextSeed() - 0.5) * 0.55
     let y = focus.y + (nextSeed() - 0.5) * 0.55
-
     let angle = nextSeed() * .pi * 2
-
     let halfLen   = 0.32 + nextSeed() * 0.22 + energy * 0.08
     let halfWidth = 0.06 + nextSeed() * 0.06 + energy * 0.02
-
     let opacity: Float = 0.60 + nextSeed() * 0.30
-
     let bristleSeed = nextSeed() * 100
-
     let colorRoll = nextSeed()
     let color: SIMD3<Float>
     if colorRoll < 0.75 {
@@ -354,7 +337,6 @@ extension AbstractExpressionismRenderer {
       let g = 0.45 + nextSeed() * 0.25
       color = Self.srgbToLinear(SIMD3(g, g, g))
     }
-
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 5),
