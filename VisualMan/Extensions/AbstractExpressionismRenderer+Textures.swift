@@ -8,6 +8,7 @@
 import Metal
 
 extension AbstractExpressionismRenderer {
+
   private static func makeCanvasDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
@@ -26,7 +27,7 @@ extension AbstractExpressionismRenderer {
 
   private static func makeHeightWetDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
+      pixelFormat: .rgba16Float, width: width / 2, height: height / 2, mipmapped: false)
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
     return desc
