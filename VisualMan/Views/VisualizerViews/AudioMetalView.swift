@@ -183,10 +183,17 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       }
     }
 
+    private func resolveNativeDrawableSize(for view: MTKView, fallback: CGSize) -> CGSize {
+      let bounds = view.bounds.size
+      let scale = view.contentScaleFactor
+      guard bounds.width > 0, bounds.height > 0, scale > 0 else { return fallback }
+      return CGSize(width: bounds.width * scale, height: bounds.height * scale)
+    }
+
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
       guard !isApplyingScale else { return }
       mtkView = view
-      nativeDrawableSize = size
+      nativeDrawableSize = resolveNativeDrawableSize(for: view, fallback: size)
       applyDrawableScale(to: view)
     }
 
@@ -198,7 +205,7 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
     private func drawFrame(in view: MTKView) {
       if nativeDrawableSize == .zero, let metalLayer = view.layer as? CAMetalLayer {
-        nativeDrawableSize = metalLayer.drawableSize
+        nativeDrawableSize = resolveNativeDrawableSize(for: view, fallback: metalLayer.drawableSize)
         mtkView = view
         applyDrawableScale(to: view)
       }
