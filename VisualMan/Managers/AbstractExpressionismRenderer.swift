@@ -14,6 +14,7 @@ struct AbExParams {
   var canvas: SIMD4<Float>
   var config: SIMD4<Float>
   var camera: SIMD4<Float>
+  var atmosphere: SIMD4<Float>
 }
 
 struct AbExStroke {
@@ -44,6 +45,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var lastSplatterTime: Float = -10
   var lastKnifeTime: Float = -10
   var lastPollockTime: Float = -10
+  var lastScumbleTime: Float = -10
   var lastDebugTrailTime: Float = -10
   var pollockEventCounter: Int = 0
   var hueOffset: Float = 0
@@ -55,7 +57,31 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
   var cameraPhase: Float = 0
 
-  static let canvasColor = SIMD3<Float>(0.95, 0.92, 0.87)
+  var atmosphereIntensity: Float = 0
+  var atmosphereHue: Float = 0
+
+  static let flowGridSize: Int = 32
+  static let flowDecayPerFrame: Float = 0.985
+  static let flowDepositWeight: Float = 0.4
+  static let flowMaxBlend: Float = 0.7
+
+  var flowField: [SIMD2<Float>] = Array(
+    repeating: .zero,
+    count: AbstractExpressionismRenderer.flowGridSize
+         * AbstractExpressionismRenderer.flowGridSize)
+
+  static let densityGridSize: Int = 32
+  static let densityDecayPerFrame: Float = 0.992
+  static let densityDepositWeight: Float = 0.50
+  static let densityMaxBias: Float = 0.65
+
+  var densityGrid: [Float] = Array(
+    repeating: 0,
+    count: AbstractExpressionismRenderer.densityGridSize
+         * AbstractExpressionismRenderer.densityGridSize)
+
+  static let canvasColor = AbstractExpressionismRenderer.srgbToLinear(
+    SIMD3<Float>(0.95, 0.92, 0.87))
   static let maxFramesInFlight: UInt64 = 3
 
   var commandAllocators = [any MTL4CommandAllocator]()

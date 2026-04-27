@@ -50,6 +50,12 @@ extension AbstractExpressionismRenderer {
 
     hueOffset += dt * 0.02
 
+    let atmTarget = min(1.0, ((slowEnvelope.x + slowEnvelope.y + slowEnvelope.z) / 3.0) * 1.6)
+    let atmRate = 1 - exp(-dt / (atmTarget > atmosphereIntensity ? 1.5 : 3.0))
+    atmosphereIntensity += (atmTarget - atmosphereIntensity) * atmRate
+
+    atmosphereHue = (atmosphereHue + dt * 0.0033).truncatingRemainder(dividingBy: 1.0)
+
     if resumeFadeIn < 1 {
       resumeFadeIn = min(1, resumeFadeIn + dt / Self.resumeFadeDuration)
     }
@@ -115,7 +121,8 @@ extension AbstractExpressionismRenderer {
 
   private func buildFrameParams(smoothed: SIMD3<Float>, strokeCount: Int) -> AbExParams {
     let energy = (smoothed.x + smoothed.y + smoothed.z) / 3.0
-    let dryRate: Float = 0.0003 + energy * 0.0002
+    let baseDryRate: Float = isPlaying ? 0.0003 : 0.0008
+    let dryRate: Float = baseDryRate + energy * 0.0002
     let bumpStrength: Float = 22.0
 
     if isPlaying {
@@ -132,8 +139,9 @@ extension AbstractExpressionismRenderer {
     return AbExParams(
       audio: SIMD4(time, smoothed.x, smoothed.y, smoothed.z),
       canvas: SIMD4(cc.x, cc.y, cc.z, dryRate),
-      config: SIMD4(0, isFirstFrame ? 1.0 : 0.0, Float(strokeCount), bumpStrength),
-      camera: SIMD4(camPanX, camPanY, camZoom, 0))
+      config: SIMD4(dt, isFirstFrame ? 1.0 : 0.0, Float(strokeCount), bumpStrength),
+      camera: SIMD4(camPanX, camPanY, camZoom, 0),
+      atmosphere: SIMD4(atmosphereIntensity, songSeed, atmosphereHue, 0))
   }
 
   func encodeFrame(bass: Float,

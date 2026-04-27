@@ -23,12 +23,15 @@ extension AbstractExpressionismRenderer {
     lastSplatterTime = -10
     lastKnifeTime = -10
     lastPollockTime = -10
+    lastScumbleTime = -10
     pollockEventCounter = 0
 
     hueOffset = 0
     strokeSeed = 0
     songSeed = Float.random(in: 0..<1000)
     warmBias = Float.random(in: 0.2..<0.8)
+    atmosphereIntensity = 0
+    atmosphereHue = Float.random(in: 0..<1)
 
     resumeSuppressionRemaining = 0
     resumeFadeIn = 1.0
@@ -37,6 +40,9 @@ extension AbstractExpressionismRenderer {
     currentIsA = true
 
     cameraPhase = 0
+
+    for i in 0..<flowField.count { flowField[i] = .zero }
+    for i in 0..<densityGrid.count { densityGrid[i] = 0 }
 
     pendingClearFrames = Int(Self.maxFramesInFlight) + 1
   }

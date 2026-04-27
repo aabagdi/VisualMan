@@ -14,16 +14,16 @@ extension AbstractExpressionismRenderer {
     let count = bass > 0.25 ? 3 : (bass > 0.10 ? 2 : 1)
     for _ in 0..<count where strokes.count < 12 {
       let isOutlier = nextSeed() < 0.22
-      let x: Float
-      let y: Float
+      var pos: SIMD2<Float>
       if isOutlier {
-        x = (nextSeed() - 0.5) * 1.00
-        y = (nextSeed() - 0.5) * 1.05
+        pos = SIMD2((nextSeed() - 0.5) * 1.00, (nextSeed() - 0.5) * 1.05)
       } else {
-        x = focus.x + (nextSeed() - 0.5) * 0.85 * spread
-        y = focus.y + (nextSeed() - 0.5) * 0.95 * spread
+        let suggested = SIMD2(focus.x + (nextSeed() - 0.5) * 0.85 * spread,
+                              focus.y + (nextSeed() - 0.5) * 0.95 * spread)
+        pos = applyDensityBias(at: suggested, dispersion: 0.30)
       }
-      let local = localStrokeAngle(at: SIMD2(x, y))
+      let x = pos.x, y = pos.y
+      let local = localStrokeAngle(at: pos)
       let angle = (nextSeed() < 0.78)
         ? local + (nextSeed() - 0.5) * 0.5
         : nextSeed() * .pi * 2
@@ -37,6 +37,8 @@ extension AbstractExpressionismRenderer {
         posAngle: SIMD4(x, y, angle, halfLen),
         sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
         color: SIMD4(color.x, color.y, color.z, packColorW(shape: 0, durability: dur))))
+      depositFlow(at: pos, angle: angle, weight: 0.7 + bass * 0.6)
+      depositDensity(at: pos, weight: 1.0 + bass * 0.5)
     }
   }
 
@@ -44,16 +46,16 @@ extension AbstractExpressionismRenderer {
                                     energy: Float, focus: SIMD2<Float>, spread: Float) {
     lastGesturalTime = wallClock
     let isOutlier = nextSeed() < 0.28
-    let x: Float
-    let y: Float
+    var pos: SIMD2<Float>
     if isOutlier {
-      x = (nextSeed() - 0.5) * 1.00
-      y = (nextSeed() - 0.5) * 1.05
+      pos = SIMD2((nextSeed() - 0.5) * 1.00, (nextSeed() - 0.5) * 1.05)
     } else {
-      x = focus.x + (nextSeed() - 0.5) * 0.88 * spread
-      y = focus.y + (nextSeed() - 0.5) * 0.92 * spread
+      let suggested = SIMD2(focus.x + (nextSeed() - 0.5) * 0.88 * spread,
+                            focus.y + (nextSeed() - 0.5) * 0.92 * spread)
+      pos = applyDensityBias(at: suggested, dispersion: 0.30)
     }
-    let local = localStrokeAngle(at: SIMD2(x, y))
+    let x = pos.x, y = pos.y
+    let local = localStrokeAngle(at: pos)
     let angle = (nextSeed() < 0.78)
       ? local + (nextSeed() - 0.5) * 0.5
       : nextSeed() * .pi * 2
@@ -67,10 +69,12 @@ extension AbstractExpressionismRenderer {
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
       color: SIMD4(color.x, color.y, color.z, packColorW(shape: 0, durability: dur))))
+    depositFlow(at: pos, angle: angle, weight: 0.5 + energy * 0.5)
+    depositDensity(at: pos, weight: 0.85 + energy * 0.4)
   }
 
   private func appendRogueStroke(to strokes: inout [AbExStroke], energy: Float) {
-    guard strokes.count < 12, nextSeed() < 0.006 else { return }
+    guard strokes.count < 12, nextSeed() < 0.0035 else { return }
 
     let x = (nextSeed() - 0.5) * 1.05
     let y = (nextSeed() - 0.5) * 1.10
@@ -101,7 +105,7 @@ extension AbstractExpressionismRenderer {
   private func appendPollockTrails(to strokes: inout [AbExStroke],
                                    energy: Float, focus: SIMD2<Float>) {
     guard energy > 0.04, strokes.count < 12,
-          (wallClock - lastPollockTime) > 0.60 else { return }
+          (wallClock - lastPollockTime) > 1.0 else { return }
     lastPollockTime = wallClock
 
     pollockEventCounter &+= 1
@@ -109,12 +113,12 @@ extension AbstractExpressionismRenderer {
     let canvasIsEmpty = wallClock < 5.0
     let trailColor: SIMD3<Float>
     if canvasIsEmpty {
-      trailColor = SIMD3(0.02, 0.02, 0.02)
+      trailColor = Self.srgbToLinear(SIMD3(0.02, 0.02, 0.02))
     } else {
       switch pollockEventCounter % 3 {
-      case 0:  trailColor = SIMD3(0.02, 0.02, 0.02)
-      case 1:  trailColor = SIMD3(0.98, 0.98, 0.96)
-      default: trailColor = SIMD3(0.92, 0.10, 0.08)
+      case 0:  trailColor = Self.srgbToLinear(SIMD3(0.02, 0.02, 0.02))
+      case 1:  trailColor = Self.srgbToLinear(SIMD3(0.98, 0.98, 0.96))
+      default: trailColor = Self.srgbToLinear(SIMD3(0.92, 0.10, 0.08))
       }
     }
 
@@ -152,10 +156,12 @@ extension AbstractExpressionismRenderer {
   }
 
   private func appendWash(to strokes: inout [AbExStroke], mid: Float, focus: SIMD2<Float>) {
-    guard mid > 0.06, (wallClock - lastWashTime) > 0.85, strokes.count < 12 else { return }
+    guard mid > 0.06, (wallClock - lastWashTime) > 1.4, strokes.count < 12 else { return }
     lastWashTime = wallClock
-    let x = focus.x * 0.6 + (nextSeed() - 0.5) * 1.00
-    let y = focus.y * 0.6 + (nextSeed() - 0.5) * 1.05
+    let suggested = SIMD2(focus.x * 0.6 + (nextSeed() - 0.5) * 1.00,
+                          focus.y * 0.6 + (nextSeed() - 0.5) * 1.05)
+    let pos = applyDensityBias(at: suggested, dispersion: 0.40)
+    let x = pos.x, y = pos.y
     let angle = nextSeed() * .pi
     let concentrationRoll = nextSeed()
     let opacity: Float
@@ -178,13 +184,16 @@ extension AbstractExpressionismRenderer {
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
       color: SIMD4(color.x, color.y, color.z, 0)))
+    depositDensity(at: pos, weight: 1.4 * sizeMult)
   }
 
   private func appendAmbientWash(to strokes: inout [AbExStroke],
                                  energy: Float, focus: SIMD2<Float>) {
-    guard energy > 0.01, strokes.count < 12, nextSeed() < 0.004 else { return }
-    let x = focus.x + (nextSeed() - 0.5) * 0.95
-    let y = focus.y + (nextSeed() - 0.5) * 1.00
+    guard energy > 0.01, strokes.count < 12, nextSeed() < 0.0025 else { return }
+    let suggested = SIMD2(focus.x + (nextSeed() - 0.5) * 0.95,
+                          focus.y + (nextSeed() - 0.5) * 1.00)
+    let pos = applyDensityBias(at: suggested, dispersion: 0.40)
+    let x = pos.x, y = pos.y
     let angle = time * 0.1 + nextSeed() * .pi
     let halfLen = 0.20 + nextSeed() * 0.15
     let halfWidth = 0.14 + nextSeed() * 0.10
@@ -195,6 +204,7 @@ extension AbstractExpressionismRenderer {
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
       color: SIMD4(color.x, color.y, color.z, 0)))
+    depositDensity(at: pos, weight: 0.6)
   }
 
   private func splatterPosition(focus: SIMD2<Float>) -> (Float, Float) {
@@ -257,10 +267,10 @@ extension AbstractExpressionismRenderer {
   }
 
   private func appendSplatters(to strokes: inout [AbExStroke], high: Float) {
-    guard high > 0.04, (wallClock - lastSplatterTime) > 0.10, strokes.count < 12 else { return }
+    guard high > 0.025, (wallClock - lastSplatterTime) > 0.13, strokes.count < 12 else { return }
     lastSplatterTime = wallClock
     let focus = splatterFocus()
-    let count = high > 0.35 ? 4 : (high > 0.18 ? 3 : 2)
+    let count = high > 0.25 ? 3 : (high > 0.12 ? 2 : 1)
     let burstShapeRoll = nextSeed()
     let burstTypeRoll  = nextSeed()
     for _ in 0..<count where strokes.count < 12 {
@@ -268,28 +278,29 @@ extension AbstractExpressionismRenderer {
                                          burstShapeRoll: burstShapeRoll,
                                          burstTypeRoll: burstTypeRoll))
     }
+    depositDensity(at: SIMD2(focus.x, focus.y), weight: 0.25 * Float(count))
   }
 
   private func appendKnifeStroke(to strokes: inout [AbExStroke],
                                  energy: Float, focus: SIMD2<Float>) {
     guard energy > 0.05,
-          (wallClock - lastKnifeTime) > 0.25,
+          (wallClock - lastKnifeTime) > 0.45,
           strokes.count < 12,
           nextSeed() < 0.85 else { return }
     lastKnifeTime = wallClock
 
     let isOutlier = nextSeed() < 0.30
-    let x: Float
-    let y: Float
+    var pos: SIMD2<Float>
     if isOutlier {
-      x = (nextSeed() - 0.5) * 1.05
-      y = (nextSeed() - 0.5) * 1.10
+      pos = SIMD2((nextSeed() - 0.5) * 1.05, (nextSeed() - 0.5) * 1.10)
     } else {
-      x = focus.x + (nextSeed() - 0.5) * 0.65
-      y = focus.y + (nextSeed() - 0.5) * 0.70
+      let suggested = SIMD2(focus.x + (nextSeed() - 0.5) * 0.65,
+                            focus.y + (nextSeed() - 0.5) * 0.70)
+      pos = applyDensityBias(at: suggested, dispersion: 0.30)
     }
+    let x = pos.x, y = pos.y
 
-    let local = localStrokeAngle(at: SIMD2(x, y))
+    let local = localStrokeAngle(at: pos)
     let angle = (nextSeed() < 0.75)
       ? local + (nextSeed() - 0.5) * 0.5
       : nextSeed() * .pi * 2
@@ -304,9 +315,57 @@ extension AbstractExpressionismRenderer {
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 4),
       color: SIMD4(color.x, color.y, color.z, 0)))
+    depositFlow(at: pos, angle: angle, weight: 1.0 + energy * 0.4)
+    depositDensity(at: pos, weight: 1.1 + energy * 0.3)
+  }
+
+  private func appendScumble(to strokes: inout [AbExStroke],
+                             mid: Float, energy: Float, focus: SIMD2<Float>) {
+    guard mid > 0.10,
+          (wallClock - lastScumbleTime) > 1.2,
+          strokes.count < 12,
+          nextSeed() < 0.75 else { return }
+    lastScumbleTime = wallClock
+
+    let x = focus.x + (nextSeed() - 0.5) * 0.55
+    let y = focus.y + (nextSeed() - 0.5) * 0.55
+
+    let angle = nextSeed() * .pi * 2
+
+    let halfLen   = 0.32 + nextSeed() * 0.22 + energy * 0.08
+    let halfWidth = 0.06 + nextSeed() * 0.06 + energy * 0.02
+
+    let opacity: Float = 0.60 + nextSeed() * 0.30
+
+    let bristleSeed = nextSeed() * 100
+
+    let colorRoll = nextSeed()
+    let color: SIMD3<Float>
+    if colorRoll < 0.75 {
+      color = pickColorBiased()
+    } else if colorRoll < 0.90 {
+      let warmth: Float = nextSeed() < 0.5 ? 1.0 : -1.0
+      color = Self.srgbToLinear(SIMD3(
+        0.92 + warmth * 0.04,
+        0.92 + nextSeed() * 0.04,
+        0.92 - warmth * 0.04
+      ))
+    } else {
+      let g = 0.45 + nextSeed() * 0.25
+      color = Self.srgbToLinear(SIMD3(g, g, g))
+    }
+
+    strokes.append(AbExStroke(
+      posAngle: SIMD4(x, y, angle, halfLen),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 5),
+      color: SIMD4(color.x, color.y, color.z, 0)))
+    depositDensity(at: SIMD2(x, y), weight: 1.0)
   }
 
   func generateStrokes(audio: SIMD3<Float>) -> [AbExStroke] {
+    decayFlow()
+    decayDensity()
+
     var strokes = [AbExStroke]()
     if !isPlaying { return strokes }
     if resumeSuppressionRemaining > 0 { return strokes }
@@ -318,7 +377,7 @@ extension AbstractExpressionismRenderer {
 
     let bassTransient = bass > smoothedBass * 1.20 && bass > 0.05
     let transientFired = bassTransient
-                      && (wallClock - lastGesturalTime) > 0.30
+                      && (wallClock - lastGesturalTime) > 0.50
                       && strokes.count < 12
 
     if transientFired {
@@ -326,24 +385,27 @@ extension AbstractExpressionismRenderer {
     }
     if !transientFired
         && energy > 0.05
-        && (wallClock - lastGesturalTime) > 0.30
+        && (wallClock - lastGesturalTime) > 0.50
         && strokes.count < 12
-        && nextSeed() < 0.70 {
+        && nextSeed() < 0.55 {
       appendGesturalStroke(to: &strokes, energy: energy, focus: focus, spread: spread)
     }
     if energy > 0.25
-        && (wallClock - lastGesturalTime) > 0.15
+        && (wallClock - lastGesturalTime) > 0.25
         && strokes.count < 12
-        && nextSeed() < 0.30 {
+        && nextSeed() < 0.18 {
       appendGesturalStroke(to: &strokes, energy: energy, focus: focus, spread: spread)
     }
     appendWash(to: &strokes, mid: mid, focus: focus)
-    appendSplatters(to: &strokes, high: high)
     appendAmbientWash(to: &strokes, energy: energy, focus: focus)
     appendKnifeStroke(to: &strokes, energy: energy, focus: focus)
     appendRogueStroke(to: &strokes, energy: energy)
 
     appendPollockTrails(to: &strokes, energy: energy, focus: focus)
+
+    appendScumble(to: &strokes, mid: mid, energy: energy, focus: focus)
+
+    appendSplatters(to: &strokes, high: high)
 
     return strokes
   }

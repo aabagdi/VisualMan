@@ -10,6 +10,14 @@ import Metal
 extension AbstractExpressionismRenderer {
   private static func makeCanvasDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+    return desc
+  }
+
+  private static func makeDisplayDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
@@ -72,7 +80,7 @@ extension AbstractExpressionismRenderer {
     if let old = displayTex {
       pendingTextureReleases.append((frame: frameNumber, texture: old))
     }
-    let dispDesc = Self.makeCanvasDescriptor(width: width, height: height)
+    let dispDesc = Self.makeDisplayDescriptor(width: width, height: height)
     guard let disp = device.makeTexture(descriptor: dispDesc) else {
       displayTex = nil
       lastDisplayWidth = 0; lastDisplayHeight = 0
@@ -121,12 +129,13 @@ extension AbstractExpressionismRenderer {
   private func makeWarmUpTextures() -> WarmUpTextures? {
     let colDesc = Self.makeCanvasDescriptor(width: 64, height: 64)
     let hwDesc = Self.makeHeightWetDescriptor(width: 64, height: 64)
+    let dispDesc = Self.makeDisplayDescriptor(width: 64, height: 64)
 
     guard let cA = device.makeTexture(descriptor: colDesc),
           let cB = device.makeTexture(descriptor: colDesc),
           let hwA = device.makeTexture(descriptor: hwDesc),
           let hwB = device.makeTexture(descriptor: hwDesc),
-          let disp = device.makeTexture(descriptor: colDesc) else { return nil }
+          let disp = device.makeTexture(descriptor: dispDesc) else { return nil }
 
     return WarmUpTextures(color: [cA, cB],
                           heightWet: [hwA, hwB],
@@ -156,7 +165,8 @@ extension AbstractExpressionismRenderer {
       audio: .zero,
       canvas: SIMD4(cc.x, cc.y, cc.z, 0),
       config: SIMD4(0, 1, 0, 10),
-      camera: SIMD4(0, 0, 1, 0))
+      camera: SIMD4(0, 0, 1, 0),
+      atmosphere: .zero)
 
     renderPaint(encoder: encoder,
                 colorIn: tex.color[0], colorOut: tex.color[1],
