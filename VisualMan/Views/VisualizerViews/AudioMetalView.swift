@@ -216,8 +216,9 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         applyDrawableScale(to: view)
       }
 
-      let drawableSize = view.drawableSize
-      guard drawableSize.width > 0, drawableSize.height > 0 else { return }
+      let scaledWidth = Int((nativeDrawableSize.width * drawableScaleFactor).rounded())
+      let scaledHeight = Int((nativeDrawableSize.height * drawableScaleFactor).rounded())
+      guard scaledWidth > 0, scaledHeight > 0 else { return }
 
       let now = CACurrentMediaTime()
       if lastFrameTime > 0, now - lastFrameTime > 0.1 {
@@ -232,8 +233,8 @@ struct AudioMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         bass: audioLevels.bassLevel,
         mid: audioLevels.midLevel,
         high: audioLevels.highLevel,
-        drawableWidth: Int(drawableSize.width),
-        drawableHeight: Int(drawableSize.height)
+        drawableWidth: scaledWidth,
+        drawableHeight: scaledHeight
       )
 
       guard let renderPassDesc = view.currentMTL4RenderPassDescriptor,

@@ -8,42 +8,8 @@
 import Metal
 
 extension AbstractExpressionismRenderer {
-  private func appendBassTransientStrokes(to strokes: inout [AbExStroke],
-                                          bass: Float, focus: SIMD2<Float>, spread: Float) {
-    lastGesturalTime = wallClock
-    let count = bass > 0.25 ? 3 : (bass > 0.10 ? 2 : 1)
-    for _ in 0..<count where strokes.count < 12 {
-      let isOutlier = nextSeed() < 0.22
-      var pos: SIMD2<Float>
-      if isOutlier {
-        pos = SIMD2((nextSeed() - 0.5) * 1.00, (nextSeed() - 0.5) * 1.05)
-      } else {
-        let suggested = SIMD2(focus.x + (nextSeed() - 0.5) * 0.85 * spread,
-                              focus.y + (nextSeed() - 0.5) * 0.95 * spread)
-        pos = applyDensityBias(at: suggested, dispersion: 0.30)
-      }
-      let x = pos.x, y = pos.y
-      let local = localStrokeAngle(at: pos)
-      let angle = (nextSeed() < 0.78)
-        ? local + (nextSeed() - 0.5) * 0.5
-        : nextSeed() * .pi * 2
-      let halfLen = 0.18 + bass * 0.32 + nextSeed() * 0.12
-      let halfWidth = 0.014 + bass * 0.022 + nextSeed() * 0.010
-      let opacity = 0.85 + bass * 0.15
-      let bristleSeed = nextSeed() * 100
-      let color = pickColorBiased()
-      let dur = pickDurability(permanentChance: 0.08, stickyChance: 0.22)
-      strokes.append(AbExStroke(
-        posAngle: SIMD4(x, y, angle, halfLen),
-        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
-        color: SIMD4(color.x, color.y, color.z, packColorW(shape: 0, durability: dur))))
-      depositFlow(at: pos, angle: angle, weight: 0.7 + bass * 0.6)
-      depositDensity(at: pos, weight: 1.0 + bass * 0.5)
-    }
-  }
-
-  private func appendGesturalStroke(to strokes: inout [AbExStroke],
-                                    energy: Float, focus: SIMD2<Float>, spread: Float) {
+  func appendGesturalStroke(to strokes: inout [AbExStroke],
+                            energy: Float, focus: SIMD2<Float>, spread: Float) {
     lastGesturalTime = wallClock
     let isOutlier = nextSeed() < 0.28
     var pos: SIMD2<Float>
@@ -65,15 +31,29 @@ extension AbstractExpressionismRenderer {
     let bristleSeed = nextSeed() * 100
     let color = pickColorBiased()
     let dur = pickDurability(permanentChance: 0.03, stickyChance: 0.15)
+    let curveRoll = nextSeed()
+    let curvature: Float
+    if curveRoll < 0.30 {
+      curvature = 0
+    } else if curveRoll < 0.65 {
+      let amp = 0.25 + nextSeed() * 0.40
+      let dir: Float = nextSeed() < 0.5 ? 1 : -1
+      curvature = amp * dir
+    } else {
+      let amp = 0.25 + nextSeed() * 0.40
+      let dir: Float = nextSeed() < 0.5 ? 1 : -1
+      curvature = (1.0 + amp) * dir
+    }
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
-      color: SIMD4(color.x, color.y, color.z, packColorW(shape: 0, durability: dur))))
+      color: SIMD4(color.x, color.y, color.z, packColorW(shape: 0, durability: dur)),
+      animation: SIMD4(0, 1, 0, curvature)))
     depositFlow(at: pos, angle: angle, weight: 0.5 + energy * 0.5)
     depositDensity(at: pos, weight: 0.85 + energy * 0.4)
   }
 
-  private func appendRogueStroke(to strokes: inout [AbExStroke], energy: Float) {
+  func appendRogueStroke(to strokes: inout [AbExStroke], energy: Float) {
     guard strokes.count < 12, nextSeed() < 0.0035 else { return }
     let x = (nextSeed() - 0.5) * 1.05
     let y = (nextSeed() - 0.5) * 1.10
@@ -88,7 +68,8 @@ extension AbstractExpressionismRenderer {
       strokes.append(AbExStroke(
         posAngle: SIMD4(x, y, angle, halfLen),
         sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
-        color: SIMD4(color.x, color.y, color.z, 0)))
+        color: SIMD4(color.x, color.y, color.z, 0),
+        animation: SIMD4(0, 1, 0, 0)))
     } else {
       let radius = 0.006 + nextSeed() * 0.014
       let opacity: Float = 0.85 + nextSeed() * 0.15
@@ -96,12 +77,13 @@ extension AbstractExpressionismRenderer {
       strokes.append(AbExStroke(
         posAngle: SIMD4(x, y, 0, radius),
         sizeOpacity: SIMD4(radius, opacity, bristleSeed, 2),
-        color: SIMD4(color.x, color.y, color.z, 0)))
+        color: SIMD4(color.x, color.y, color.z, 0),
+        animation: SIMD4(0, 1, 0, 0)))
     }
   }
 
-  private func appendPollockTrails(to strokes: inout [AbExStroke],
-                                   energy: Float, focus: SIMD2<Float>) {
+  func appendPollockTrails(to strokes: inout [AbExStroke],
+                           energy: Float, focus: SIMD2<Float>) {
     guard energy > 0.04, strokes.count < 12,
           (wallClock - lastPollockTime) > 1.0 else { return }
     lastPollockTime = wallClock
@@ -144,12 +126,13 @@ extension AbstractExpressionismRenderer {
       strokes.append(AbExStroke(
         posAngle: SIMD4(x, y, angle, length),
         sizeOpacity: SIMD4(topWidth, opacity, bristleSeed, 3),
-        color: SIMD4(trailColor.x, trailColor.y, trailColor.z, 0)))
+        color: SIMD4(trailColor.x, trailColor.y, trailColor.z, 0),
+        animation: SIMD4(0, 1, 0, 0)))
     }
   }
 
-  private func appendWash(to strokes: inout [AbExStroke], mid: Float, focus: SIMD2<Float>) {
-    guard mid > 0.06, (wallClock - lastWashTime) > 1.4, strokes.count < 12 else { return }
+  func appendWash(to strokes: inout [AbExStroke], mid: Float, focus: SIMD2<Float>) {
+    guard mid > 0.06, (wallClock - lastWashTime) > 2.0, strokes.count < 12 else { return }
     lastWashTime = wallClock
     let suggested = SIMD2(focus.x * 0.6 + (nextSeed() - 0.5) * 1.00,
                           focus.y * 0.6 + (nextSeed() - 0.5) * 1.05)
@@ -176,12 +159,13 @@ extension AbstractExpressionismRenderer {
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
-      color: SIMD4(color.x, color.y, color.z, 0)))
+      color: SIMD4(color.x, color.y, color.z, 0),
+      animation: SIMD4(0, 1, 0, 0)))
     depositDensity(at: pos, weight: 1.4 * sizeMult)
   }
 
-  private func appendAmbientWash(to strokes: inout [AbExStroke],
-                                 energy: Float, focus: SIMD2<Float>) {
+  func appendAmbientWash(to strokes: inout [AbExStroke],
+                         energy: Float, focus: SIMD2<Float>) {
     guard energy > 0.01, strokes.count < 12, nextSeed() < 0.0025 else { return }
     let suggested = SIMD2(focus.x + (nextSeed() - 0.5) * 0.95,
                           focus.y + (nextSeed() - 0.5) * 1.00)
@@ -196,7 +180,8 @@ extension AbstractExpressionismRenderer {
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
-      color: SIMD4(color.x, color.y, color.z, 0)))
+      color: SIMD4(color.x, color.y, color.z, 0),
+      animation: SIMD4(0, 1, 0, 0)))
     depositDensity(at: pos, weight: 0.6)
   }
 
@@ -213,18 +198,15 @@ extension AbstractExpressionismRenderer {
     let sizeRoll = nextSeed()
     let radius: Float
     let opacityBase: Float
-    if sizeRoll < 0.25 {
-      radius = 0.003 + nextSeed() * 0.009
+    if sizeRoll < 0.30 {
+      radius = 0.004 + nextSeed() * 0.008
       opacityBase = 0.95
-    } else if sizeRoll < 0.63 {
-      radius = 0.013 + nextSeed() * 0.020
+    } else if sizeRoll < 0.65 {
+      radius = 0.012 + nextSeed() * 0.013
       opacityBase = 0.93
-    } else if sizeRoll < 0.96 {
-      radius = 0.034 + nextSeed() * 0.034
-      opacityBase = 0.92
     } else {
-      radius = 0.072 + nextSeed() * 0.055
-      opacityBase = 0.90
+      radius = 0.025 + nextSeed() * 0.015
+      opacityBase = 0.92
     }
     return (radius, opacityBase + high * 0.06)
   }
@@ -256,28 +238,29 @@ extension AbstractExpressionismRenderer {
     return AbExStroke(
       posAngle: SIMD4(x, y, angle, radius),
       sizeOpacity: SIMD4(burstTypeRoll, opacity, bristleSeed, 2),
-      color: SIMD4(color.x, color.y, color.z, packColorW(shape: shapeVariant, durability: dur)))
+      color: SIMD4(color.x, color.y, color.z, packColorW(shape: shapeVariant, durability: dur)),
+      animation: SIMD4(0, 1, 0, 0))
   }
 
-  private func appendSplatters(to strokes: inout [AbExStroke], high: Float) {
-    guard high > 0.025, (wallClock - lastSplatterTime) > 0.13, strokes.count < 12 else { return }
+  func appendSplatters(to strokes: inout [AbExStroke], high: Float) {
+    guard high > 0.05, (wallClock - lastSplatterTime) > 0.35, strokes.count < 12 else { return }
     lastSplatterTime = wallClock
-    let focus = splatterFocus()
-    let count = high > 0.25 ? 3 : (high > 0.12 ? 2 : 1)
-    let burstShapeRoll = nextSeed()
-    let burstTypeRoll  = nextSeed()
+    let count = high > 0.30 ? 2 : 1
     for _ in 0..<count where strokes.count < 12 {
+      let focus = splatterFocus()
+      let burstShapeRoll = nextSeed()
+      let burstTypeRoll  = nextSeed()
       strokes.append(makeSplatterStroke(high: high, focus: focus,
                                          burstShapeRoll: burstShapeRoll,
                                          burstTypeRoll: burstTypeRoll))
+      depositDensity(at: SIMD2(focus.x, focus.y), weight: 0.25)
     }
-    depositDensity(at: SIMD2(focus.x, focus.y), weight: 0.25 * Float(count))
   }
 
-  private func appendKnifeStroke(to strokes: inout [AbExStroke],
-                                 energy: Float, focus: SIMD2<Float>) {
+  func appendKnifeStroke(to strokes: inout [AbExStroke],
+                         energy: Float, focus: SIMD2<Float>) {
     guard energy > 0.05,
-          (wallClock - lastKnifeTime) > 0.45,
+          (wallClock - lastKnifeTime) > 0.65,
           strokes.count < 12,
           nextSeed() < 0.85 else { return }
     lastKnifeTime = wallClock
@@ -299,17 +282,31 @@ extension AbstractExpressionismRenderer {
     let halfWidth = 0.011 + nextSeed() * 0.010
     let opacity: Float = 0.78 + nextSeed() * 0.20 + energy * 0.05
     let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
+    let color = pickKnifeColor()
+    let curveRoll = nextSeed()
+    let curvature: Float
+    if curveRoll < 0.40 {
+      curvature = 0
+    } else if curveRoll < 0.75 {
+      let amp = 0.20 + nextSeed() * 0.35
+      let dir: Float = nextSeed() < 0.5 ? 1 : -1
+      curvature = amp * dir
+    } else {
+      let amp = 0.20 + nextSeed() * 0.35
+      let dir: Float = nextSeed() < 0.5 ? 1 : -1
+      curvature = (1.0 + amp) * dir
+    }
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 4),
-      color: SIMD4(color.x, color.y, color.z, 0)))
+      color: SIMD4(color.x, color.y, color.z, 0),
+      animation: SIMD4(0, 1, 0, curvature)))
     depositFlow(at: pos, angle: angle, weight: 1.0 + energy * 0.4)
     depositDensity(at: pos, weight: 1.1 + energy * 0.3)
   }
 
-  private func appendScumble(to strokes: inout [AbExStroke],
-                             mid: Float, energy: Float, focus: SIMD2<Float>) {
+  func appendScumble(to strokes: inout [AbExStroke],
+                     mid: Float, energy: Float, focus: SIMD2<Float>) {
     guard mid > 0.10,
           (wallClock - lastScumbleTime) > 1.2,
           strokes.count < 12,
@@ -340,55 +337,9 @@ extension AbstractExpressionismRenderer {
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 5),
-      color: SIMD4(color.x, color.y, color.z, 0)))
+      color: SIMD4(color.x, color.y, color.z, 0),
+      animation: SIMD4(0, 1, 0, 0)))
     depositDensity(at: SIMD2(x, y), weight: 1.0)
   }
 
-  func generateStrokes(audio: SIMD3<Float>) -> [AbExStroke] {
-    decayFlow()
-    decayDensity()
-
-    var strokes = [AbExStroke]()
-    if !isPlaying { return strokes }
-    if resumeSuppressionRemaining > 0 { return strokes }
-
-    let bass = audio.x, mid = audio.y, high = audio.z
-    let energy = (bass + mid + high) / 3.0
-    let focus = compositionFocus()
-    let spread: Float = 0.85 + energy * 0.5
-
-    let bassTransient = bass > smoothedBass * 1.20 && bass > 0.05
-    let transientFired = bassTransient
-                      && (wallClock - lastGesturalTime) > 0.50
-                      && strokes.count < 12
-
-    if transientFired {
-      appendBassTransientStrokes(to: &strokes, bass: bass, focus: focus, spread: spread)
-    }
-    if !transientFired
-        && energy > 0.05
-        && (wallClock - lastGesturalTime) > 0.50
-        && strokes.count < 12
-        && nextSeed() < 0.55 {
-      appendGesturalStroke(to: &strokes, energy: energy, focus: focus, spread: spread)
-    }
-    if energy > 0.25
-        && (wallClock - lastGesturalTime) > 0.25
-        && strokes.count < 12
-        && nextSeed() < 0.18 {
-      appendGesturalStroke(to: &strokes, energy: energy, focus: focus, spread: spread)
-    }
-    appendWash(to: &strokes, mid: mid, focus: focus)
-    appendAmbientWash(to: &strokes, energy: energy, focus: focus)
-    appendKnifeStroke(to: &strokes, energy: energy, focus: focus)
-    appendRogueStroke(to: &strokes, energy: energy)
-
-    appendPollockTrails(to: &strokes, energy: energy, focus: focus)
-
-    appendScumble(to: &strokes, mid: mid, energy: energy, focus: focus)
-
-    appendSplatters(to: &strokes, high: high)
-
-    return strokes
-  }
 }

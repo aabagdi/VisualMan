@@ -81,6 +81,35 @@ extension AbstractExpressionismRenderer {
     return Self.srgbToLinear(rgbSrgb)
   }
 
+  func pickKnifeColor() -> SIMD3<Float> {
+    var baseHue = (time * 0.0042 + songSeed * 0.7)
+      .truncatingRemainder(dividingBy: 1.0)
+    if baseHue < 0 { baseHue += 1 }
+
+    let energy = (slowEnvelope.x + slowEnvelope.y + slowEnvelope.z) / 3.0
+    let dissonance = min(max(energy * 1.5, 0.05), 0.95)
+
+    let r = nextSeed()
+    let offset: Float
+    if r < 0.65 {
+      offset = 0.5 + (nextSeed() - 0.5) * 0.16
+    } else if r < 0.90 {
+      let direction: Float = (nextSeed() < 0.5) ? 1.0 : -1.0
+      offset = direction * (0.33 + (nextSeed() - 0.5) * 0.08)
+    } else {
+      offset = (nextSeed() - 0.5) * 0.18 * (0.5 + dissonance * 0.5)
+    }
+
+    var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
+    if hue < 0 { hue += 1 }
+
+    let sat = min(0.98, 0.72 + dissonance * 0.18 + nextSeed() * 0.10)
+    let val = 0.62 + nextSeed() * 0.32
+
+    let rgbSrgb = Self.hsvToRgb(SIMD3(hue, sat, val))
+    return Self.srgbToLinear(rgbSrgb)
+  }
+
   nonisolated static func hsvToRgb(_ hsv: SIMD3<Float>) -> SIMD3<Float> {
     let h = hsv.x * 6.0
     let s = hsv.y

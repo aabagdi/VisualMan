@@ -8,7 +8,6 @@
 import Metal
 
 extension AbstractExpressionismRenderer {
-
   private static func makeCanvasDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
@@ -33,12 +32,21 @@ extension AbstractExpressionismRenderer {
     return desc
   }
 
+  private static func makeVelocityDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .rgba16Float, width: width / 2, height: height / 2, mipmapped: false)
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+    return desc
+  }
+
   func drainPendingTextureReleases() {
     drainPendingReleases(&pendingTextureReleases)
   }
 
   private func queueCurrentCanvasForRelease() {
-    for old in [colorA, colorB, heightWetA, heightWetB] {
+    for old in [colorA, colorB, heightWetA, heightWetB, colorMid, heightWetMid,
+                velocityA, velocityB] {
       if let t = old {
         pendingTextureReleases.append((frame: frameNumber, texture: t))
       }
@@ -48,6 +56,8 @@ extension AbstractExpressionismRenderer {
   private func clearCanvasTextures() {
     colorA = nil; colorB = nil
     heightWetA = nil; heightWetB = nil
+    colorMid = nil; heightWetMid = nil
+    velocityA = nil; velocityB = nil
     canvasSize = 0
   }
 
@@ -56,21 +66,27 @@ extension AbstractExpressionismRenderer {
 
     let colDesc = Self.makeCanvasDescriptor(width: size, height: size)
     let hwDesc = Self.makeHeightWetDescriptor(width: size, height: size)
+    let velDesc = Self.makeVelocityDescriptor(width: size, height: size)
 
     guard let cA = device.makeTexture(descriptor: colDesc),
           let cB = device.makeTexture(descriptor: colDesc),
+          let cMid = device.makeTexture(descriptor: colDesc),
           let hwA = device.makeTexture(descriptor: hwDesc),
-          let hwB = device.makeTexture(descriptor: hwDesc) else {
+          let hwB = device.makeTexture(descriptor: hwDesc),
+          let hwMid = device.makeTexture(descriptor: hwDesc),
+          let vA = device.makeTexture(descriptor: velDesc),
+          let vB = device.makeTexture(descriptor: velDesc) else {
       clearCanvasTextures()
       return false
     }
 
-    for t in [cA, cB, hwA, hwB] {
+    for t in [cA, cB, cMid, hwA, hwB, hwMid, vA, vB] {
       residencySet.addAllocation(t)
     }
 
-    colorA = cA; colorB = cB
-    heightWetA = hwA; heightWetB = hwB
+    colorA = cA; colorB = cB; colorMid = cMid
+    heightWetA = hwA; heightWetB = hwB; heightWetMid = hwMid
+    velocityA = vA; velocityB = vB
     canvasSize = size
     isFirstFrame = true
     currentIsA = true
@@ -98,8 +114,9 @@ extension AbstractExpressionismRenderer {
     let requestedCanvasSize = max(displayWidth, displayHeight)
     let targetCanvasSize = max(canvasSize, requestedCanvasSize)
 
-    let canvasExists = colorA != nil && colorB != nil
-        && heightWetA != nil && heightWetB != nil
+    let canvasExists = colorA != nil && colorB != nil && colorMid != nil
+        && heightWetA != nil && heightWetB != nil && heightWetMid != nil
+        && velocityA != nil && velocityB != nil
     let canvasNeedsRebuild = !canvasExists || targetCanvasSize > canvasSize
 
     if canvasNeedsRebuild {
@@ -124,28 +141,32 @@ extension AbstractExpressionismRenderer {
   private struct WarmUpTextures {
     let color: [MTLTexture]
     let heightWet: [MTLTexture]
+    let velocity: MTLTexture
     let display: MTLTexture
   }
 
   private func makeWarmUpTextures() -> WarmUpTextures? {
     let colDesc = Self.makeCanvasDescriptor(width: 64, height: 64)
     let hwDesc = Self.makeHeightWetDescriptor(width: 64, height: 64)
+    let velDesc = Self.makeVelocityDescriptor(width: 64, height: 64)
     let dispDesc = Self.makeDisplayDescriptor(width: 64, height: 64)
 
     guard let cA = device.makeTexture(descriptor: colDesc),
           let cB = device.makeTexture(descriptor: colDesc),
           let hwA = device.makeTexture(descriptor: hwDesc),
           let hwB = device.makeTexture(descriptor: hwDesc),
+          let vel = device.makeTexture(descriptor: velDesc),
           let disp = device.makeTexture(descriptor: dispDesc) else { return nil }
 
     return WarmUpTextures(color: [cA, cB],
                           heightWet: [hwA, hwB],
+                          velocity: vel,
                           display: disp)
   }
 
   func warmUpGPU() {
     guard let tex = makeWarmUpTextures() else { return }
-    let dummies = tex.color + tex.heightWet + [tex.display]
+    let dummies = tex.color + tex.heightWet + [tex.velocity, tex.display]
     for t in dummies { residencySet.addAllocation(t) }
     residencySet.commit()
 
@@ -172,6 +193,7 @@ extension AbstractExpressionismRenderer {
     renderPaint(encoder: encoder,
                 colorIn: tex.color[0], colorOut: tex.color[1],
                 hwIn: tex.heightWet[0], hwOut: tex.heightWet[1],
+                velocityIn: tex.velocity,
                 params: params, strokes: [])
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     renderCompose(encoder: encoder,

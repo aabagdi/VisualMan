@@ -12,6 +12,7 @@ extension AbstractExpressionismRenderer {
   struct Pipelines {
     let paint: MTLComputePipelineState
     let compose: MTLComputePipelineState
+    let velocity: MTLComputePipelineState
   }
 
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
@@ -22,9 +23,10 @@ extension AbstractExpressionismRenderer {
     func makePipeline(_ name: String) -> MTLComputePipelineState? {
       Self.makePipeline(name, library: library, compiler: compiler)
     }
-    guard let paint   = makePipeline("abexPaint"),
-          let compose = makePipeline("abexCompose") else { return nil }
-    return Pipelines(paint: paint, compose: compose)
+    guard let paint    = makePipeline("abexPaint"),
+          let compose  = makePipeline("abexCompose"),
+          let velocity = makePipeline("abexVelocityDeposit") else { return nil }
+    return Pipelines(paint: paint, compose: compose, velocity: velocity)
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {

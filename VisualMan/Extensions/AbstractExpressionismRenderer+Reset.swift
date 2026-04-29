@@ -44,6 +44,8 @@ extension AbstractExpressionismRenderer {
     for i in 0..<flowField.count { flowField[i] = .zero }
     for i in 0..<densityGrid.count { densityGrid[i] = 0 }
 
+    animatingStrokes.removeAll()
+
     pendingClearFrames = Int(Self.maxFramesInFlight) + 1
   }
 }

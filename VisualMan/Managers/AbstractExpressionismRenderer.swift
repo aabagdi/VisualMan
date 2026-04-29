@@ -21,6 +21,7 @@ struct AbExStroke {
   var posAngle: SIMD4<Float>
   var sizeOpacity: SIMD4<Float>
   var color: SIMD4<Float>
+  var animation: SIMD4<Float>
 }
 
 @MainActor
@@ -30,6 +31,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
   var paintPipeline: MTLComputePipelineState
   var composePipeline: MTLComputePipelineState
+  var velocityPipeline: MTLComputePipelineState
 
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
@@ -102,6 +104,10 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var colorB: MTLTexture?
   var heightWetA: MTLTexture?
   var heightWetB: MTLTexture?
+  var colorMid: MTLTexture?
+  var heightWetMid: MTLTexture?
+  var velocityA: MTLTexture?
+  var velocityB: MTLTexture?
 
   var displayTex: MTLTexture?
 
@@ -118,6 +124,16 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var isPlaying: Bool = true
 
   var pendingClearFrames: Int = 0
+
+  struct AnimatingStroke {
+    var stroke: AbExStroke
+    var currentFrame: Int
+    var totalFrames: Int
+  }
+  var animatingStrokes: [AnimatingStroke] = []
+  static let knifeAnimationFrames: Int = 20
+  static let gesturalAnimationFrames: Int = 16
+  static let maxAnimatingStrokes: Int = 8
 
   var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
@@ -163,6 +179,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     self.argumentTables = argumentTables
     self.paintPipeline   = pipelines.paint
     self.composePipeline = pipelines.compose
+    self.velocityPipeline = pipelines.velocity
     self.residencySet = residencySet
 
     configureResidencySet()
