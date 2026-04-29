@@ -68,7 +68,8 @@ extension AbstractExpressionismRenderer {
                    colorIn: MTLTexture, colorOut: MTLTexture,
                    hwIn: MTLTexture, hwOut: MTLTexture,
                    velocityIn: MTLTexture,
-                   params: AbExParams, strokes: [AbExStroke]) {
+                   params: AbExParams, strokes: [AbExStroke],
+                   tileMap: TileMap) {
     encoder.setComputePipelineState(paintPipeline)
     argumentTable.setTexture(colorIn.gpuResourceID, index: 0)
     argumentTable.setTexture(colorOut.gpuResourceID, index: 1)
@@ -84,8 +85,10 @@ extension AbstractExpressionismRenderer {
     } else {
       argumentTable.setAddress(writeUniformArray(strokes), index: 1)
     }
+    argumentTable.setAddress(writeUniformArray(tileMap.counts), index: 2)
+    argumentTable.setAddress(writeUniformArray(tileMap.indices), index: 3)
 
-    let tg = MTLSize(width: 16, height: 16, depth: 1)
+    let tg = MTLSize(width: 32, height: 16, depth: 1)
     let grid = MTLSize(width: colorOut.width, height: colorOut.height, depth: 1)
     encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
   }
@@ -93,7 +96,8 @@ extension AbstractExpressionismRenderer {
   func renderVelocityDeposit(encoder: any MTL4ComputeCommandEncoder,
                              velocityIn: MTLTexture, velocityOut: MTLTexture,
                              heightWetIn: MTLTexture,
-                             params: AbExParams, strokes: [AbExStroke]) {
+                             params: AbExParams, strokes: [AbExStroke],
+                             tileMap: TileMap) {
     encoder.setComputePipelineState(velocityPipeline)
     argumentTable.setTexture(velocityIn.gpuResourceID, index: 0)
     argumentTable.setTexture(velocityOut.gpuResourceID, index: 1)
@@ -107,8 +111,10 @@ extension AbstractExpressionismRenderer {
     } else {
       argumentTable.setAddress(writeUniformArray(strokes), index: 1)
     }
+    argumentTable.setAddress(writeUniformArray(tileMap.counts), index: 2)
+    argumentTable.setAddress(writeUniformArray(tileMap.indices), index: 3)
 
-    let tg = MTLSize(width: 16, height: 16, depth: 1)
+    let tg = MTLSize(width: 32, height: 16, depth: 1)
     let grid = MTLSize(width: velocityOut.width, height: velocityOut.height, depth: 1)
     encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
   }
@@ -122,7 +128,7 @@ extension AbstractExpressionismRenderer {
     argumentTable.setTexture(output.gpuResourceID, index: 2)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
-    let tg = MTLSize(width: 16, height: 16, depth: 1)
+    let tg = MTLSize(width: 32, height: 16, depth: 1)
     let grid = MTLSize(width: output.width, height: output.height, depth: 1)
     encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
   }
@@ -196,13 +202,17 @@ extension AbstractExpressionismRenderer {
                                     tex: PingPongTextures,
                                     smoothed: SIMD3<Float>,
                                     strokes: SplitStrokes) {
+    let depositTileMap = buildTileMap(strokes: strokes.deposit)
+    let smearTileMap   = buildTileMap(strokes: strokes.smear)
+
     let pass1Params = buildFrameParams(smoothed: smoothed,
                                         strokeCount: strokes.deposit.count)
     renderPaint(encoder: encoder,
                 colorIn: tex.colorIn, colorOut: tex.colorMid,
                 hwIn: tex.hwIn, hwOut: tex.hwMid,
                 velocityIn: tex.velocityIn,
-                params: pass1Params, strokes: strokes.deposit)
+                params: pass1Params, strokes: strokes.deposit,
+                tileMap: depositTileMap)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     let velocityParams = buildFrameParams(smoothed: smoothed,
@@ -212,7 +222,8 @@ extension AbstractExpressionismRenderer {
                           velocityOut: tex.velocityOut,
                           heightWetIn: tex.hwMid,
                           params: velocityParams,
-                          strokes: strokes.smear)
+                          strokes: strokes.smear,
+                          tileMap: smearTileMap)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     var pass2Params = buildFrameParams(smoothed: smoothed,
@@ -228,7 +239,8 @@ extension AbstractExpressionismRenderer {
                 colorIn: tex.colorMid, colorOut: tex.colorOut,
                 hwIn: tex.hwMid, hwOut: tex.hwOut,
                 velocityIn: tex.velocityOut,
-                params: pass2Params, strokes: strokes.smear)
+                params: pass2Params, strokes: strokes.smear,
+                tileMap: smearTileMap)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     renderCompose(encoder: encoder,

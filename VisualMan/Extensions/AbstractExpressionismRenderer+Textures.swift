@@ -194,7 +194,8 @@ extension AbstractExpressionismRenderer {
                 colorIn: tex.color[0], colorOut: tex.color[1],
                 hwIn: tex.heightWet[0], hwOut: tex.heightWet[1],
                 velocityIn: tex.velocity,
-                params: params, strokes: [])
+                params: params, strokes: [],
+                tileMap: TileMap.empty)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     renderCompose(encoder: encoder,
                   color: tex.color[1], heightWet: tex.heightWet[1],

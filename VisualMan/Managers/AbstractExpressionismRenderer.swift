@@ -91,7 +91,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var argumentTables: [any MTL4ArgumentTable]
   var uniformBuffers = [MTLBuffer]()
   var uniformOffset: Int = 0
-  static let uniformBufferSize: Int = 4096
+  static let uniformBufferSize: Int = 65536
   let sharedEvent: MTLSharedEvent
   var frameNumber: UInt64 = 0
   let residencySet: MTLResidencySet
@@ -131,9 +131,9 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     var totalFrames: Int
   }
   var animatingStrokes: [AnimatingStroke] = []
-  static let knifeAnimationFrames: Int = 20
-  static let gesturalAnimationFrames: Int = 16
-  static let maxAnimatingStrokes: Int = 8
+  static let knifeAnimationFrames: Int = 14
+  static let gesturalAnimationFrames: Int = 12
+  static let maxAnimatingStrokes: Int = 5
 
   var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 

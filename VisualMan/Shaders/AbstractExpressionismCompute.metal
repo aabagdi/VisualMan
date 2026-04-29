@@ -674,6 +674,9 @@ inline half3 strokeTint(constant AbExStroke &s, StrokeResult sr) {
   return clamp(tint, 0.0h, 1.0h);
 }
 
+#define ABEX_TILE_GRID_DIM 16
+#define ABEX_MAX_STROKES_PER_TILE 12
+
 kernel void abexPaint(
                       texture2d<half, access::sample> colorIn      [[texture(0)]],
                       texture2d<half, access::write>  colorOut     [[texture(1)]],
@@ -682,6 +685,8 @@ kernel void abexPaint(
                       texture2d<half, access::sample> velocityIn   [[texture(4)]],
                       constant AbExParams &params                 [[buffer(0)]],
                       constant AbExStroke *strokes                [[buffer(1)]],
+                      constant uint *tileCounts                   [[buffer(2)]],
+                      constant uint *tileIndices                  [[buffer(3)]],
                       uint2 gid [[thread_position_in_grid]])
 {
   constexpr sampler advSampler(coord::normalized,
@@ -699,7 +704,6 @@ kernel void abexPaint(
   float2 p = uv - 0.5;
 
   bool isFirstFrame = params.config.y > 0.5;
-  int  strokeCount  = int(params.config.z);
   half dryRate      = half(params.canvas.w);
 
   half deltaT       = clamp(half(params.config.x), 0.0h, 0.05h);
@@ -781,24 +785,36 @@ kernel void abexPaint(
       half velMag = length(velocity);
       advFraction = smoothstep(0.001h, 0.006h, velMag);
 
-      if (advFraction > 0.005h) {
-        float2 srcUv = saturate(uv - float2(velocity));
-        half4 advColor = colorIn.sample(advSampler, srcUv);
-        half4 advHW    = heightWetIn.sample(advSampler, srcUv);
+      if (simd_any(advFraction > 0.005h)) {
+        if (advFraction > 0.005h) {
+          float2 srcUv = saturate(uv - float2(velocity));
+          half4 advColor = colorIn.sample(advSampler, srcUv);
+          half4 advHW    = heightWetIn.sample(advSampler, srcUv);
 
-        color.rgb = mix(color.rgb, advColor.rgb, advFraction);
-        color.a   = mix(color.a,   advColor.a,   advFraction);
+          color.rgb = mix(color.rgb, advColor.rgb, advFraction);
+          color.a   = mix(color.a,   advColor.a,   advFraction);
 
-        height     = mix(height,     advHW.r, advFraction);
-        permHeight = mix(permHeight, advHW.b, advFraction);
-        crackVis   = mix(crackVis,   advHW.a, advFraction);
+          height     = mix(height,     advHW.r, advFraction);
+          permHeight = mix(permHeight, advHW.b, advFraction);
+          crackVis   = mix(crackVis,   advHW.a, advFraction);
 
-        wetness = max(wetness, advHW.g);
+          wetness = max(wetness, advHW.g);
+        }
       }
     }
   }
 
-  for (int i = 0; i < strokeCount && i < 12; i++) {
+  uint tileX = (gid.x * ABEX_TILE_GRID_DIM) / w;
+  uint tileY = (gid.y * ABEX_TILE_GRID_DIM) / h;
+  if (tileX >= ABEX_TILE_GRID_DIM) tileX = ABEX_TILE_GRID_DIM - 1;
+  if (tileY >= ABEX_TILE_GRID_DIM) tileY = ABEX_TILE_GRID_DIM - 1;
+  uint tileIdx = tileY * ABEX_TILE_GRID_DIM + tileX;
+  uint tileStrokeCount = tileCounts[tileIdx];
+  constant uint *tileStrokeList = tileIndices
+                                + tileIdx * ABEX_MAX_STROKES_PER_TILE;
+
+  for (uint k = 0; k < tileStrokeCount && k < ABEX_MAX_STROKES_PER_TILE; k++) {
+    int i = int(tileStrokeList[k]);
     float type = strokes[i].sizeOpacity.w;
 
     bool isGestural = (type < 0.5);
@@ -1013,6 +1029,8 @@ kernel void abexVelocityDeposit(
     texture2d<half, access::read>  heightWetIn [[texture(2)]],
     constant AbExParams &params                [[buffer(0)]],
     constant AbExStroke *strokes               [[buffer(1)]],
+    constant uint *tileCounts                  [[buffer(2)]],
+    constant uint *tileIndices                 [[buffer(3)]],
     uint2 gid [[thread_position_in_grid]])
 {
   uint w = velocityOut.get_width();
@@ -1027,8 +1045,17 @@ kernel void abexVelocityDeposit(
   float2 uv = (float2(gid) + 0.5) / float2(w, h);
   float2 p = uv - 0.5;
 
-  int strokeCount = int(params.config.z);
-  for (int i = 0; i < strokeCount; i++) {
+  uint tileX = (gid.x * ABEX_TILE_GRID_DIM) / w;
+  uint tileY = (gid.y * ABEX_TILE_GRID_DIM) / h;
+  if (tileX >= ABEX_TILE_GRID_DIM) tileX = ABEX_TILE_GRID_DIM - 1;
+  if (tileY >= ABEX_TILE_GRID_DIM) tileY = ABEX_TILE_GRID_DIM - 1;
+  uint tileIdx = tileY * ABEX_TILE_GRID_DIM + tileX;
+  uint tileStrokeCount = tileCounts[tileIdx];
+  constant uint *tileStrokeList = tileIndices
+                                + tileIdx * ABEX_MAX_STROKES_PER_TILE;
+
+  for (uint k = 0; k < tileStrokeCount && k < ABEX_MAX_STROKES_PER_TILE; k++) {
+    int i = int(tileStrokeList[k]);
     float type = strokes[i].sizeOpacity.w;
     bool isGestural = (type < 0.5);
     bool isKnife    = (type >= 3.5 && type < 4.5);
