@@ -9,25 +9,6 @@ import Metal
 import simd
 
 extension AbstractExpressionismRenderer {
-  nonisolated static func srgbToLinear(_ c: SIMD3<Float>) -> SIMD3<Float> {
-    func f(_ x: Float) -> Float {
-      x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4)
-    }
-    return SIMD3(f(c.x), f(c.y), f(c.z))
-  }
-
-  static let warmColors: [SIMD3<Float>] = [
-    SIMD3(0.85, 0.15, 0.05), SIMD3(0.90, 0.55, 0.05),
-    SIMD3(0.80, 0.60, 0.10), SIMD3(0.55, 0.25, 0.08),
-    SIMD3(0.35, 0.15, 0.08), SIMD3(0.75, 0.05, 0.20),
-  ].map(srgbToLinear)
-
-  static let coolColors: [SIMD3<Float>] = [
-    SIMD3(0.05, 0.10, 0.70), SIMD3(0.05, 0.35, 0.65),
-    SIMD3(0.10, 0.40, 0.25), SIMD3(0.25, 0.10, 0.50),
-    SIMD3(0.02, 0.20, 0.45), SIMD3(0.15, 0.55, 0.35),
-  ].map(srgbToLinear)
-
   static let compositionAnchors: [SIMD2<Float>] = [
     SIMD2(-0.22, 0.24),
     SIMD2( 0.28, -0.20),
@@ -39,94 +20,6 @@ extension AbstractExpressionismRenderer {
     strokeSeed &+= 1
     let x = strokeSeed &* 2654435769
     return Float(x) / Float(UInt32.max)
-  }
-
-  func pickColor(warm: Bool) -> SIMD3<Float> {
-    let palette = warm ? Self.warmColors : Self.coolColors
-    let r = nextSeed()
-    let idx = Int(r * Float(palette.count)) % palette.count
-    var color = palette[idx]
-    let variation = SIMD3<Float>(nextSeed() - 0.5, nextSeed() - 0.5, nextSeed() - 0.5) * 0.1
-    color = pointwiseMin(pointwiseMax(color + variation, .zero), SIMD3(repeating: 1))
-    return color
-  }
-
-  func pickColorBiased() -> SIMD3<Float> {
-    var baseHue = (time * 0.0042 + songSeed * 0.7)
-      .truncatingRemainder(dividingBy: 1.0)
-    if baseHue < 0 { baseHue += 1 }
-
-    let energy = (slowEnvelope.x + slowEnvelope.y + slowEnvelope.z) / 3.0
-    let dissonance = min(max(energy * 1.5, 0.05), 0.95)
-
-    let r = nextSeed()
-    let offset: Float
-    if r < 0.60 {
-      offset = (nextSeed() - 0.5) * 0.24 * (0.5 + dissonance * 0.5)
-    } else if r < 0.88 {
-      let direction: Float = (nextSeed() < 0.5) ? 1.0 : -1.0
-      offset = direction * (0.42 + (nextSeed() - 0.5) * 0.16) * dissonance
-    } else {
-      offset = 0.5 + (nextSeed() - 0.5) * 0.10
-    }
-
-    var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
-    if hue < 0 { hue += 1 }
-
-    let satBase: Float = 0.55 + dissonance * 0.20
-    let sat = min(0.95, satBase + nextSeed() * 0.20)
-    let val = 0.50 + nextSeed() * 0.40
-
-    let rgbSrgb = Self.hsvToRgb(SIMD3(hue, sat, val))
-    return Self.srgbToLinear(rgbSrgb)
-  }
-
-  func pickKnifeColor() -> SIMD3<Float> {
-    var baseHue = (time * 0.0042 + songSeed * 0.7)
-      .truncatingRemainder(dividingBy: 1.0)
-    if baseHue < 0 { baseHue += 1 }
-
-    let energy = (slowEnvelope.x + slowEnvelope.y + slowEnvelope.z) / 3.0
-    let dissonance = min(max(energy * 1.5, 0.05), 0.95)
-
-    let r = nextSeed()
-    let offset: Float
-    if r < 0.65 {
-      offset = 0.5 + (nextSeed() - 0.5) * 0.16
-    } else if r < 0.90 {
-      let direction: Float = (nextSeed() < 0.5) ? 1.0 : -1.0
-      offset = direction * (0.33 + (nextSeed() - 0.5) * 0.08)
-    } else {
-      offset = (nextSeed() - 0.5) * 0.18 * (0.5 + dissonance * 0.5)
-    }
-
-    var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
-    if hue < 0 { hue += 1 }
-
-    let sat = min(0.98, 0.72 + dissonance * 0.18 + nextSeed() * 0.10)
-    let val = 0.62 + nextSeed() * 0.32
-
-    let rgbSrgb = Self.hsvToRgb(SIMD3(hue, sat, val))
-    return Self.srgbToLinear(rgbSrgb)
-  }
-
-  nonisolated static func hsvToRgb(_ hsv: SIMD3<Float>) -> SIMD3<Float> {
-    let h = hsv.x * 6.0
-    let s = hsv.y
-    let v = hsv.z
-    let c = v * s
-    let x = c * (1.0 - abs(h.truncatingRemainder(dividingBy: 2.0) - 1.0))
-    let m = v - c
-    let rgb: SIMD3<Float>
-    switch Int(h) {
-    case 0:  rgb = SIMD3(c, x, 0)
-    case 1:  rgb = SIMD3(x, c, 0)
-    case 2:  rgb = SIMD3(0, c, x)
-    case 3:  rgb = SIMD3(0, x, c)
-    case 4:  rgb = SIMD3(x, 0, c)
-    default: rgb = SIMD3(c, 0, x)
-    }
-    return rgb + SIMD3<Float>(repeating: m)
   }
 
   private static let permanentDurabilityBase: Float = 0.80
@@ -151,6 +44,16 @@ extension AbstractExpressionismRenderer {
     return shape + durability
   }
 
+  func pickCurvature(zeroChance: Float, midThreshold: Float,
+                     ampBase: Float, ampJitter: Float) -> Float {
+    let curveRoll = nextSeed()
+    if curveRoll < zeroChance { return 0 }
+    let amp = ampBase + nextSeed() * ampJitter
+    let dir: Float = nextSeed() < 0.5 ? 1 : -1
+    if curveRoll < midThreshold { return amp * dir }
+    return (1.0 + amp) * dir
+  }
+
   func compositionFocus() -> SIMD2<Float> {
     let t = time * 0.06 + songSeed * 7.3
     let anchors = Self.compositionAnchors
@@ -173,6 +76,35 @@ extension AbstractExpressionismRenderer {
 
   func dominantAngle() -> Float {
     return time * 0.045 + songSeed * 1.2
+  }
+
+  func sampleGesturedStroke(suggestedPos: SIMD2<Float>,
+                            suggestedAngle: Float,
+                            continueProb: Float = 0.70)
+                          -> (pos: SIMD2<Float>, angle: Float) {
+    let timedOut = (wallClock - currentGestureStarted)
+                   > Self.gestureTimeoutSeconds
+    let active = currentGestureRemaining > 0 && !timedOut
+
+    if active && nextSeed() < continueProb {
+      currentGestureRemaining -= 1
+      let along = (nextSeed() - 0.5) * 2.0 * currentGestureSpan
+      let perp  = (nextSeed() - 0.5) * 0.08
+      let cs = cos(currentGestureAngle)
+      let sn = sin(currentGestureAngle)
+      let offset = SIMD2(along * cs - perp * sn,
+                         along * sn + perp * cs)
+      let pos = currentGestureCenter + offset
+      let jitter = (nextSeed() - 0.5) * (10.0 * .pi / 180.0)
+      return (pos: pos, angle: currentGestureAngle + jitter)
+    }
+
+    currentGestureRemaining = 1 + Int(nextSeed() * 4.0)
+    currentGestureAngle = suggestedAngle
+    currentGestureCenter = suggestedPos
+    currentGestureStarted = wallClock
+    currentGestureSpan = 0.18 + nextSeed() * 0.20
+    return (pos: suggestedPos, angle: suggestedAngle)
   }
 
   private func flowIndex(at p: SIMD2<Float>) -> Int {
@@ -248,6 +180,39 @@ extension AbstractExpressionismRenderer {
 
   func sampleDensity(at p: SIMD2<Float>) -> Float {
     return densityGrid[densityIndex(at: p)]
+  }
+
+  func isInAttentionZone(_ p: SIMD2<Float>) -> Bool {
+    return attentionStrength(at: p) > 0.5
+  }
+
+  func attentionStrength(at p: SIMD2<Float>) -> Float {
+    let t = wallClock * 0.012
+    let p1 = SIMD2(p.x * 1.5 + t, p.y * 1.5 + t * 0.7)
+    let p2 = SIMD2(p.x * 3.2 - t * 0.4, p.y * 3.2 + t * 0.3)
+    let n1 = simplexLike(p1)
+    let n2 = simplexLike(p2) * 0.4
+    let combined = n1 + n2
+    return min(1.0, max(0.0, combined * 0.5 + 0.55))
+  }
+
+  private func simplexLike(_ p: SIMD2<Float>) -> Float {
+    let i = SIMD2(floor(p.x), floor(p.y))
+    let f = p - i
+    let u = f * f * (SIMD2<Float>(repeating: 3.0) - 2.0 * f)
+    let h00 = hashCell(i + SIMD2(0, 0))
+    let h10 = hashCell(i + SIMD2(1, 0))
+    let h01 = hashCell(i + SIMD2(0, 1))
+    let h11 = hashCell(i + SIMD2(1, 1))
+    let mix0 = h00 + (h10 - h00) * u.x
+    let mix1 = h01 + (h11 - h01) * u.x
+    return (mix0 + (mix1 - mix0) * u.y) * 2.0 - 1.0
+  }
+
+  private func hashCell(_ i: SIMD2<Float>) -> Float {
+    var h = i.x * 12.9898 + i.y * 78.233
+    h = sin(h) * 43758.5453
+    return h - floor(h)
   }
 
   func applyDensityBias(at suggested: SIMD2<Float>,

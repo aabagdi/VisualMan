@@ -42,15 +42,15 @@ struct VisualizerSnapshotHost<Content: View>: UIViewControllerRepresentable {
   let snapshotter: VisualizerSnapshotter
   @ViewBuilder let content: () -> Content
 
-  func makeUIViewController(context: Context) -> UIHostingController<Content> {
-    let controller = UIHostingController(rootView: content())
+  func makeUIViewController(context: Context) -> UIHostingController<AnyView> {
+    let controller = UIHostingController(rootView: AnyView(content().ignoresSafeArea()))
     controller.view.backgroundColor = .clear
     snapshotter.captureView = controller.view
     return controller
   }
 
-  func updateUIViewController(_ uiViewController: UIHostingController<Content>, context: Context) {
-    uiViewController.rootView = content()
+  func updateUIViewController(_ uiViewController: UIHostingController<AnyView>, context: Context) {
+    uiViewController.rootView = AnyView(content().ignoresSafeArea())
     snapshotter.captureView = uiViewController.view
   }
 }

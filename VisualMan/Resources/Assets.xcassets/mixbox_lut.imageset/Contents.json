@@ -1,0 +1,17 @@
+{
+  "images" : [
+    {
+      "compression-type" : "lossless",
+      "filename" : "mixbox_lut.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  },
+  "properties" : {
+    "compression-type" : "lossless",
+    "template-rendering-intent" : "original"
+  }
+}

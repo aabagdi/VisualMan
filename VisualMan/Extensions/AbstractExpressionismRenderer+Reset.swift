@@ -41,6 +41,12 @@ extension AbstractExpressionismRenderer {
 
     cameraPhase = 0
 
+    currentGestureRemaining = 0
+    currentGestureAngle = 0
+    currentGestureCenter = .zero
+    currentGestureStarted = 0
+    currentGestureSpan = 0.30
+
     for i in 0..<flowField.count { flowField[i] = .zero }
     for i in 0..<densityGrid.count { densityGrid[i] = 0 }
 

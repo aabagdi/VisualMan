@@ -7,7 +7,22 @@
 
 #include <metal_stdlib>
 #include "ShaderUtils.h"
+#include "../Mixbox/Mixbox.metal"
 using namespace metal;
+
+inline float3 mixboxLerpLinear(texture2d<float, access::sample> lut,
+                                float3 lin_a, float3 lin_b, float t) {
+  float3 srgb_a = pow(saturate(lin_a), 1.0 / 2.2);
+  float3 srgb_b = pow(saturate(lin_b), 1.0 / 2.2);
+  float3 mixed_srgb = mixbox_lerp(lut, srgb_a, srgb_b, t);
+  return pow(saturate(mixed_srgb), 2.2);
+}
+
+inline half3 mixboxLerpLinear(texture2d<float, access::sample> lut,
+                               half3 lin_a, half3 lin_b, half t) {
+  return half3(mixboxLerpLinear(lut, float3(lin_a), float3(lin_b),
+                                 float(t)));
+}
 
 struct AbExParams {
   float4 audio;
@@ -119,11 +134,12 @@ struct StrokeResult {
   float bristleTone;
   float strokeWetness;
   float impastoPermanence;
+  float radialNorm;
 };
 
 inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s) {
   StrokeResult r; r.coverage = 0; r.heightDelta = 0;
-  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0;
+  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0; r.radialNorm = 0;
   r.strokeWetness = 1.0; r.impastoPermanence = 0.0;
 
   float2 center  = s.posAngle.xy;
@@ -249,7 +265,7 @@ inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s) {
 
 inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
   StrokeResult r; r.coverage = 0; r.heightDelta = 0;
-  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0;
+  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0; r.radialNorm = 0;
   r.strokeWetness = 1.5;
   r.impastoPermanence = 0.0;
 
@@ -294,6 +310,15 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
 
   falloff = clamp(falloff, 0.0, 1.0);
 
+  float poolField = shaderSimplex2D(scaled * 0.5 + seed * 8.3);
+  float spreadField = shaderSimplex2D(scaled * 1.4 + seed * 17.1) * 0.45;
+  float densityField = poolField + spreadField;
+  float interiorWeight = 1.0 - smoothstep(0.0, 0.85, normR);
+  float densityClamped = clamp(densityField, -1.4, 1.4);
+  float densityRaw = mix(0.75, 1.20, (densityClamped + 1.4) / 2.8);
+  float densityMult = mix(1.0, densityRaw, interiorWeight);
+  falloff *= densityMult;
+
   float intensityRoll = hash11(seed * 4.13);
   float intensity;
   if (intensityRoll < 0.20) {
@@ -306,6 +331,10 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
 
   r.coverage    = min(1.0, falloff * baseOp * intensity);
   r.alongNorm   = 0.5;
+
+  float dirX = (rr > 0.001) ? (scaled.x / rr) : 0.0;
+  float flowBias = -dirX * 0.20;
+  r.radialNorm  = saturate(normR + flowBias);
   r.acrossT     = normR;
 
   r.bristleTone = 0.0;
@@ -316,7 +345,7 @@ inline StrokeResult evaluateWash(float2 p, constant AbExStroke &s) {
 
 inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
   StrokeResult r; r.coverage = 0; r.heightDelta = 0;
-  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0;
+  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0; r.radialNorm = 0;
   r.strokeWetness = 1.0; r.impastoPermanence = 0.0;
 
   float2 center = s.posAngle.xy;
@@ -427,7 +456,7 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
 
 inline StrokeResult evaluateDrip(float2 p, constant AbExStroke &s) {
   StrokeResult r; r.coverage = 0; r.heightDelta = 0;
-  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0;
+  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0; r.radialNorm = 0;
   r.strokeWetness = 0.0;
   r.impastoPermanence = 0.30;
 
@@ -460,17 +489,19 @@ inline StrokeResult evaluateDrip(float2 p, constant AbExStroke &s) {
   float launchSprayNoise = shaderNoise(float2(t * 35.0, seed * 1.7)) - 0.5;
   float launchWidth = 1.10 + launchSprayNoise * 0.45;
 
-  float midWidth = 0.95 + shaderSimplex2D(float2(t * 2.5, seed * 2.1)) * 0.18;
+  float midWidthLow  = shaderSimplex2D(float2(t * 1.8, seed * 2.1)) * 0.32;
+  float midWidthHigh = shaderSimplex2D(float2(t * 5.5, seed * 4.7)) * 0.12;
+  float midWidth = 0.85 + midWidthLow + midWidthHigh;
 
   float landingWidth = landingWidthScale;
 
   float widthMod = launchWidth * launchT
                  + midWidth * midT
                  + landingWidth * landingT;
-  widthMod = clamp(widthMod, 0.30, 1.85);
+  widthMod = clamp(widthMod, 0.25, 1.85);
 
-  float wobbleBase = shaderSimplex2D(float2(t * 1.0, seed * 0.7))      * dripLen * 0.07
-                   + shaderSimplex2D(float2(t * 3.5, seed * 1.3 + 11)) * dripLen * 0.025;
+  float wobbleBase = shaderSimplex2D(float2(t * 1.0, seed * 0.7))      * dripLen * 0.10
+                   + shaderSimplex2D(float2(t * 3.5, seed * 1.3 + 11)) * dripLen * 0.035;
   float launchSprayLateral = (shaderNoise(float2(t * 50.0, seed * 3.7)) - 0.5)
                               * dripLen * 0.04 * launchT;
   float wobble = wobbleBase + launchSprayLateral;
@@ -527,7 +558,7 @@ inline StrokeResult evaluateDrip(float2 p, constant AbExStroke &s) {
 
 inline StrokeResult evaluateKnife(float2 p, constant AbExStroke &s) {
   StrokeResult r; r.coverage = 0; r.heightDelta = 0;
-  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0;
+  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0; r.radialNorm = 0;
   r.strokeWetness = 1.0;
   r.impastoPermanence = 0.55;
 
@@ -554,7 +585,9 @@ inline StrokeResult evaluateKnife(float2 p, constant AbExStroke &s) {
   if (abs(alongT) > 1.05 || abs(acrossT) > 1.5) return r;
 
   float lengthMask = 1.0 - smoothstep(0.92, 1.04, abs(alongT));
-  float widthMask  = 1.0 - smoothstep(0.78, 1.02, abs(acrossT));
+  float widthMask  = 1.0 - smoothstep(0.88, 1.02, abs(acrossT));
+
+  float edgeBias = sign(acrossT) * sign(hash11(seed * 31.7) - 0.5);
 
   float pressureNoise = shaderNoise(float2(local.x * 6.0  + seed * 11.0,
                                             seed * 19.0));
@@ -568,9 +601,11 @@ inline StrokeResult evaluateKnife(float2 p, constant AbExStroke &s) {
                                        local.y * 700.0 + seed * 17.0)) - 0.5;
   coverage *= 1.0 + striation * 0.36 + fineGrain * 0.16;
 
+  float ridgeBoost = 1.0 + max(0.0, edgeBias) * 0.50;
   float sideRidge = smoothstep(0.85, 1.0, abs(acrossT))
                   * (1.0 - smoothstep(1.0, 1.18, abs(acrossT)))
-                  * lengthMask;
+                  * lengthMask
+                  * ridgeBoost;
 
   float leadEdge   = smoothstep(0.55, 0.92, alongT) * widthMask;
   float leadAmount = 0.55 + pressureNoise * 0.40;
@@ -592,7 +627,7 @@ inline StrokeResult evaluateKnife(float2 p, constant AbExStroke &s) {
 
 inline StrokeResult evaluateScumble(float2 p, constant AbExStroke &s) {
   StrokeResult r; r.coverage = 0; r.heightDelta = 0;
-  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0;
+  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0; r.radialNorm = 0;
 
   r.strokeWetness = 0.40;
 
@@ -651,10 +686,72 @@ inline StrokeResult evaluateScumble(float2 p, constant AbExStroke &s) {
 
   r.coverage    = coverage;
   r.heightDelta = coverage * 0.04;
-  r.alongNorm   = 0.5;
+  r.alongNorm   = saturate(0.5 + 0.5 * local.x / halfLen);
   r.acrossT     = scaled.y;
 
   r.bristleTone = density * 0.20;
+  return r;
+}
+
+inline StrokeResult evaluateLine(float2 p, constant AbExStroke &s) {
+  StrokeResult r; r.coverage = 0; r.heightDelta = 0;
+  r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0; r.radialNorm = 0;
+  r.strokeWetness = 0.10;
+  r.impastoPermanence = 0.0;
+
+  float2 center = s.posAngle.xy;
+  float angle   = s.posAngle.z;
+  float halfLen = max(s.posAngle.w, 0.01);
+  float halfWd  = max(s.sizeOpacity.x, 0.001);
+  float baseOp  = s.sizeOpacity.y;
+  float seed    = s.sizeOpacity.z;
+  float curvature = s.animation.w;
+
+  float cs = cos(angle), sn = sin(angle);
+  float2 d = p - center;
+  float2 local = float2(d.x * cs + d.y * sn, -d.x * sn + d.y * cs);
+
+  float alongT = local.x / halfLen;
+  float curveOffset = curvature * (1.0 - alongT * alongT) * halfLen * 0.35;
+  local.y -= curveOffset;
+
+  float wobble = shaderSimplex2D(float2(alongT * 4.0, seed * 2.3))
+                 * halfWd * 0.7;
+  local.y -= wobble;
+
+  if (abs(local.x) > halfLen * 1.05) return r;
+  if (abs(local.y) > halfWd * 3.0)   return r;
+
+  float distToLine = abs(local.y);
+  if (abs(local.x) > halfLen) {
+    float2 endpt = float2(local.x > 0 ? halfLen : -halfLen, 0);
+    distToLine = length(local - endpt);
+  }
+
+  float coverage = 1.0 - smoothstep(halfWd * 0.6, halfWd * 1.4,
+                                     distToLine);
+
+  float skipNoiseLow = shaderSimplex2D(float2(alongT * 2.2, seed * 7.1));
+  float skipNoiseHigh = shaderSimplex2D(float2(alongT * 18.0, seed * 11.3));
+  float skipFactor = smoothstep(-0.5, 0.4, skipNoiseLow);
+  coverage *= mix(0.20, 1.0, skipFactor);
+  coverage *= 0.78 + skipNoiseHigh * 0.22;
+
+  float crossT = local.y / halfWd;
+  float crossGrain = shaderNoise(float2(alongT * 50.0, crossT * 12.0
+                                          + seed * 3.1)) - 0.5;
+  coverage *= 1.0 + crossGrain * 0.30;
+
+  float endTaper = 1.0 - smoothstep(0.85, 1.0, abs(alongT));
+  coverage *= endTaper;
+
+  r.coverage    = clamp(coverage * baseOp, 0.0, 1.0);
+  r.alongNorm   = saturate(alongT * 0.5 + 0.5);
+  r.acrossT     = local.y / halfWd;
+
+  r.bristleTone = 0.0;
+  r.heightDelta = 0.0;
+
   return r;
 }
 
@@ -683,6 +780,11 @@ kernel void abexPaint(
                       texture2d<half, access::sample> heightWetIn  [[texture(2)]],
                       texture2d<half, access::write>  heightWetOut [[texture(3)]],
                       texture2d<half, access::sample> velocityIn   [[texture(4)]],
+                      texture2d<half, access::read>   dryColorIn   [[texture(5)]],
+                      texture2d<half, access::write>  dryColorOut  [[texture(6)]],
+                      texture2d<half, access::read>   substrateIn  [[texture(7)]],
+                      texture2d<half, access::write>  substrateOut [[texture(8)]],
+                      texture2d<float, access::sample> mixboxLUT   [[texture(9)]],
                       constant AbExParams &params                 [[buffer(0)]],
                       constant AbExStroke *strokes                [[buffer(1)]],
                       constant uint *tileCounts                   [[buffer(2)]],
@@ -715,16 +817,22 @@ kernel void abexPaint(
   half height, wetness, permHeight, crackVis;
 
   half advFraction = 0.0h;
+  half4 dryColor;
+  half4 substrate;
+  bool skipDecay = params.atmosphere.w > 0.5;
 
   if (isFirstFrame) {
     color = half4(0); height = 0.0h; wetness = 0.0h;
     permHeight = 0.0h; crackVis = 0.0h;
+    dryColor = half4(0);
+    substrate = half4(0);
   } else {
-    bool skipDecay = params.atmosphere.w > 0.5;
 
     color = colorIn.read(gid);
     half4 hw = heightWetIn.read(hgid);
     height = hw.r; wetness = hw.g; permHeight = hw.b; crackVis = hw.a;
+    dryColor = dryColorIn.read(hgid);
+    substrate = substrateIn.read(hgid);
 
     if (!skipDecay && (color.a > 0.001h || height > 0.001h)) {
 
@@ -767,23 +875,86 @@ kernel void abexPaint(
                        - thickMix * 1.0h;
       dryScale = max(dryScale, 0.3h);
       half wetDecay = saturate(1.0h - dryRate * dryScale);
+      half wetnessOld = wetness;
       wetness *= wetDecay;
+
+      half wetGradMag = 0.0h;
+      if (simd_any(wetness > 0.005h || wetnessOld > 0.005h)) {
+        float2 hwSize = float2(heightWetIn.get_width(),
+                                heightWetIn.get_height());
+        float2 hwStep = 1.0 / hwSize;
+        float2 hwUv = (float2(hgid) + 0.5) * hwStep;
+        half4 nL = heightWetIn.sample(advSampler, hwUv - float2(hwStep.x, 0.0));
+        half4 nR = heightWetIn.sample(advSampler, hwUv + float2(hwStep.x, 0.0));
+        half4 nD = heightWetIn.sample(advSampler, hwUv - float2(0.0, hwStep.y));
+        half4 nU = heightWetIn.sample(advSampler, hwUv + float2(0.0, hwStep.y));
+
+        half neighbWet = (nL.g + nR.g + nD.g + nU.g) * 0.25h;
+        half viscosityGate = 1.0h
+                           - smoothstep(0.10h, 0.55h, permHeight) * 0.85h;
+        half substrateGate = 1.0h - substrate.r * 0.95h;
+        half flowRate = 0.18h * viscosityGate * substrateGate
+                       * deltaT * 60.0h;
+        flowRate = clamp(flowRate, 0.0h, 0.40h);
+        wetness = mix(wetness, neighbWet, flowRate);
+
+        wetGradMag = abs(nR.g - nL.g) + abs(nU.g - nD.g);
+      }
+
+      if (color.a > 0.005h && wetnessOld > 0.005h) {
+        half wetnessLost = max(wetnessOld - wetness, 0.0h);
+        half dryShare = saturate(wetnessLost / wetnessOld);
+        half stainGate = smoothstep(0.0h, 0.05h, permHeight);
+        half edgeBoost = 1.0h
+                       + smoothstep(0.05h, 0.30h, wetGradMag) * 0.6h
+                       * stainGate;
+        half incomingAlpha = saturate(color.a * dryShare * edgeBoost);
+        if (incomingAlpha > 0.0001h) {
+          half luma = dot(color.rgb,
+                          half3(0.2126h, 0.7152h, 0.0722h));
+          half3 desat = mix(color.rgb, half3(luma), 0.05h);
+          half3 driedColor;
+          driedColor.r = saturate(desat.r + luma * 0.025h);
+          driedColor.g = saturate(desat.g + luma * 0.005h);
+          driedColor.b = saturate(desat.b - luma * 0.018h);
+
+          half a_dst = dryColor.a;
+          half a_src = incomingAlpha;
+          half outA = a_dst + a_src * (1.0h - a_dst);
+          if (outA > 0.001h) {
+            half3 outRgb = (dryColor.rgb * a_dst
+                            + driedColor * a_src * (1.0h - a_dst))
+                         / outA;
+            dryColor.rgb = outRgb;
+            dryColor.a = outA;
+          }
+          color.a = max(0.0h, color.a - incomingAlpha);
+        }
+      }
 
       half permThickCrack = smoothstep(0.20h, 0.55h, permHeight);
       if (permThickCrack > 0.001h) {
         half drynessCrack = 1.0h - smoothstep(0.05h, 0.40h, wetness);
         half wetOnDryCrack = wetness * permThickCrack;
         half crackBoost = 1.0h + wetOnDryCrack * 2.0h;
+        half thickBonus = 1.0h
+                        + smoothstep(0.40h, 0.90h, permHeight) * 1.5h;
         half crackGrowth = permThickCrack * drynessCrack * crackBoost
-                         * deltaT * 0.04h;
+                         * thickBonus
+                         * deltaT * 0.18h;
         crackVis = min(1.0h, crackVis + crackGrowth);
       }
     }
 
     if (skipDecay) {
-      half2 velocity = velocityIn.read(hgid).rg;
+      half3 velSample = velocityIn.read(hgid).rgb;
+      half2 velocity = velSample.rg;
+      half knifeFlag = velSample.b;
       half velMag = length(velocity);
       advFraction = smoothstep(0.001h, 0.006h, velMag);
+
+      half drainRate = smoothstep(0.001h, 0.012h, velMag) * 0.08h;
+      wetness = max(0.0h, wetness - drainRate);
 
       if (simd_any(advFraction > 0.005h)) {
         if (advFraction > 0.005h) {
@@ -791,12 +962,35 @@ kernel void abexPaint(
           half4 advColor = colorIn.sample(advSampler, srcUv);
           half4 advHW    = heightWetIn.sample(advSampler, srcUv);
 
-          color.rgb = mix(color.rgb, advColor.rgb, advFraction);
-          color.a   = mix(color.a,   advColor.a,   advFraction);
+          bool isKnifeSmear = knifeFlag > 0.5h;
+          if (isKnifeSmear) {
+            color.rgb = mixboxLerpLinear(mixboxLUT, color.rgb,
+                                           advColor.rgb, advFraction);
+          } else {
 
-          height     = mix(height,     advHW.r, advFraction);
-          permHeight = mix(permHeight, advHW.b, advFraction);
-          crackVis   = mix(crackVis,   advHW.a, advFraction);
+            float2 velDir = float2(velocity) / max(velMag, 0.001h);
+            float2 velPerp = float2(-velDir.y, velDir.x);
+
+            float pAlong  = dot(float2(gid), velDir);
+            float pAcross = dot(float2(gid), velPerp);
+
+            float bristleN = shaderSimplex2D(
+              float2(pAcross * 0.55, pAlong * 0.045));
+
+            float groove = smoothstep(-0.15, 0.15, bristleN);
+
+            half3 grooveMix = mixboxLerpLinear(mixboxLUT, color.rgb,
+                                                 advColor.rgb,
+                                                 advFraction);
+            half3 cleanMix = mix(color.rgb, advColor.rgb,
+                                  advFraction * 0.05h);
+            color.rgb = mix(cleanMix, grooveMix, half(groove));
+          }
+
+          color.a    = mix(color.a,    advColor.a, advFraction);
+          height     = mix(height,     advHW.r,    advFraction);
+          permHeight = mix(permHeight, advHW.b,    advFraction);
+          crackVis   = mix(crackVis,   advHW.a,    advFraction);
 
           wetness = max(wetness, advHW.g);
         }
@@ -822,7 +1016,8 @@ kernel void abexPaint(
     bool isSplatter = (type >= 1.5 && type < 2.5);
     bool isDrip     = (type >= 2.5 && type < 3.5);
     bool isKnife    = (type >= 3.5 && type < 4.5);
-    bool isScumble  = (type >= 4.5);
+    bool isScumble  = (type >= 4.5 && type < 5.5);
+    bool isLine     = (type >= 5.5);
 
     StrokeResult sr;
     if      (isGestural) sr = evaluateGestural(p, strokes[i]);
@@ -830,7 +1025,10 @@ kernel void abexPaint(
     else if (isSplatter) sr = evaluateSplatter(p, strokes[i]);
     else if (isDrip)     sr = evaluateDrip(p, strokes[i]);
     else if (isKnife)    sr = evaluateKnife(p, strokes[i]);
-    else                 sr = evaluateScumble(p, strokes[i]);
+    else if (isScumble)  sr = evaluateScumble(p, strokes[i]);
+    else                 sr = evaluateLine(p, strokes[i]);
+
+    if (!simd_any(sr.coverage > 0.001)) continue;
 
     half drawnMask = 1.0h;
     half newness = 1.0h;
@@ -839,11 +1037,12 @@ kernel void abexPaint(
       float progressMin = strokes[i].animation.x;
       float progressMax = strokes[i].animation.y;
       float softEdge = 0.025;
+      float progressCoord = isWash ? sr.radialNorm : sr.alongNorm;
       drawnMask = half(1.0 - smoothstep(progressMax - softEdge,
                                          progressMax + softEdge,
-                                         sr.alongNorm));
+                                         progressCoord));
       newness = half(smoothstep(progressMin - softEdge,
-                                 progressMin + softEdge, sr.alongNorm));
+                                 progressMin + softEdge, progressCoord));
       sr.coverage *= float(drawnMask);
       sr.heightDelta *= float(drawnMask);
     }
@@ -856,6 +1055,10 @@ kernel void abexPaint(
       half kCov = half(max(sr.coverage, 0.0));
       if (kCov < 0.001h) continue;
 
+      half scrapeAmount = min(permHeight, kCov * 0.08h * newness);
+      permHeight -= scrapeAmount;
+      height += scrapeAmount;
+
       float kPerpCoord = dot(p, kperp);
       float kBristleSeed = kPerpCoord * 540.0;
       float kBristleNoise = fract(sin(kBristleSeed * 12.9898)
@@ -865,8 +1068,8 @@ kernel void abexPaint(
       half3 kTint = half3(strokes[i].color.xyz);
       half stainStrength = kCov * 0.90h * (1.0h + bristleVar * 0.7h);
       stainStrength *= (1.0h - advFraction * 0.75h);
-      color.rgb = mix(color.rgb, kTint,
-                       clamp(stainStrength, 0.0h, 1.0h));
+      color.rgb = mixboxLerpLinear(mixboxLUT, color.rgb, kTint,
+                                    clamp(stainStrength, 0.0h, 1.0h));
       color.a = max(color.a, kCov * 0.98h);
 
       half presenceGate = max(max(smoothstep(0.02h, 0.30h, color.a),
@@ -883,7 +1086,11 @@ kernel void abexPaint(
       half hd = half(sr.heightDelta);
       half kPermDelta = max(hd, 0.0h) * half(sr.impastoPermanence);
       half kStainFloor = kCov * 0.05h * (1.0h + bristleVar * 1.6h);
-      permHeight = clamp(max(newPerm + kPermDelta, kStainFloor),
+
+      half bristleRidge = bristleVar * kCov * 0.20h;
+
+      permHeight = clamp(max(newPerm + kPermDelta + bristleRidge,
+                              kStainFloor),
                           0.0h, HEIGHT_MAX);
       height = clamp(permHeight + newSettling
                       + min(hd, 0.0h) * newness,
@@ -901,6 +1108,52 @@ kernel void abexPaint(
     if (isWash) {
       float impastoResist = smoothstep(0.20, 0.80, float(permHeight));
       sr.coverage *= 1.0 - impastoResist * 0.85;
+
+      sr.coverage *= float(newness);
+
+      half wcov = half(sr.coverage);
+      if (wcov > 0.005h) {
+        half3 wtint = strokeTint(strokes[i], sr);
+
+        half luma = dot(wtint, half3(0.2126h, 0.7152h, 0.0722h));
+        half3 desat = mix(wtint, half3(luma), 0.08h);
+        wtint = desat;
+        wtint.r = saturate(wtint.r + luma * 0.030h);
+        wtint.g = saturate(wtint.g + luma * 0.008h);
+        wtint.b = saturate(wtint.b - luma * 0.022h);
+
+        half a_dst = dryColor.a;
+        half a_src = wcov;
+        half outA = a_dst + a_src * (1.0h - a_dst);
+        if (outA > 0.001h) {
+          half mixT = a_src * (1.0h - a_dst) / outA;
+          dryColor.rgb = mixboxLerpLinear(mixboxLUT,
+                                            dryColor.rgb, wtint, mixT);
+          dryColor.a = outA;
+        }
+
+        half availableCapacity = 1.0h - substrate.r;
+        half saturationGain = wcov * availableCapacity * 0.06h;
+        substrate.r = saturate(substrate.r + saturationGain);
+      }
+      continue;
+    }
+
+    if (isLine) {
+      half lcov = half(sr.coverage);
+      if (lcov > 0.005h) {
+        half3 ltint = half3(strokes[i].color.xyz);
+
+        half a_dst = dryColor.a;
+        half a_src = lcov;
+        half outA = a_dst + a_src * (1.0h - a_dst);
+        if (outA > 0.001h) {
+          dryColor.rgb = (dryColor.rgb * a_dst
+                          + ltint * a_src * (1.0h - a_dst)) / outA;
+          dryColor.a = outA;
+        }
+      }
+      continue;
     }
 
     if (!isWash) {
@@ -939,6 +1192,11 @@ kernel void abexPaint(
       half gNewPerm = permHeight * (1.0h - gFlatten * 0.50h);
       permHeight = gNewPerm;
       height = permHeight + gNewSettling;
+
+      half gScrape = min(permHeight, half(sr.coverage) * 0.03h * newness
+                                       * gImpastoGate);
+      permHeight -= gScrape;
+      height += gScrape;
     }
 
     if (isSplatter || isDrip) {
@@ -964,16 +1222,23 @@ kernel void abexPaint(
     half oldAmount = color.a * (1.0h - cov);
     half total     = oldAmount + cov;
     half tNew      = cov / max(total, 0.001h);
-    half3 dryBlend = (color.rgb * oldAmount + tint * cov) / max(total, 0.001h);
+    half3 dryBlend;
+    half3 layeredResult;
+    if (isGestural) {
+      dryBlend = (color.rgb * oldAmount + tint * cov)
+               / max(total, 0.001h);
+      layeredResult = mix(color.rgb, tint, cov);
+    } else {
+      dryBlend = mixboxLerpLinear(mixboxLUT, color.rgb, tint, tNew);
+      layeredResult = mixboxLerpLinear(mixboxLUT, color.rgb, tint, cov);
+    }
     half3 wetBlend = wetMix(color.rgb, tint, tNew);
     half3 mixedResult = mix(dryBlend, wetBlend, effectiveWet);
-
-    half3 layeredResult = mix(color.rgb, tint, cov);
 
     half surfaceDryness = 1.0h - smoothstep(0.05h, 0.40h, wetness);
     half layerWeight;
     if (isWash) {
-      layerWeight = min(1.0h, cov * 1.5h);
+      layerWeight = 0.0h;
     } else if (isSplatter) {
       layerWeight = cov;
     } else if (isScumble) {
@@ -1005,6 +1270,20 @@ kernel void abexPaint(
 
     wetness = max(wetness, cov * clamp(half(sr.strokeWetness), 0.0h, 1.0h));
 
+    half depositLoad = cov * clamp(half(sr.strokeWetness), 0.0h, 1.0h);
+    if (depositLoad > 0.005h) {
+      half absorbencyRate;
+      if      (isWash)     absorbencyRate = 0.10h;
+      else if (isSplatter) absorbencyRate = 0.08h;
+      else if (isDrip)     absorbencyRate = 0.06h;
+      else if (isScumble)  absorbencyRate = 0.05h;
+      else if (isKnife)    absorbencyRate = 0.01h;
+      else                 absorbencyRate = 0.05h;
+      half availableCapacity = 1.0h - substrate.r;
+      half saturationGain = depositLoad * availableCapacity * absorbencyRate;
+      substrate.r = saturate(substrate.r + saturationGain);
+    }
+
     if (!isWash && crackVis > 0.001h) {
       half fillStrength = cov * clamp(half(sr.strokeWetness), 0.0h, 1.0h) * 0.55h;
       crackVis = max(0.0h, crackVis - fillStrength);
@@ -1020,6 +1299,10 @@ kernel void abexPaint(
   colorOut.write(color, gid);
   if (hwOwner) {
     heightWetOut.write(half4(height, wetness, permHeight, crackVis), hgid);
+    dryColorOut.write(dryColor, hgid);
+    if (!skipDecay) {
+      substrateOut.write(substrate, hgid);
+    }
   }
 }
 
@@ -1081,7 +1364,9 @@ kernel void abexVelocityDeposit(
 
     if (abs(alongT) > 1.30 || abs(effAcrossT) > 1.50) continue;
 
-    float lengthMask = 1.0 - smoothstep(0.85, 1.30, abs(alongT));
+    float trailMask = smoothstep(-1.30, -0.50, alongT);
+    float leadMask  = 1.0 - smoothstep(0.85, 1.30, alongT);
+    float lengthMask = trailMask * leadMask;
     float widthMask  = 1.0 - smoothstep(0.80, 1.50, abs(effAcrossT));
     float coverage = lengthMask * widthMask;
 
@@ -1094,6 +1379,8 @@ kernel void abexVelocityDeposit(
       coverage *= windowMask;
     }
 
+    if (!simd_any(coverage > 0.01)) continue;
+
     if (coverage < 0.01) continue;
 
     float dy_dx = isS
@@ -1103,6 +1390,7 @@ kernel void abexVelocityDeposit(
     float2 tangentLocal = float2(1.0, dy_dx) * invNorm;
     float2 kdir = float2(tangentLocal.x * cs - tangentLocal.y * sn,
                          tangentLocal.x * sn + tangentLocal.y * cs);
+    float2 kperpStraight = float2(-sn, cs);
 
     int2 nearOff = int2(round(-kdir * 2.0));
     int2 farOff  = int2(round(-kdir * 5.0));
@@ -1119,21 +1407,67 @@ kernel void abexVelocityDeposit(
 
     float speed = isKnife ? 0.0050 : 0.0025;
 
-    velocity += half2(kdir * speed * coverage * float(wetGate));
+    float kPerpCoord = dot(p, kperpStraight);
+    float kBristleSeed = kPerpCoord * 540.0;
+    float kBristleNoise = fract(sin(kBristleSeed * 12.9898)
+                                 * 43758.5453);
+    float bristleMod = 0.55 + 0.45 * kBristleNoise;
+
+    float2 kperpCurve = float2(-kdir.y, kdir.x);
+    half edgeFactor = smoothstep(0.6h, 1.0h, half(abs(effAcrossT)));
+    float fanSign = (effAcrossT > 0.0) ? 1.0 : -1.0;
+    float2 fanVel = kperpCurve * (fanSign * 0.25 * float(edgeFactor));
+
+    velocity += half2((kdir + fanVel) * speed * coverage
+                      * float(wetGate) * bristleMod);
+
+    if (isKnife) {
+      half kFlag = half(coverage * float(wetGate) * bristleMod);
+      vSample.b = max(vSample.b, kFlag);
+    }
   }
+
+  half knifeFlag = vSample.b * 0.40h;
 
   half velMag = length(velocity);
   if (velMag > 0.012h) {
     velocity = velocity * (0.012h / velMag);
   }
 
-  velocityOut.write(half4(velocity.x, velocity.y, 0, 0), gid);
+  velocityOut.write(half4(velocity.x, velocity.y, knifeFlag, 0), gid);
+}
+
+kernel void abexPassthrough(
+                        texture2d<half, access::read>  colorIn      [[texture(0)]],
+                        texture2d<half, access::write> colorOut     [[texture(1)]],
+                        texture2d<half, access::read>  hwIn         [[texture(2)]],
+                        texture2d<half, access::write> hwOut        [[texture(3)]],
+                        texture2d<half, access::read>  dryColorIn   [[texture(4)]],
+                        texture2d<half, access::write> dryColorOut  [[texture(5)]],
+                        uint2 gid [[thread_position_in_grid]])
+{
+  uint w = colorOut.get_width();
+  uint h = colorOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+
+  colorOut.write(colorIn.read(gid), gid);
+  hwOut.write(hwIn.read(gid), gid);
+  uint dw = dryColorOut.get_width();
+  uint dh = dryColorOut.get_height();
+  uint2 hgid = gid / 2;
+  if (hgid.x < dw && hgid.y < dh) {
+    if ((gid.x & 1u) == 0u && (gid.y & 1u) == 0u) {
+      dryColorOut.write(dryColorIn.read(hgid), hgid);
+    }
+  }
 }
 
 kernel void abexCompose(
                         texture2d<half, access::read>   color     [[texture(0)]],
                         texture2d<half, access::sample> heightWet [[texture(1)]],
                         texture2d<half, access::write>  output    [[texture(2)]],
+                        texture2d<half, access::sample> dryColor  [[texture(3)]],
+                        texture2d<half, access::sample> substrate [[texture(4)]],
                         constant AbExParams &params              [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]])
 {
@@ -1180,7 +1514,10 @@ kernel void abexCompose(
   half bumpSurfaceTexture = max(0.10h, 1.0h - washAmt * 0.90h);
   float bumpSurfaceF = float(bumpSurfaceTexture);
 
-  half3 canvasBase = half3(params.canvas.xyz) - canvasWeave(canvasPx);
+  half3 canvasBaseRaw = half3(params.canvas.xyz) - canvasWeave(canvasPx);
+
+  half4 dc = dryColor.sample(hwSampler, uvAll);
+  half3 canvasBase = mix(canvasBaseRaw, dc.rgb, dc.a);
 
   if (c.a < 0.005h && hC < 0.005) {
     half3 bare = acesNarkowicz(canvasBase);
@@ -1193,12 +1530,41 @@ kernel void abexCompose(
   half3 stainLayer  = canvasBase * mix(half3(1.0h), c.rgb, c.a * 0.7h);
   half3 brushedResult = mix(stainLayer, normalLayer, smoothstep(0.05h, 0.15h, c.a));
 
-  half stainMix = pow(c.a, 0.85h) * 0.95h;
+  half stainMix = pow(c.a, 0.30h);
   half3 soakResult = mix(canvasBase, c.rgb, stainMix);
 
-  soakResult = mix(soakResult, canvasBase, washAmt * 0.12h);
+  soakResult = mix(soakResult, canvasBase, washAmt * 0.08h);
 
   half3 result = mix(brushedResult, soakResult, washAmt);
+
+
+  half granPaintMask = smoothstep(0.05h, 0.30h, c.a);
+
+  if (granPaintMask > 0.005h) {
+    half clumpNoise = half(shaderSimplex2D(canvasPx * 0.030));
+    half grainNoise = half(shaderSimplex2D(canvasPx * 0.180));
+
+    half wetSmoothness = smoothstep(0.05h, 0.45h, wetTotal);
+    half granGate = granPaintMask * (1.0h - wetSmoothness * 0.65h);
+
+    half lumMod = 1.0h
+                + (clumpNoise * 0.04h + grainNoise * 0.02h) * granGate;
+    result *= lumMod;
+
+    half3 chromaJitter = half3(
+      clumpNoise,
+      grainNoise * 0.7h + clumpNoise * 0.3h,
+      clumpNoise * 0.4h - grainNoise * 0.6h) * 0.025h * granGate;
+    result += chromaJitter * result;
+
+    half thinness = 1.0h - smoothstep(0.10h, 0.45h, c.a);
+    half dryBrushAmount = thinness * (1.0h - washAmt) * (1.0h - wetSmoothness)
+                        * granPaintMask;
+    if (dryBrushAmount > 0.01h) {
+      half dbGap = smoothstep(-0.10h, 0.50h, grainNoise);
+      result = mix(result, canvasBase, dbGap * dryBrushAmount * 0.45h);
+    }
+  }
 
   half3 N;
   half  paintMask;
@@ -1249,13 +1615,28 @@ kernel void abexCompose(
   half ao = 1.0h - cavity * 0.35h * paintMask;
   result *= ao;
 
+  half wL = hwL.g;
+  half wR = hwR.g;
+  half wD = hwD.g;
+  half wU = hwU.g;
+  half wetGradX = abs(wR - wL);
+  half wetGradY = abs(wU - wD);
+  half wetGradMag = wetGradX + wetGradY;
+  half edgeStrength = smoothstep(0.08h, 0.35h, wetGradMag) * paintMask;
+  if (edgeStrength > 0.01h) {
+    half eLum = dot(result, half3(0.2126h, 0.7152h, 0.0722h));
+    half3 edgeBoosted = result + (result - half3(eLum)) * edgeStrength * 0.45h;
+    edgeBoosted *= (1.0h - edgeStrength * 0.18h);
+    result = edgeBoosted;
+  }
+
   half permH = half(hwC.b);
-  if (crackVis > 0.04h && permH > 0.05h) {
+  if (crackVis > 0.04h && permH > 0.25h) {
 
     half regionA = half(shaderSimplex2D(canvasPx * 0.0008));
     half regionB = half(shaderSimplex2D(canvasPx * 0.0014 + 247.0));
-    half maskA = smoothstep(0.30h, 0.55h, regionA);
-    half maskB = smoothstep(0.20h, 0.50h, regionB);
+    half maskA = smoothstep(0.10h, 0.50h, regionA);
+    half maskB = smoothstep(0.05h, 0.45h, regionB);
     half crackProne = maskA * maskB;
 
     if (crackProne > 0.01h) {
@@ -1263,17 +1644,21 @@ kernel void abexCompose(
       float n1 = shaderSimplex2D(canvasPx * 0.012);
       float n2 = shaderSimplex2D(canvasPx * 0.038 + 51.0) * 0.5;
       float crackField = n1 + n2;
-      half crackLine = 1.0h - smoothstep(0.0h, 0.06h, half(abs(crackField)));
+      half crackLine = 1.0h - smoothstep(0.0h, 0.10h, half(abs(crackField)));
 
       half crackDepth = 0.5h
                      + 0.5h * half(shaderSimplex2D(canvasPx * 0.005 + 31.0));
 
       half coverFactor = mix(1.0h, 0.30h, wetTotal);
 
+      half permEmphasis = 1.0h
+                        + smoothstep(0.25h, 0.55h, permH) * 0.6h;
+
       half crackStrength = saturate(crackVis * crackLine * crackProne);
       if (crackStrength > 0.005h) {
-        half3 crackTint = canvasBase * 0.5h;
-        half darkenAmount = crackStrength * 0.45h * crackDepth * coverFactor;
+        half3 crackTint = canvasBase * 0.3h;
+        half darkenAmount = crackStrength * 0.75h * crackDepth
+                          * coverFactor * permEmphasis;
         result = mix(result, crackTint, darkenAmount);
       }
     }
@@ -1308,17 +1693,13 @@ kernel void abexCompose(
     float v = dot(ng, gperp) * sAcross;
     float2 dng = gdir * u + gperp * v;
 
-    half nx1 = half(shaderSimplex2D(dng * 0.025         )) * 0.30h;
-    half ny1 = half(shaderSimplex2D(dng * 0.025 + 173.0 )) * 0.30h;
-    half nx2 = half(shaderSimplex2D(dng * 0.12  + 41.0  )) * 0.15h;
-    half ny2 = half(shaderSimplex2D(dng * 0.12  + 217.0 )) * 0.15h;
+    half nx1 = half(shaderSimplex2D(dng * 0.025         )) * 0.38h;
+    half ny1 = half(shaderSimplex2D(dng * 0.025 + 173.0 )) * 0.38h;
 
     half thickScale = pow(smoothstep(0.20h, 1.20h, half(hC)), 1.4h);
     half bodyAmp = paintMask * (0.10h + 0.50h * thickScale) * surfaceTexture;
 
-    half px = nx1 + nx2;
-    half py = ny1 + ny2;
-    N = normalize(N + half3(px, py, 0.0h) * bodyAmp);
+    N = normalize(N + half3(nx1, ny1, 0.0h) * bodyAmp);
   }
 
   float2 cvGrad = canvasWeaveGradient(ng);
@@ -1335,6 +1716,11 @@ kernel void abexCompose(
   const half3 warmLight  = half3(1.00h, 0.95h, 0.82h);
   const half3 coolShadow = half3(0.82h, 0.86h, 0.96h);
   half3 lightTint  = mix(coolShadow, warmLight, hl);
+
+  half wetDarkening = 1.0h - wetTotal * 0.12h;
+  half saturationFactor = 1.0h - wetTotal * 0.10h;
+  half dryLuma = dot(result, half3(0.2126h, 0.7152h, 0.0722h));
+  result = mix(half3(dryLuma), result, saturationFactor) * wetDarkening;
 
   half3 rgb = result * lightTint * hl;
 

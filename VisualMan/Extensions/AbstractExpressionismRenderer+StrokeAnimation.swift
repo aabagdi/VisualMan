@@ -18,8 +18,13 @@ extension AbstractExpressionismRenderer {
   func enqueueAnimatingStrokes(_ fresh: [AbExStroke]) {
     for s in fresh where animatingStrokes.count < Self.maxAnimatingStrokes {
       let typeRaw = Int(s.sizeOpacity.w)
-      let totalFrames = (typeRaw == 4) ? Self.knifeAnimationFrames
-                                        : Self.gesturalAnimationFrames
+      let totalFrames: Int
+      switch typeRaw {
+      case 4:  totalFrames = Self.knifeAnimationFrames
+      case 1:  totalFrames = Self.washAnimationFrames
+      case 5:  totalFrames = Self.scumbleAnimationFrames
+      default: totalFrames = Self.gesturalAnimationFrames
+      }
       animatingStrokes.append(AnimatingStroke(
         stroke: s, currentFrame: 0, totalFrames: totalFrames))
     }
@@ -30,15 +35,15 @@ extension AbstractExpressionismRenderer {
                                           spread: Float) -> [AbExStroke] {
     var candidates = [AbExStroke]()
     if energy > 0.05
-        && (wallClock - lastGesturalTime) > 0.70
+        && (wallClock - lastGesturalTime) > 0.95
         && candidates.count < 12
-        && nextSeed() < 0.45 {
+        && nextSeed() < 0.32 {
       appendGesturalStroke(to: &candidates, energy: energy, focus: focus, spread: spread)
     }
     if energy > 0.25
-        && (wallClock - lastGesturalTime) > 0.40
+        && (wallClock - lastGesturalTime) > 0.55
         && candidates.count < 12
-        && nextSeed() < 0.10 {
+        && nextSeed() < 0.07 {
       appendGesturalStroke(to: &candidates, energy: energy, focus: focus, spread: spread)
     }
     return candidates
@@ -70,10 +75,25 @@ extension AbstractExpressionismRenderer {
       }
     }
 
-    appendWash(to: &strokes, mid: mid, focus: focus)
-    appendAmbientWash(to: &strokes, energy: energy, focus: focus)
+    var preWash = strokes
+    appendWash(to: &preWash, mid: mid, focus: focus)
+    appendAmbientWash(to: &preWash, energy: energy, focus: focus)
+    let washPriorCount = strokes.count
+    let washAdded = preWash.count - washPriorCount
+    for k in 0..<washAdded {
+      freshSmearStrokes.append(preWash[washPriorCount + k])
+    }
+
     appendRogueStroke(to: &strokes, energy: energy)
-    appendScumble(to: &strokes, mid: mid, energy: energy, focus: focus)
+
+    var preScumble = strokes
+    appendScumble(to: &preScumble, mid: mid, energy: energy, focus: focus)
+    let scumblePriorCount = strokes.count
+    let scumbleAdded = preScumble.count - scumblePriorCount
+    for k in 0..<scumbleAdded {
+      freshSmearStrokes.append(preScumble[scumblePriorCount + k])
+    }
+
     appendSplatters(to: &strokes, high: high)
 
     var preKnife = strokes
@@ -92,16 +112,26 @@ extension AbstractExpressionismRenderer {
 
   func emitAnimatedStrokes(into base: [AbExStroke]) -> [AbExStroke] {
     var out = base
-    let extensionFrames = 8
     for anim in animatingStrokes where anim.currentFrame < anim.totalFrames
                                     && out.count < 12 {
+      let typeRaw = Int(anim.stroke.sizeOpacity.w)
+      let isWash = (typeRaw == 1)
+      let extensionFrames = isWash ? 0 : 8
       let drawFrames = anim.totalFrames - extensionFrames
       let cf = anim.currentFrame
       let progressMin: Float
       let progressMax: Float
       if cf < drawFrames {
-        progressMin = Float(cf) / Float(drawFrames)
-        progressMax = Float(cf + 1) / Float(drawFrames)
+        let tMin = Float(cf) / Float(drawFrames)
+        let tMax = Float(cf + 1) / Float(drawFrames)
+
+        if isWash {
+          progressMin = sqrt(tMin)
+          progressMax = sqrt(tMax)
+        } else {
+          progressMin = tMin
+          progressMax = tMax
+        }
       } else {
         let extProg = Float(cf - drawFrames + 1) / Float(extensionFrames)
         progressMin = 1.0

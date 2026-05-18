@@ -13,6 +13,7 @@ extension AbstractExpressionismRenderer {
     let paint: MTLComputePipelineState
     let compose: MTLComputePipelineState
     let velocity: MTLComputePipelineState
+    let passthrough: MTLComputePipelineState
   }
 
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
@@ -23,10 +24,12 @@ extension AbstractExpressionismRenderer {
     func makePipeline(_ name: String) -> MTLComputePipelineState? {
       Self.makePipeline(name, library: library, compiler: compiler)
     }
-    guard let paint    = makePipeline("abexPaint"),
-          let compose  = makePipeline("abexCompose"),
-          let velocity = makePipeline("abexVelocityDeposit") else { return nil }
-    return Pipelines(paint: paint, compose: compose, velocity: velocity)
+    guard let paint        = makePipeline("abexPaint"),
+          let compose      = makePipeline("abexCompose"),
+          let velocity     = makePipeline("abexVelocityDeposit"),
+          let passthrough  = makePipeline("abexPassthrough") else { return nil }
+    return Pipelines(paint: paint, compose: compose, velocity: velocity,
+                     passthrough: passthrough)
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
@@ -47,6 +50,9 @@ extension AbstractExpressionismRenderer {
 
   func configureResidencySet() {
     for buf in uniformBuffers { residencySet.addAllocation(buf) }
+    if let lut = mixboxLUT {
+      residencySet.addAllocation(lut)
+    }
     residencySet.commit()
     commandQueue.addResidencySet(residencySet)
   }

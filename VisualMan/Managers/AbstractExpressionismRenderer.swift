@@ -6,6 +6,7 @@
 //
 
 import Metal
+import MetalKit
 import os
 import QuartzCore
 
@@ -32,6 +33,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var paintPipeline: MTLComputePipelineState
   var composePipeline: MTLComputePipelineState
   var velocityPipeline: MTLComputePipelineState
+  var passthroughPipeline: MTLComputePipelineState
 
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
@@ -48,7 +50,9 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var lastKnifeTime: Float = -10
   var lastPollockTime: Float = -10
   var lastScumbleTime: Float = -10
+  var lastLineTime: Float = -10
   var lastDebugTrailTime: Float = -10
+  var framesSinceSmear: Int = 999
   var pollockEventCounter: Int = 0
   var hueOffset: Float = 0
   var strokeSeed: UInt32 = 0
@@ -58,6 +62,13 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var warmBias: Float = Float.random(in: 0.2..<0.8)
 
   var cameraPhase: Float = 0
+
+  var currentGestureRemaining: Int = 0
+  var currentGestureAngle: Float = 0
+  var currentGestureCenter: SIMD2<Float> = .zero
+  var currentGestureStarted: Float = 0
+  var currentGestureSpan: Float = 0.30
+  static let gestureTimeoutSeconds: Float = 2.0
 
   var atmosphereIntensity: Float = 0
   var atmosphereHue: Float = 0
@@ -109,7 +120,16 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var velocityA: MTLTexture?
   var velocityB: MTLTexture?
 
+  var dryColorA: MTLTexture?
+  var dryColorB: MTLTexture?
+  var dryColorMid: MTLTexture?
+
+  var substrateA: MTLTexture?
+  var substrateB: MTLTexture?
+
   var displayTex: MTLTexture?
+
+  var mixboxLUT: MTLTexture?
 
   var canvasSize: Int = 0
   var lastDisplayWidth: Int = 0
@@ -133,6 +153,8 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var animatingStrokes: [AnimatingStroke] = []
   static let knifeAnimationFrames: Int = 14
   static let gesturalAnimationFrames: Int = 12
+  static let scumbleAnimationFrames: Int = 20
+  static let washAnimationFrames: Int = 40
   static let maxAnimatingStrokes: Int = 5
 
   var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
@@ -180,7 +202,27 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     self.paintPipeline   = pipelines.paint
     self.composePipeline = pipelines.compose
     self.velocityPipeline = pipelines.velocity
+    self.passthroughPipeline = pipelines.passthrough
     self.residencySet = residencySet
+
+    let textureLoader = MTKTextureLoader(device: device)
+    let lutOptions: [MTKTextureLoader.Option: Any] = [
+      .textureUsage: NSNumber(value: MTLTextureUsage.shaderRead.rawValue),
+      .textureStorageMode: NSNumber(value: MTLStorageMode.private.rawValue),
+      .SRGB: false
+    ]
+    do {
+      let lut = try textureLoader.newTexture(name: "mixbox_lut",
+                                              scaleFactor: 1.0,
+                                              bundle: .main,
+                                              options: lutOptions)
+      self.mixboxLUT = lut
+      Self.logger.info(
+        "Loaded Mixbox LUT: \(lut.width)x\(lut.height), format=\(lut.pixelFormat.rawValue)")
+    } catch {
+      Self.logger.error("Failed to load Mixbox LUT: \(error)")
+      return nil
+    }
 
     configureResidencySet()
   }

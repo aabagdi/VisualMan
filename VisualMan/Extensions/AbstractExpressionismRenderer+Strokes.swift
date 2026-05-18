@@ -9,8 +9,9 @@ import Metal
 
 extension AbstractExpressionismRenderer {
   func appendGesturalStroke(to strokes: inout [AbExStroke],
-                            energy: Float, focus: SIMD2<Float>, spread: Float) {
-    lastGesturalTime = wallClock
+                            energy: Float,
+                            focus: SIMD2<Float>,
+                            spread: Float) {
     let isOutlier = nextSeed() < 0.28
     var pos: SIMD2<Float>
     if isOutlier {
@@ -20,41 +21,45 @@ extension AbstractExpressionismRenderer {
                             focus.y + (nextSeed() - 0.5) * 0.92 * spread)
       pos = applyDensityBias(at: suggested, dispersion: 0.30)
     }
-    let x = pos.x, y = pos.y
+    if !isOutlier {
+      guard attentionStrength(at: pos) > 0.45 else { return }
+    }
+    lastGesturalTime = wallClock
     let local = localStrokeAngle(at: pos)
-    let angle = (nextSeed() < 0.78)
+    let suggestedAngle = (nextSeed() < 0.78)
       ? local + (nextSeed() - 0.5) * 0.5
       : nextSeed() * .pi * 2
+
+    let gestured: (pos: SIMD2<Float>, angle: Float)
+    if isOutlier {
+      gestured = (pos: pos, angle: suggestedAngle)
+      currentGestureRemaining = 0
+    } else {
+      gestured = sampleGesturedStroke(suggestedPos: pos,
+                                       suggestedAngle: suggestedAngle,
+                                       continueProb: 0.70)
+    }
+    let x = gestured.pos.x, y = gestured.pos.y
+    let angle = gestured.angle
     let halfLen = 0.13 + energy * 0.22 + nextSeed() * 0.09
     let halfWidth = 0.012 + energy * 0.016 + nextSeed() * 0.008
     let opacity = 0.84 + energy * 0.16
     let bristleSeed = nextSeed() * 100
     let color = pickColorBiased()
     let dur = pickDurability(permanentChance: 0.03, stickyChance: 0.15)
-    let curveRoll = nextSeed()
-    let curvature: Float
-    if curveRoll < 0.30 {
-      curvature = 0
-    } else if curveRoll < 0.65 {
-      let amp = 0.25 + nextSeed() * 0.40
-      let dir: Float = nextSeed() < 0.5 ? 1 : -1
-      curvature = amp * dir
-    } else {
-      let amp = 0.25 + nextSeed() * 0.40
-      let dir: Float = nextSeed() < 0.5 ? 1 : -1
-      curvature = (1.0 + amp) * dir
-    }
+    let curvature = pickCurvature(zeroChance: 0.30, midThreshold: 0.65,
+                                   ampBase: 0.25, ampJitter: 0.40)
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
       color: SIMD4(color.x, color.y, color.z, packColorW(shape: 0, durability: dur)),
       animation: SIMD4(0, 1, 0, curvature)))
-    depositFlow(at: pos, angle: angle, weight: 0.5 + energy * 0.5)
-    depositDensity(at: pos, weight: 0.85 + energy * 0.4)
+    depositFlow(at: gestured.pos, angle: angle, weight: 0.5 + energy * 0.5)
+    depositDensity(at: gestured.pos, weight: 0.85 + energy * 0.4)
   }
 
   func appendRogueStroke(to strokes: inout [AbExStroke], energy: Float) {
-    guard strokes.count < 12, nextSeed() < 0.0035 else { return }
+    guard strokes.count < 12, nextSeed() < 0.0024 else { return }
     let x = (nextSeed() - 0.5) * 1.05
     let y = (nextSeed() - 0.5) * 1.10
     let angle = nextSeed() * .pi * 2
@@ -83,7 +88,8 @@ extension AbstractExpressionismRenderer {
   }
 
   func appendPollockTrails(to strokes: inout [AbExStroke],
-                           energy: Float, focus: SIMD2<Float>) {
+                           energy: Float,
+                           focus: SIMD2<Float>) {
     guard energy > 0.04, strokes.count < 12,
           (wallClock - lastPollockTime) > 1.0 else { return }
     lastPollockTime = wallClock
@@ -133,10 +139,11 @@ extension AbstractExpressionismRenderer {
 
   func appendWash(to strokes: inout [AbExStroke], mid: Float, focus: SIMD2<Float>) {
     guard mid > 0.06, (wallClock - lastWashTime) > 2.0, strokes.count < 12 else { return }
-    lastWashTime = wallClock
     let suggested = SIMD2(focus.x * 0.6 + (nextSeed() - 0.5) * 1.00,
                           focus.y * 0.6 + (nextSeed() - 0.5) * 1.05)
     let pos = applyDensityBias(at: suggested, dispersion: 0.40)
+    guard attentionStrength(at: pos) > 0.45 else { return }
+    lastWashTime = wallClock
     let x = pos.x, y = pos.y
     let angle = nextSeed() * .pi
     let concentrationRoll = nextSeed()
@@ -155,7 +162,7 @@ extension AbstractExpressionismRenderer {
     let halfLen = (0.18 + mid * 0.25) * sizeMult
     let halfWidth = (0.12 + mid * 0.18) * sizeMult
     let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
+    let color = pickStainColor()
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
@@ -165,18 +172,20 @@ extension AbstractExpressionismRenderer {
   }
 
   func appendAmbientWash(to strokes: inout [AbExStroke],
-                         energy: Float, focus: SIMD2<Float>) {
+                         energy: Float,
+                         focus: SIMD2<Float>) {
     guard energy > 0.01, strokes.count < 12, nextSeed() < 0.0025 else { return }
     let suggested = SIMD2(focus.x + (nextSeed() - 0.5) * 0.95,
                           focus.y + (nextSeed() - 0.5) * 1.00)
     let pos = applyDensityBias(at: suggested, dispersion: 0.40)
+    guard attentionStrength(at: pos) > 0.45 else { return }
     let x = pos.x, y = pos.y
     let angle = time * 0.1 + nextSeed() * .pi
     let halfLen = 0.20 + nextSeed() * 0.15
     let halfWidth = 0.14 + nextSeed() * 0.10
     let opacity: Float = 0.04 + energy * 0.05
     let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
+    let color = pickStainColor()
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
@@ -185,85 +194,13 @@ extension AbstractExpressionismRenderer {
     depositDensity(at: pos, weight: 0.6)
   }
 
-  private func splatterPosition(focus: SIMD2<Float>) -> (Float, Float) {
-    let isOutlier = nextSeed() < 0.35
-    if isOutlier {
-      return ((nextSeed() - 0.5) * 1.05, (nextSeed() - 0.5) * 1.10)
-    }
-    return (focus.x + (nextSeed() - 0.5) * 0.75,
-            focus.y + (nextSeed() - 0.5) * 0.80)
-  }
-
-  private func splatterSizeAndOpacity(high: Float) -> (radius: Float, opacity: Float) {
-    let sizeRoll = nextSeed()
-    let radius: Float
-    let opacityBase: Float
-    if sizeRoll < 0.30 {
-      radius = 0.004 + nextSeed() * 0.008
-      opacityBase = 0.95
-    } else if sizeRoll < 0.65 {
-      radius = 0.012 + nextSeed() * 0.013
-      opacityBase = 0.93
-    } else {
-      radius = 0.025 + nextSeed() * 0.015
-      opacityBase = 0.92
-    }
-    return (radius, opacityBase + high * 0.06)
-  }
-
-  private func splatterShape(radius: Float, at p: SIMD2<Float>, burstRoll: Float) -> (variant: Float, angle: Float) {
-    if radius < 0.012 {
-      return (burstRoll < 0.50 ? 2.0 : 0.0, 0)
-    } else if burstRoll < 0.15 {
-      let local = localStrokeAngle(at: p)
-      let angle = (nextSeed() < 0.60)
-        ? local + (nextSeed() - 0.5) * 0.8
-        : nextSeed() * .pi * 2
-      return (1.0, angle)
-    } else if burstRoll < 0.25 {
-      return (2.0, 0)
-    } else {
-      return (0.0, 0)
-    }
-  }
-
-  private func makeSplatterStroke(high: Float, focus: SIMD2<Float>,
-                                  burstShapeRoll: Float, burstTypeRoll: Float) -> AbExStroke {
-    let (x, y) = splatterPosition(focus: focus)
-    let (radius, opacity) = splatterSizeAndOpacity(high: high)
-    let (shapeVariant, angle) = splatterShape(radius: radius, at: SIMD2(x, y), burstRoll: burstShapeRoll)
-    let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
-    let dur = pickDurability(permanentChance: 0.12, stickyChance: 0.28)
-    return AbExStroke(
-      posAngle: SIMD4(x, y, angle, radius),
-      sizeOpacity: SIMD4(burstTypeRoll, opacity, bristleSeed, 2),
-      color: SIMD4(color.x, color.y, color.z, packColorW(shape: shapeVariant, durability: dur)),
-      animation: SIMD4(0, 1, 0, 0))
-  }
-
-  func appendSplatters(to strokes: inout [AbExStroke], high: Float) {
-    guard high > 0.05, (wallClock - lastSplatterTime) > 0.35, strokes.count < 12 else { return }
-    lastSplatterTime = wallClock
-    let count = high > 0.30 ? 2 : 1
-    for _ in 0..<count where strokes.count < 12 {
-      let focus = splatterFocus()
-      let burstShapeRoll = nextSeed()
-      let burstTypeRoll  = nextSeed()
-      strokes.append(makeSplatterStroke(high: high, focus: focus,
-                                         burstShapeRoll: burstShapeRoll,
-                                         burstTypeRoll: burstTypeRoll))
-      depositDensity(at: SIMD2(focus.x, focus.y), weight: 0.25)
-    }
-  }
-
   func appendKnifeStroke(to strokes: inout [AbExStroke],
-                         energy: Float, focus: SIMD2<Float>) {
+                         energy: Float,
+                         focus: SIMD2<Float>) {
     guard energy > 0.05,
           (wallClock - lastKnifeTime) > 0.65,
           strokes.count < 12,
           nextSeed() < 0.85 else { return }
-    lastKnifeTime = wallClock
     let isOutlier = nextSeed() < 0.30
     var pos: SIMD2<Float>
     if isOutlier {
@@ -273,47 +210,54 @@ extension AbstractExpressionismRenderer {
                             focus.y + (nextSeed() - 0.5) * 0.70)
       pos = applyDensityBias(at: suggested, dispersion: 0.30)
     }
-    let x = pos.x, y = pos.y
+    if !isOutlier {
+      guard attentionStrength(at: pos) > 0.45 else { return }
+    }
+    lastKnifeTime = wallClock
     let local = localStrokeAngle(at: pos)
-    let angle = (nextSeed() < 0.75)
+    let suggestedAngle = (nextSeed() < 0.75)
       ? local + (nextSeed() - 0.5) * 0.5
       : nextSeed() * .pi * 2
+
+    let gestured: (pos: SIMD2<Float>, angle: Float)
+    if isOutlier {
+      gestured = (pos: pos, angle: suggestedAngle)
+      currentGestureRemaining = 0
+    } else {
+      gestured = sampleGesturedStroke(suggestedPos: pos,
+                                       suggestedAngle: suggestedAngle,
+                                       continueProb: 0.55)
+    }
+    let x = gestured.pos.x, y = gestured.pos.y
+    let angle = gestured.angle
     let halfLen = 0.22 + nextSeed() * 0.22 + energy * 0.18
     let halfWidth = 0.011 + nextSeed() * 0.010
     let opacity: Float = 0.78 + nextSeed() * 0.20 + energy * 0.05
     let bristleSeed = nextSeed() * 100
     let color = pickKnifeColor()
-    let curveRoll = nextSeed()
-    let curvature: Float
-    if curveRoll < 0.40 {
-      curvature = 0
-    } else if curveRoll < 0.75 {
-      let amp = 0.20 + nextSeed() * 0.35
-      let dir: Float = nextSeed() < 0.5 ? 1 : -1
-      curvature = amp * dir
-    } else {
-      let amp = 0.20 + nextSeed() * 0.35
-      let dir: Float = nextSeed() < 0.5 ? 1 : -1
-      curvature = (1.0 + amp) * dir
-    }
+    let curvature = pickCurvature(zeroChance: 0.40, midThreshold: 0.75,
+                                   ampBase: 0.20, ampJitter: 0.35)
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 4),
       color: SIMD4(color.x, color.y, color.z, 0),
       animation: SIMD4(0, 1, 0, curvature)))
-    depositFlow(at: pos, angle: angle, weight: 1.0 + energy * 0.4)
-    depositDensity(at: pos, weight: 1.1 + energy * 0.3)
+    depositFlow(at: gestured.pos, angle: angle, weight: 1.0 + energy * 0.4)
+    depositDensity(at: gestured.pos, weight: 1.1 + energy * 0.3)
   }
 
   func appendScumble(to strokes: inout [AbExStroke],
-                     mid: Float, energy: Float, focus: SIMD2<Float>) {
+                     mid: Float,
+                     energy: Float,
+                     focus: SIMD2<Float>) {
     guard mid > 0.10,
           (wallClock - lastScumbleTime) > 1.2,
           strokes.count < 12,
           nextSeed() < 0.75 else { return }
-    lastScumbleTime = wallClock
     let x = focus.x + (nextSeed() - 0.5) * 0.55
     let y = focus.y + (nextSeed() - 0.5) * 0.55
+    guard attentionStrength(at: SIMD2(x, y)) > 0.45 else { return }
+    lastScumbleTime = wallClock
     let angle = nextSeed() * .pi * 2
     let halfLen   = 0.32 + nextSeed() * 0.22 + energy * 0.08
     let halfWidth = 0.06 + nextSeed() * 0.06 + energy * 0.02
@@ -342,4 +286,91 @@ extension AbstractExpressionismRenderer {
     depositDensity(at: SIMD2(x, y), weight: 1.0)
   }
 
+  func appendLine(to strokes: inout [AbExStroke],
+                  mid: Float, focus: SIMD2<Float>) {
+    guard mid > 0.08,
+          (wallClock - lastLineTime) > 1.5,
+          strokes.count < 12,
+          nextSeed() < 0.30 else { return }
+    lastLineTime = wallClock
+
+    let suggested = SIMD2(focus.x * 0.3 + (nextSeed() - 0.5) * 1.10,
+                          focus.y * 0.3 + (nextSeed() - 0.5) * 1.20)
+    let pos = pickEdgeSeekingPosition(near: suggested)
+    let x = pos.x, y = pos.y
+
+    let halfLen = 0.22 + nextSeed() * 0.32 + mid * 0.10
+    let halfWidth: Float = 0.0008 + nextSeed() * 0.0006
+
+    let edgeDir = densityEdgeDirection(at: pos)
+    let baseAngle: Float
+    if let edgeDir = edgeDir {
+      let edgeAngle = atan2(edgeDir.y, edgeDir.x)
+      baseAngle = edgeAngle + (nextSeed() - 0.5) * 0.8
+    } else {
+      baseAngle = nextSeed() * .pi * 2
+    }
+    let angle = baseAngle
+
+    let curvature: Float = (nextSeed() - 0.5) * 2.4
+
+    let opacity: Float = 0.65 + nextSeed() * 0.30
+    let bristleSeed = nextSeed() * 100
+
+    let isCharcoal = nextSeed() < 0.35
+    let g: Float
+    if isCharcoal {
+      g = 0.06 + nextSeed() * 0.10
+    } else {
+      g = 0.18 + nextSeed() * 0.14
+    }
+    let color = Self.srgbToLinear(SIMD3(g, g, g))
+
+    strokes.append(AbExStroke(
+      posAngle: SIMD4(x, y, angle, halfLen),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 6),
+      color: SIMD4(color.x, color.y, color.z, 0),
+      animation: SIMD4(0, 1, 0, curvature)))
+    depositDensity(at: pos, weight: 0.4)
+  }
+
+  private func pickEdgeSeekingPosition(near suggested: SIMD2<Float>)
+    -> SIMD2<Float> {
+    let dHere = sampleDensity(at: suggested)
+    if dHere < 0.05 { return suggested }
+
+    var bestPos = suggested
+    var bestEdgeStrength: Float = 0
+    let r: Float = 0.10
+    for k in 0..<8 {
+      let theta = Float(k) * .pi * 0.25
+      let candidate = SIMD2(suggested.x + cos(theta) * r,
+                            suggested.y + sin(theta) * r)
+      let dThere = sampleDensity(at: candidate)
+      let edgeStrength = abs(dThere - dHere)
+      if edgeStrength > bestEdgeStrength {
+        bestEdgeStrength = edgeStrength
+        bestPos = (suggested + candidate) * 0.5
+      }
+    }
+    if bestEdgeStrength > 0.10 {
+      return bestPos
+    }
+    return suggested
+  }
+
+  private func densityEdgeDirection(at pos: SIMD2<Float>) -> SIMD2<Float>? {
+    let eps: Float = 0.04
+    let dRight = sampleDensity(at: SIMD2(pos.x + eps, pos.y))
+    let dLeft  = sampleDensity(at: SIMD2(pos.x - eps, pos.y))
+    let dUp    = sampleDensity(at: SIMD2(pos.x, pos.y + eps))
+    let dDown  = sampleDensity(at: SIMD2(pos.x, pos.y - eps))
+    let gradX = dRight - dLeft
+    let gradY = dUp - dDown
+    let gradMag = sqrt(gradX * gradX + gradY * gradY)
+    if gradMag < 0.05 { return nil }
+    let edgeX = -gradY / gradMag
+    let edgeY = gradX / gradMag
+    return SIMD2(edgeX, edgeY)
+  }
 }
