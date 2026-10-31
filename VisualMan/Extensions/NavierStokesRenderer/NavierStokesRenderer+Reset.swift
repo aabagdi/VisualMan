@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/10/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 
 extension NavierStokesRenderer {
@@ -15,8 +16,6 @@ extension NavierStokesRenderer {
 
     sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
 
-    pendingDisplayReleases.forEach { residencySet.removeAllocation($0.texture) }
-    pendingDisplayReleases.removeAll()
     pendingTAAHistoryReleases.forEach { residencySet.removeAllocation($0.texture) }
     pendingTAAHistoryReleases.removeAll()
     residencySet.commit()
@@ -58,3 +57,5 @@ extension NavierStokesRenderer {
     framesSinceReinit = reinitInterval
   }
 }
+
+#endif

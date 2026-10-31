@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/7/26.
 //
 
+#if !targetEnvironment(simulator)
 import SwiftUI
 import MetalKit
 
@@ -20,3 +21,5 @@ struct LiquidLightVisualizerView: View {
       factory: { device in await LiquidLightRenderer.create(device: device) })
   }
 }
+
+#endif

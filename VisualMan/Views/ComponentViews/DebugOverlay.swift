@@ -11,7 +11,7 @@ struct DebugOverlay: View {
   var smoothedBass: Float
   var smoothedMid: Float
   var smoothedHigh: Float
-  
+
   var body: some View {
     VStack(alignment: .leading) {
       Text("Bass: \(smoothedBass, specifier: "%.3f")")

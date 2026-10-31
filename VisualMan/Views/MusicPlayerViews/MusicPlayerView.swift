@@ -104,6 +104,7 @@ struct MusicPlayerView: View {
       }
     }
     .toolbar {
+      #if !targetEnvironment(simulator)
       if visualizerSelection.current == .abstractExpressionism {
         ToolbarItem(placement: .topBarTrailing) {
           Button {
@@ -116,6 +117,7 @@ struct MusicPlayerView: View {
 
         ToolbarSpacer(.fixed, placement: .topBarTrailing)
       }
+      #endif
 
       ToolbarItem(placement: .topBarTrailing) {
         Button {

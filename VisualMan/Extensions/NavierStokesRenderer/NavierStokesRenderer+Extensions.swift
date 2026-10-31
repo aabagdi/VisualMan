@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 3/15/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import os
 
@@ -46,21 +47,11 @@ extension NavierStokesRenderer {
            fieldOut: dyeB, dissipation: 1.0)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    encoder.setComputePipelineState(pipelines.advect)
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
-    argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
-    argumentTable.setTexture(dyeC.gpuResourceID, index: 2)
-    let negDt: Float = -dtVal
-    let one: Float = 1.0
-    argumentTable.setAddress(writeUniform(negDt), index: 0)
-    argumentTable.setAddress(writeUniform(one), index: 1)
-    dispatchGrid(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
+    // The correction kernel computes the backward advection of dyeB inline,
+    // so no separate reverse-time pass is needed.
     encoder.setComputePipelineState(pipelines.macCormackCorrect)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(dyeB.gpuResourceID, index: 1)
-    argumentTable.setTexture(dyeC.gpuResourceID, index: 2)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 3)
     argumentTable.setTexture(dyeC.gpuResourceID, index: 4)
     argumentTable.setAddress(writeUniform(dtVal), index: 0)
@@ -95,18 +86,10 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
-    argumentTable.setTexture(psiB.gpuResourceID, index: 1)
-    argumentTable.setTexture(psiC.gpuResourceID, index: 2)
-    let negDt: Float = -dtVal
-    argumentTable.setAddress(writeUniform(negDt), index: 0)
-    dispatchGrid(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
+    // Backward advection of psiB happens inside the correction kernel.
     encoder.setComputePipelineState(pipelines.psiMacCormackCorrect)
     argumentTable.setTexture(psiA.gpuResourceID, index: 0)
     argumentTable.setTexture(psiB.gpuResourceID, index: 1)
-    argumentTable.setTexture(psiC.gpuResourceID, index: 2)
     argumentTable.setTexture(velocityA.gpuResourceID, index: 3)
     argumentTable.setTexture(psiC.gpuResourceID, index: 4)
     argumentTable.setAddress(writeUniform(dtVal), index: 0)
@@ -130,8 +113,8 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
     argumentTable.setTexture(u0.gpuResourceID, index: 1)
     dispatchGrid(encoder: encoder)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
+    // No barrier: psiInit writes psiA and never touches u0/velocityA.
     encoder.setComputePipelineState(pipelines.psiInit)
     argumentTable.setTexture(psiA.gpuResourceID, index: 0)
     dispatchGrid(encoder: encoder)
@@ -203,33 +186,27 @@ extension NavierStokesRenderer {
     dispatchGrid(encoder: encoder, width: dstSize, height: dstSize)
   }
 
-  func render(encoder: any MTL4ComputeCommandEncoder, output: MTLTexture, bass: Float, mid: Float) {
+  /// Writes the final image into `historyOut`, which is also what the blit
+  /// pass presents. `historyIn` is the previous frame's output.
+  func render(encoder: any MTL4ComputeCommandEncoder,
+              historyIn: MTLTexture,
+              historyOut: MTLTexture) {
     encoder.setComputePipelineState(pipelines.render)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
-    argumentTable.setTexture(output.gpuResourceID, index: 1)
     argumentTable.setTexture(bloomA.gpuResourceID, index: 2)
     argumentTable.setTexture(bloomMidA.gpuResourceID, index: 3)
     argumentTable.setTexture(bloomLoA.gpuResourceID, index: 4)
-
-    let usePrev = (frameNumber & 1) == 0
-    let historyPrev = usePrev ? taaHistoryA : taaHistoryB
-    let historyNext = usePrev ? taaHistoryB : taaHistoryA
-    if let hPrev = historyPrev, let hNext = historyNext {
-      argumentTable.setTexture(hPrev.gpuResourceID, index: 5)
-      argumentTable.setTexture(hNext.gpuResourceID, index: 6)
-    } else {
-      argumentTable.setTexture(dyeA.gpuResourceID, index: 5)
-      argumentTable.setTexture(output.gpuResourceID, index: 6)
-    }
-
+    argumentTable.setTexture(historyIn.gpuResourceID, index: 5)
+    argumentTable.setTexture(historyOut.gpuResourceID, index: 6)
     argumentTable.setAddress(frameUniformsAddress, index: 0)
 
-    dispatchGrid(encoder: encoder, width: output.width, height: output.height)
+    dispatchGrid(encoder: encoder, width: historyOut.width, height: historyOut.height)
   }
-  
+
   func runSimulationPass(encoder: any MTL4ComputeCommandEncoder,
                          bass: Float, mid: Float, high: Float,
-                         output: MTLTexture) {
+                         historyIn: MTLTexture,
+                         historyOut: MTLTexture) {
     let validFlag: UInt32 = taaHistoryValid ? 1 : 0
     let audioEnergy = min(1.0, (bass + mid + high) / 3.0)
     let dynamicTAABlend = max(0.55, taaBlendFactor - audioEnergy * 0.30)
@@ -278,7 +255,7 @@ extension NavierStokesRenderer {
 
     runBloomPasses(encoder: encoder, bass: bass, mid: mid)
 
-    render(encoder: encoder, output: output, bass: bass, mid: mid)
+    render(encoder: encoder, historyIn: historyIn, historyOut: historyOut)
   }
 
   func runBloomPasses(encoder: any MTL4ComputeCommandEncoder,
@@ -305,3 +282,5 @@ extension NavierStokesRenderer {
                             threadsPerThreadgroup: threadGroupSize)
   }
 }
+
+#endif

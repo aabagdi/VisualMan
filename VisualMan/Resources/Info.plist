@@ -4,11 +4,11 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>CFBundleGetInfoString</key>
+	<string></string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
 	</array>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>VisualMan saves visualizer screenshots to your photo library.</string>
 </dict>
 </plist>

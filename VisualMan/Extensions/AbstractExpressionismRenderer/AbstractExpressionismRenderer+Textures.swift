@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/24/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 
 extension AbstractExpressionismRenderer {
@@ -52,15 +53,27 @@ extension AbstractExpressionismRenderer {
     drainPendingReleases(&pendingTextureReleases)
   }
 
-  private func queueCurrentCanvasForRelease() {
+  private func queueCurrentCanvasForRelease(excluding: Set<ObjectIdentifier> = []) {
     for old in [colorA, colorB, heightWetA, heightWetB, colorMid, heightWetMid,
                 velocityA, velocityB,
                 dryColorA, dryColorB, dryColorMid,
                 substrateA, substrateB] {
-      if let t = old {
+      if let t = old, !excluding.contains(ObjectIdentifier(t as AnyObject)) {
         pendingTextureReleases.append((frame: frameNumber, texture: t))
       }
     }
+  }
+
+  private func clearResampleSources() {
+    for t in [resampleColorSrc, resampleHeightWetSrc,
+              resampleDryColorSrc, resampleSubstrateSrc] {
+      if let t { pendingTextureReleases.append((frame: frameNumber, texture: t)) }
+    }
+    resampleColorSrc = nil
+    resampleHeightWetSrc = nil
+    resampleDryColorSrc = nil
+    resampleSubstrateSrc = nil
+    pendingResample = false
   }
 
   private func clearCanvasTextures() {
@@ -73,8 +86,26 @@ extension AbstractExpressionismRenderer {
     canvasSize = 0
   }
 
-  private func rebuildCanvasTextures(size: Int) -> Bool {
-    queueCurrentCanvasForRelease()
+  private func captureResampleSources() -> Set<ObjectIdentifier> {
+    let readA = currentIsA
+    let cSrc  = readA ? colorA : colorB
+    let hwSrc = readA ? heightWetA : heightWetB
+    let dSrc  = readA ? dryColorA : dryColorB
+    let sSrc  = readA ? substrateA : substrateB
+    resampleColorSrc = cSrc
+    resampleHeightWetSrc = hwSrc
+    resampleDryColorSrc = dSrc
+    resampleSubstrateSrc = sSrc
+    var exclude: Set<ObjectIdentifier> = []
+    for t in [cSrc, hwSrc, dSrc, sSrc] {
+      if let t { exclude.insert(ObjectIdentifier(t as AnyObject)) }
+    }
+    return exclude
+  }
+
+  private func rebuildCanvasTextures(size: Int, preserveContent: Bool) -> Bool {
+    let exclude = preserveContent ? captureResampleSources() : []
+    queueCurrentCanvasForRelease(excluding: exclude)
 
     let colDesc = Self.makeCanvasDescriptor(width: size, height: size)
     let hwDesc = Self.makeHeightWetDescriptor(width: size, height: size)
@@ -95,6 +126,7 @@ extension AbstractExpressionismRenderer {
           let dcMid = device.makeTexture(descriptor: dryDesc),
           let sA = device.makeTexture(descriptor: subDesc),
           let sB = device.makeTexture(descriptor: subDesc) else {
+      clearResampleSources()
       clearCanvasTextures()
       return false
     }
@@ -110,44 +142,52 @@ extension AbstractExpressionismRenderer {
     dryColorA = dcA; dryColorB = dcB; dryColorMid = dcMid
     substrateA = sA; substrateB = sB
     canvasSize = size
-    isFirstFrame = true
+    isFirstFrame = !preserveContent
+    pendingResample = preserveContent
     currentIsA = true
     return true
   }
 
   private func rebuildDisplayTexture(width: Int, height: Int) -> Bool {
-    if let old = displayTex {
+    for old in displayTextures {
       pendingTextureReleases.append((frame: frameNumber, texture: old))
     }
     let dispDesc = Self.makeDisplayDescriptor(width: width, height: height)
-    guard let disp = device.makeTexture(descriptor: dispDesc) else {
-      displayTex = nil
+    guard let dispA = device.makeTexture(descriptor: dispDesc),
+          let dispB = device.makeTexture(descriptor: dispDesc) else {
+      displayTextures = []
       lastDisplayWidth = 0; lastDisplayHeight = 0
       return false
     }
-    residencySet.addAllocation(disp)
-    displayTex = disp
+    residencySet.addAllocation(dispA)
+    residencySet.addAllocation(dispB)
+    displayTextures = [dispA, dispB]
     lastDisplayWidth = width
     lastDisplayHeight = height
     return true
   }
 
   func ensureCanvasTextures(displayWidth: Int, displayHeight: Int) -> Bool {
-    let requestedCanvasSize = max(displayWidth, displayHeight)
-    let targetCanvasSize = max(canvasSize, requestedCanvasSize)
+    let scaledF = Float(max(displayWidth, displayHeight)) * Self.canvasRenderScale
+    let scaled = max(2, Int(scaledF.rounded()))
+    let requestedCanvasSize = scaled - (scaled % 2)
 
     let canvasExists = colorA != nil && colorB != nil && colorMid != nil
         && heightWetA != nil && heightWetB != nil && heightWetMid != nil
         && velocityA != nil && velocityB != nil
         && dryColorA != nil && dryColorB != nil && dryColorMid != nil
         && substrateA != nil && substrateB != nil
-    let canvasNeedsRebuild = !canvasExists || targetCanvasSize > canvasSize
+
+    let grow = requestedCanvasSize > canvasSize
+    let shrink = requestedCanvasSize < canvasSize - max(2, canvasSize / 16)
+    let canvasNeedsRebuild = !canvasExists || grow || shrink
 
     if canvasNeedsRebuild {
-      guard rebuildCanvasTextures(size: targetCanvasSize) else { return false }
+      guard rebuildCanvasTextures(size: requestedCanvasSize,
+                                  preserveContent: canvasExists) else { return false }
     }
 
-    let displayNeedsRebuild = displayTex == nil
+    let displayNeedsRebuild = displayTextures.count != 2
         || displayWidth != lastDisplayWidth
         || displayHeight != lastDisplayHeight
 
@@ -231,7 +271,8 @@ extension AbstractExpressionismRenderer {
                 dryColorIn: tex.dryColor[0], dryColorOut: tex.dryColor[1],
                 substrateIn: tex.substrate[0], substrateOut: tex.substrate[1],
                 params: params, strokes: [],
-                tileMap: TileMap.empty)
+                tileMap: TileMap.empty,
+                region: CanvasRegion(x: 0, y: 0, width: 64, height: 64))
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     renderCompose(encoder: encoder,
                   color: tex.color[1], heightWet: tex.heightWet[1],
@@ -250,3 +291,5 @@ extension AbstractExpressionismRenderer {
     residencySet.commit()
   }
 }
+
+#endif

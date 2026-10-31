@@ -238,7 +238,7 @@ actor DSPProcessor {
     }
   }
   
-  private func smoothVisualizerBars(_ newBars: [32 of Float], dt: Float) {
+  private func smoothVisualizerBars(_ newBars: borrowing [32 of Float], dt: Float) {
     let safeDt = max(dt, 1e-4)
     let attackRetention = exp(-safeDt / Constants.attackTau)
     let releaseRetention = exp(-safeDt / Constants.releaseTau)
@@ -252,11 +252,12 @@ actor DSPProcessor {
     }
   }
   
-  private func updateAutomaticGainControl(bars: [32 of Float], dt: Float) {
+  private func updateAutomaticGainControl(bars: borrowing [32 of Float], dt: Float) {
+    // A scalar reduction over 32 elements beats vDSP here: the call overhead
+    // exceeds the work, and it avoids needing a mutable copy of `bars`.
     var maxBar: Float = 0
-    var bars = bars
-    bars.withUnsafeElementPointer { ptr in
-      vDSP_maxv(ptr, 1, &maxBar, vDSP_Length(Constants.barCount))
+    for i in 0..<Constants.barCount {
+      maxBar = max(maxBar, bars[i])
     }
 
     let safeDt = max(dt, 1e-4)

@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 3/15/26.
 //
 
+#if !targetEnvironment(simulator)
 import SwiftUI
 import MetalKit
 
@@ -19,3 +20,5 @@ struct NavierStokesVisualizerView: View {
       factory: { device in await NavierStokesRenderer.create(device: device) })
   }
 }
+
+#endif

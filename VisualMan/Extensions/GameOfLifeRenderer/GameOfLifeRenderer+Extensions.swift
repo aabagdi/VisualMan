@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/12/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import os
 
@@ -131,3 +132,5 @@ extension GameOfLifeRenderer {
     simA.replace(region: region, mipmapLevel: 0, withBytes: &pixels, bytesPerRow: w * 2)
   }
 }
+
+#endif

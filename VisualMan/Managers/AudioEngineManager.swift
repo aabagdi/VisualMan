@@ -104,7 +104,6 @@ final class AudioEngineManager {
   private func setupAudioEngine() throws {
     do {
       try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-      try AVAudioSession.sharedInstance().setActive(true)
     } catch {
       throw VMError.invalidSession(underlying: error)
     }
@@ -144,21 +143,21 @@ final class AudioEngineManager {
     }
 
     let isSecurityScoped = (source as? FileAudioSource)?.isSecurityScoped ?? false
-    try play(from: url, isSecurityScoped: isSecurityScoped)
+    try await play(from: url, isSecurityScoped: isSecurityScoped)
     currentAudioSourceURL = source.getPlaybackURL()
   }
 
-  private func play(from url: URL, isSecurityScoped: Bool) throws {
+  private func play(from url: URL, isSecurityScoped: Bool) async throws {
     stopSecurityScopedAccess()
 
     let accessing = url.startAccessingSecurityScopedResource()
     if isSecurityScoped || accessing {
       securityScopedURL = url
     }
-    try playAudioFromURL(url)
+    try await playAudioFromURL(url)
   }
   
-  private func playAudioFromURL(_ url: URL) throws {
+  private func playAudioFromURL(_ url: URL) async throws {
     guard let engine,
           let player else {
       throw VMError.nilEngineOrPlayer
@@ -176,7 +175,7 @@ final class AudioEngineManager {
       
       duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
       
-      try AVAudioSession.sharedInstance().setActive(true)
+      try await activateAudioSession()
 
       engine.prepare()
 
@@ -184,13 +183,7 @@ final class AudioEngineManager {
         try engine.start()
       }
       
-      player.scheduleFile(audioFile, at: nil) { [weak self] in
-        Task { @MainActor in
-          guard let self,
-                self.currentPlaybackID == playbackID else { return }
-          self.handlePlaybackCompleted()
-        }
-      }
+      schedule(audioFile, on: player, playbackID: playbackID)
       
       installAudioTap(on: engine)
 
@@ -203,6 +196,25 @@ final class AudioEngineManager {
     }
 
     player.play()
+  }
+  
+  private func schedule(_ audioFile: AVAudioFile, on player: AVAudioPlayerNode, playbackID: UUID) {
+    player.scheduleFile(audioFile, at: nil) { [weak self] in
+      Task { @MainActor in
+        guard let self,
+              self.currentPlaybackID == playbackID else { return }
+        self.handlePlaybackCompleted()
+      }
+    }
+  }
+  
+  private func activateAudioSession() async throws {
+    let session = AVAudioSession.sharedInstance()
+    if #available(iOS 27.0, *) {
+      try await session.activate(options: [])
+    } else {
+      try session.setActive(true)
+    }
   }
   
   func installAudioTap(on engine: AVAudioEngine) {

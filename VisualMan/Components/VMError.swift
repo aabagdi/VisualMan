@@ -8,6 +8,7 @@
 import Foundation
 
 enum VMError: LocalizedError, Sendable {
+  case unableToActivatePlayer
   case invalidSession(underlying: (any Error & Sendable)?)
   case invalidURL
   case nilEngineOrPlayer
@@ -18,6 +19,7 @@ enum VMError: LocalizedError, Sendable {
   
   var errorDescription: String? {
     switch self {
+    case .unableToActivatePlayer: "There was an error activating the player session. Please try again."
     case .invalidSession: "There was an error setting up the player. Please try again."
     case .invalidURL: "There was an error loading the file. Please try again."
     case .nilEngineOrPlayer: "There was an error setting up the player. Please try again."

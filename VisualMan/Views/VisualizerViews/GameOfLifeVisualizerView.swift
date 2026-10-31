@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/12/26.
 //
 
+#if !targetEnvironment(simulator)
 import SwiftUI
 import MetalKit
 
@@ -20,3 +21,5 @@ struct GameOfLifeVisualizerView: View {
       factory: { device in await GameOfLifeRenderer.create(device: device) })
   }
 }
+
+#endif

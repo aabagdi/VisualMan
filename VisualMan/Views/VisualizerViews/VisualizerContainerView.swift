@@ -51,6 +51,16 @@ struct VisualizerContainerView: View {
       return AnyView(MetaballVisualizerView(audioLevels: audioLevels))
     case .ink:
       return AnyView(InkVisualizerView(audioLevels: audioLevels))
+    #if targetEnvironment(simulator)
+    // Metal 4 renderers aren't compiled for the simulator.
+    case .navierStokes, .liquidLight, .gameOfLife, .abstractExpressionism:
+      return AnyView(
+        ContentUnavailableView("Not Available in Simulator",
+                               systemImage: "cpu",
+                               description: Text("This visualizer uses Metal 4. Run on a device to see it."))
+          .background(Color.black)
+          .ignoresSafeArea())
+    #else
     case .navierStokes:
       return AnyView(NavierStokesVisualizerView(audioLevels: audioLevels))
     case .liquidLight:
@@ -59,6 +69,7 @@ struct VisualizerContainerView: View {
       return AnyView(GameOfLifeVisualizerView(audioLevels: audioLevels))
     case .abstractExpressionism:
       return AnyView(AbstractExpressionismVisualizerView(audioLevels: audioLevels, isPlaying: isPlaying))
+    #endif
     }
   }
 }

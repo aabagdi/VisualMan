@@ -14,7 +14,7 @@ struct FilesTabView: View {
   @State private var fileLoadingFailed: Bool = false
   @State private var fileError: VMError?
   @State private var isShowingVisualizer = false
-
+  
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(AudioPlaylistManager.self) private var playlistManager
 

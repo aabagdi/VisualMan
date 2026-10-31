@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/12/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import QuartzCore
 
@@ -171,3 +172,5 @@ extension LiquidLightRenderer {
     encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
   }
 }
+
+#endif

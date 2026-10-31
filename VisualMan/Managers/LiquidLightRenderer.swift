@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/7/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import os
 import QuartzCore
@@ -87,8 +88,14 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
 
   var currentUniformBuffer: MTLBuffer
 
+  /// Fraction of the drawable resolution the effect renders at. The image is
+  /// soft and the glass blur hides the bilinear upscale in the blit pass.
+  static let renderScale: Float = 0.75
+
   private var intermediateTexture: MTLTexture?
-  private var finalTexture: MTLTexture?
+  /// Two outputs, alternated per frame, so the next frame's compute never
+  /// writes the texture the previous frame's blit may still be reading.
+  private var finalTextures: [MTLTexture] = []
   private var lastDrawableWidth: Int = 0
   private var lastDrawableHeight: Int = 0
 
@@ -100,17 +107,19 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   private var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
   static func create(device: MTLDevice) async -> LiquidLightRenderer? {
-    let pipelines = await Task.detached(priority: .userInitiated) {
-      guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
-        return nil as Pipelines?
-      }
-      return createPipelines(device: device, compiler: compiler)
-    }.value
-
-    guard let pipelines else { return nil }
+    guard let pipelines = await compilePipelines(device: device) else { return nil }
     guard let renderer = LiquidLightRenderer(device: device, pipelines: pipelines) else { return nil }
     renderer.warmUpGPU()
     return renderer
+  }
+
+  // Shader compilation is slow; @concurrent keeps it off the main actor.
+  @concurrent
+  nonisolated private static func compilePipelines(device: MTLDevice) async -> Pipelines? {
+    guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+      return nil
+    }
+    return createPipelines(device: device, compiler: compiler)
   }
 
   private init?(device: MTLDevice, pipelines: Pipelines) {
@@ -212,14 +221,14 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     if width == lastDrawableWidth
         && height == lastDrawableHeight
         && intermediateTexture != nil
-        && finalTexture != nil {
+        && finalTextures.count == 2 {
       return true
     }
 
     if let old = intermediateTexture {
       pendingTextureReleases.append((frame: frameNumber, texture: old))
     }
-    if let old = finalTexture {
+    for old in finalTextures {
       pendingTextureReleases.append((frame: frameNumber, texture: old))
     }
 
@@ -233,20 +242,22 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     desc.storageMode = .private
 
     guard let interTex = device.makeTexture(descriptor: desc),
-          let finalTex = device.makeTexture(descriptor: desc) else {
+          let finalTexA = device.makeTexture(descriptor: desc),
+          let finalTexB = device.makeTexture(descriptor: desc) else {
       intermediateTexture = nil
-      finalTexture = nil
+      finalTextures = []
       lastDrawableWidth = 0
       lastDrawableHeight = 0
       return false
     }
 
     residencySet.addAllocation(interTex)
-    residencySet.addAllocation(finalTex)
+    residencySet.addAllocation(finalTexA)
+    residencySet.addAllocation(finalTexB)
     residencySet.commit()
 
     intermediateTexture = interTex
-    finalTexture = finalTex
+    finalTextures = [finalTexA, finalTexB]
     lastDrawableWidth = width
     lastDrawableHeight = height
     return true
@@ -261,13 +272,15 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
 
     let smoothed = processAudio(bass: bass, mid: mid, high: high)
 
-    guard ensureIntermediateTextures(width: drawableWidth, height: drawableHeight),
-          let intermediateTex = intermediateTexture,
-          let finalTex = finalTexture else {
+    let width = max(1, Int((Float(drawableWidth) * Self.renderScale).rounded()))
+    let height = max(1, Int((Float(drawableHeight) * Self.renderScale).rounded()))
+    guard ensureIntermediateTextures(width: width, height: height),
+          let intermediateTex = intermediateTexture else {
       return nil
     }
 
     guard let encoder = beginFrame() else { return nil }
+    let finalTex = finalTextures[Int(frameNumber & 1)]
 
     renderLiquidLight(encoder: encoder, output: intermediateTex, audio: smoothed)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
@@ -280,3 +293,5 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     return finalTex
   }
 }
+
+#endif

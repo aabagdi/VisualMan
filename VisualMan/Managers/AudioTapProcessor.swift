@@ -80,7 +80,10 @@ final class AudioTapProcessor: Sendable {
     writeIndex.store(write &+ effective, ordering: .releasing)
   }
 
-  private func drainAndProcess(dsp: DSPProcessor) async -> DSPProcessor.DSPResult? {
+  // Runs on the DSP actor so the drain copy (and any wait on ringLock while the
+  // audio thread writes) stays off the main actor. The read cursor is only
+  // touched from DSP-actor-isolated code, which serializes it with reset.
+  private func drainAndProcess(dsp: isolated DSPProcessor) -> DSPProcessor.DSPResult? {
     let w = writeIndex.load(ordering: .acquiring)
     var r = readIndex.load(ordering: .relaxed)
     var count = w &- r
@@ -115,7 +118,15 @@ final class AudioTapProcessor: Sendable {
     }
 
     readIndex.store(w, ordering: .releasing)
-    return await dsp.processSamples(drainScratch[0..<count], sampleRate: rate)
+    return dsp.processSamples(drainScratch[0..<count], sampleRate: rate)
+  }
+
+  private func resetState(dsp: isolated DSPProcessor) {
+    ringLock.withLock {
+      readIndex.store(writeIndex.load(ordering: .acquiring), ordering: .releasing)
+      sampleRateBits.store(0, ordering: .relaxed)
+    }
+    dsp.reset()
   }
 
   @MainActor
@@ -126,10 +137,6 @@ final class AudioTapProcessor: Sendable {
   }
 
   func reset() async {
-    ringLock.withLock {
-      readIndex.store(writeIndex.load(ordering: .acquiring), ordering: .releasing)
-      sampleRateBits.store(0, ordering: .relaxed)
-    }
-    await dspProcessor.reset()
+    await resetState(dsp: dspProcessor)
   }
 }

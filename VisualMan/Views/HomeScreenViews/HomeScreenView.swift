@@ -54,6 +54,7 @@ struct HomeScreenView: View {
         }
       }
     }
+    .hingeToolbarOrientation()
     .tabBarMinimizeBehavior(.onScrollDown)
     .environment(visualizerSelection)
   }

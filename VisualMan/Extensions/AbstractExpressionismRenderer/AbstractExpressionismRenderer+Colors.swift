@@ -5,6 +5,7 @@
 //  Created by on 5/18/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import simd
 
@@ -87,11 +88,22 @@ extension AbstractExpressionismRenderer {
     let energy = (slowEnvelope.x + slowEnvelope.y + slowEnvelope.z) / 3.0
     let dissonance = min(max(energy * 1.5, 0.05), 0.95)
 
+    // Hue offset distribution. Previously the 60% "small offset" path
+    // used ±0.12 jitter - which keeps all picks within the same pigment
+    // family (e.g. all greens when baseHue is in the green range,
+    // producing visually identical strokes since pure-pigment snapping
+    // collapses near-identical hues to the same pigment).
+    //
+    // Now the small offset is ±0.35 (about 4 pigments of spread on the
+    // 13-pigment palette). Combined with the wider 0.42 jumps and full
+    // complements, the picker can produce ANY of the 13 pigments at
+    // any moment, with a gentle audio-reactive bias toward baseHue's
+    // current family.
     let r = nextSeed()
     let offset: Float
-    if r < 0.60 {
-      offset = (nextSeed() - 0.5) * 0.24 * (0.5 + dissonance * 0.5)
-    } else if r < 0.88 {
+    if r < 0.55 {
+      offset = (nextSeed() - 0.5) * 0.70 * (0.5 + dissonance * 0.5)
+    } else if r < 0.85 {
       let direction: Float = (nextSeed() < 0.5) ? 1.0 : -1.0
       offset = direction * (0.42 + (nextSeed() - 0.5) * 0.16) * dissonance
     } else {
@@ -101,11 +113,7 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    let pigment = Self.nearestPigment(toHue: hue, valueBias: 0.0)
-
-    let variation = SIMD3<Float>(nextSeed() - 0.5, nextSeed() - 0.5, nextSeed() - 0.5) * 0.05
-    let varied = pigment.linearRgb + variation
-    return SIMD3(max(0, varied.x), max(0, varied.y), max(0, varied.z))
+    return Self.nearestPigment(toHue: hue, valueBias: 0.0).linearRgb
   }
 
   func pickKnifeColor() -> SIMD3<Float> {
@@ -130,11 +138,10 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    let pigment = Self.nearestPigment(toHue: hue, valueBias: 0.4)
-
-    let variation = SIMD3<Float>(nextSeed() - 0.5, nextSeed() - 0.5, nextSeed() - 0.5) * 0.04
-    let varied = pigment.linearRgb + variation
-    return SIMD3(max(0, varied.x), max(0, varied.y), max(0, varied.z))
+    // Exact pigment, no variation. valueBias 0.4 still prefers brighter
+    // pigments for knife strokes (cadmium yellow/red/orange) since
+    // knives should read as bold gestures.
+    return Self.nearestPigment(toHue: hue, valueBias: 0.4).linearRgb
   }
 
   func pickStainColor() -> SIMD3<Float> {
@@ -156,13 +163,13 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    let pigment = Self.nearestPigment(toHue: hue, valueBias: 0.0)
-
-    let whiteTarget = SIMD3<Float>(1.0, 1.0, 0.97)
-    let dilution: Float = 0.65 + nextSeed() * 0.20
-    let diluted = pigment.linearRgb * (1.0 - dilution) + whiteTarget * dilution
-
-    return SIMD3(max(0, diluted.x), max(0, diluted.y), max(0, diluted.z))
+    // Exact pigment, no dilution. Stains will now look saturated rather
+    // than pastel - the previous "dilute toward white" produced
+    // pastel-looking stains but the diluted color wasn't a Mixbox
+    // pigment, defeating the K-M mixing for stain-stain overlaps.
+    // Saturated stains are more aggressive but the palette purity
+    // matters more for accurate downstream mixing.
+    return Self.nearestPigment(toHue: hue, valueBias: 0.0).linearRgb
   }
 
   nonisolated static func hsvToRgb(_ hsv: SIMD3<Float>) -> SIMD3<Float> {
@@ -184,3 +191,5 @@ extension AbstractExpressionismRenderer {
     return rgb + SIMD3<Float>(repeating: m)
   }
 }
+
+#endif

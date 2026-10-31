@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 3/15/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import os
 
@@ -275,3 +276,5 @@ extension NavierStokesRenderer {
     commandQueue.addResidencySet(residencySet)
   }
 }
+
+#endif

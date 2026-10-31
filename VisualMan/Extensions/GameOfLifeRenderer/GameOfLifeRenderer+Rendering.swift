@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/14/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import QuartzCore
 
@@ -55,6 +56,18 @@ extension GameOfLifeRenderer {
     commandQueue.signalDrawable(drawable)
     drawable.present()
 
+    advanceSimulationIfNeeded()
+  }
+
+  func commitCompute() {
+    commandBuffer.endCommandBuffer()
+    commandQueue.commit([commandBuffer])
+    commandQueue.signalEvent(sharedEvent, value: frameNumber)
+
+    advanceSimulationIfNeeded()
+  }
+
+  private func advanceSimulationIfNeeded() {
     if pendingShouldStep {
       swap(&simA, &simB)
       pendingShouldStep = false
@@ -132,3 +145,5 @@ extension GameOfLifeRenderer {
     encoder.dispatchThreads(threadsPerGrid: renderGrid, threadsPerThreadgroup: renderTG)
   }
 }
+
+#endif

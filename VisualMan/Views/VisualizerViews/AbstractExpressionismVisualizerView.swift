@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/23/26.
 //
 
+#if !targetEnvironment(simulator)
 import SwiftUI
 import MetalKit
 
@@ -30,3 +31,5 @@ struct AbstractExpressionismVisualizerView: View {
       }
   }
 }
+
+#endif

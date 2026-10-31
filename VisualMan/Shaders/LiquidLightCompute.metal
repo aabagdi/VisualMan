@@ -83,7 +83,7 @@ inline VoronoiResult voronoi(float2 p) {
   float dist2 = 8.0;
   float2 nearestDelta = float2(0.0);
   float2 secondDelta = float2(0.0);
-  float cellID = 0.0;
+  float2 nearestCell = n;
 
   for (int j = -1; j <= 1; j++) {
     for (int i = -1; i <= 1; i++) {
@@ -96,7 +96,7 @@ inline VoronoiResult voronoi(float2 p) {
         secondDelta = nearestDelta;
         dist1 = d;
         nearestDelta = delta;
-        cellID = shaderHash21(n + g);
+        nearestCell = n + g;
       } else if (d < dist2) {
         dist2 = d;
         secondDelta = delta;
@@ -112,7 +112,7 @@ inline VoronoiResult voronoi(float2 p) {
   VoronoiResult r;
   r.dist1 = fast::sqrt(dist1);
   r.edgeDist = dot(midpoint, edgeDir);
-  r.cellID = cellID;
+  r.cellID = shaderHash21(nearestCell);
   return r;
 }
 
@@ -296,6 +296,8 @@ constant float4 BLUR_SAMPLES[16] = {
   float4(-0.406217f,  0.913776f, 0.939150f, 0.000079f),
 };
 
+constant int BLUR_TAPS = 10;
+
 kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)]],
                              texture2d<float, access::write> output  [[texture(1)]],
                              constant BlurParams &params             [[buffer(0)]],
@@ -332,7 +334,7 @@ kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)
   half  totalWeight = 0.0h;
 
   const int2 centeri = int2(gid);
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < BLUR_TAPS; i++) {
     float4 s = BLUR_SAMPLES[i];
     float2 o = float2(s.x * rc - s.y * rs, s.x * rs + s.y * rc);
     float2 offset = o * (s.z * radius);

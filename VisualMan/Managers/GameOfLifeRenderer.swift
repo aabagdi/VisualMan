@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/12/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import os
 import QuartzCore
@@ -72,17 +73,19 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   private static var logger: Logger { gameOfLifeLogger }
 
   static func create(device: MTLDevice) async -> GameOfLifeRenderer? {
-    let pipelines = await Task.detached(priority: .userInitiated) {
-      guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
-        return nil as Pipelines?
-      }
-      return createPipelines(device: device, compiler: compiler)
-    }.value
-
-    guard let pipelines else { return nil }
+    guard let pipelines = await compilePipelines(device: device) else { return nil }
     guard let renderer = GameOfLifeRenderer(device: device, pipelines: pipelines) else { return nil }
     renderer.warmUpGPU()
     return renderer
+  }
+
+  // Shader compilation is slow; @concurrent keeps it off the main actor.
+  @concurrent
+  nonisolated private static func compilePipelines(device: MTLDevice) async -> Pipelines? {
+    guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+      return nil
+    }
+    return createPipelines(device: device, compiler: compiler)
   }
 
   private init?(device: MTLDevice, pipelines: Pipelines) {
@@ -248,3 +251,5 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     let render: MTLComputePipelineState
   }
 }
+
+#endif

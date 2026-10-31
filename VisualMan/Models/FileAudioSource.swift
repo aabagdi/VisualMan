@@ -86,7 +86,15 @@ struct FileAudioSource: AudioSource {
       from: metadata, filteredByIdentifier: identifier
     ).first,
       let imageData = try? await artworkItem.load(.dataValue) else { return nil }
-    return UIImage(data: imageData)
+    return await decodeArtwork(imageData)
+  }
+
+  // UIImage(data:) decodes lazily on first draw, so force the decode here,
+  // off the main actor, to avoid a hitch when large embedded covers appear.
+  @concurrent
+  nonisolated private static func decodeArtwork(_ data: Data) async -> UIImage? {
+    guard let image = UIImage(data: data) else { return nil }
+    return image.preparingForDisplay() ?? image
   }
 
   private static func filliTunesMetadata(

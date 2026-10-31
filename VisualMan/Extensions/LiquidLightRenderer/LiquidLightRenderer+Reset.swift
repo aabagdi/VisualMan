@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/10/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 
 extension LiquidLightRenderer {
@@ -24,3 +25,5 @@ extension LiquidLightRenderer {
     resumeFadeIn = 1.0
   }
 }
+
+#endif

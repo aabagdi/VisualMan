@@ -5,6 +5,9 @@
 //  Created by Aadit Bagdi on 4/9/26.
 //
 
+// Metal 4 (MTL4*) is not available in the iOS Simulator SDK, so the Metal 4
+// renderer stack is compiled only for device builds.
+#if !targetEnvironment(simulator)
 import Metal
 import os
 import QuartzCore
@@ -24,12 +27,13 @@ protocol MetalVisualizerRenderer: AnyObject {
   var uniformOffset: Int { get set }
   var residencySet: MTLResidencySet { get }
   var argumentTables: [any MTL4ArgumentTable] { get }
-
+  
   static var maxFramesInFlight: UInt64 { get }
   static var uniformBufferSize: Int { get }
-
+  
   func encodeFrame(bass: Float, mid: Float, high: Float, drawableWidth: Int, drawableHeight: Int) -> MTLTexture?
   func commitFrame(drawable: CAMetalDrawable)
+  func commitCompute()
   func reset()
   func prepareForResume()
 }
@@ -38,12 +42,12 @@ extension MetalVisualizerRenderer {
   var argumentTable: any MTL4ArgumentTable {
     argumentTables[Int(frameNumber % Self.maxFramesInFlight)]
   }
-
+  
   func reset() {}
   func prepareForResume() {}
-
+  
   static func createAllocatorsAndBuffers(device: MTLDevice)
-    -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
+  -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {
     var allocators = [any MTL4CommandAllocator]()
     var buffers = [MTLBuffer]()
     for _ in 0..<maxFramesInFlight {
@@ -56,7 +60,7 @@ extension MetalVisualizerRenderer {
     }
     return (allocators, buffers)
   }
-
+  
   nonisolated static func makePipeline(
     _ name: String, library: MTLLibrary, compiler: any MTL4Compiler
   ) -> MTLComputePipelineState? {
@@ -72,7 +76,7 @@ extension MetalVisualizerRenderer {
       return nil
     }
   }
-
+  
   func drainPendingReleases(_ releases: inout [(frame: UInt64, texture: MTLTexture)]) {
     guard !releases.isEmpty else { return }
     let signaled = sharedEvent.signaledValue
@@ -89,7 +93,7 @@ extension MetalVisualizerRenderer {
       residencySet.commit()
     }
   }
-
+  
   func canRenderThisFrame() -> Bool {
     let nextFrame = frameNumber + 1
     if nextFrame > Self.maxFramesInFlight {
@@ -98,7 +102,7 @@ extension MetalVisualizerRenderer {
     }
     return true
   }
-
+  
   func writeUniform<T>(_ value: T) -> MTLGPUAddress {
     let aligned = (uniformOffset + 15) & ~15
     let stride = MemoryLayout<T>.stride
@@ -116,13 +120,13 @@ extension MetalVisualizerRenderer {
     uniformOffset = end
     return addr
   }
-
+  
   func writeUniformArray<T>(_ values: [T]) -> MTLGPUAddress {
     values.withUnsafeBufferPointer { buf in
       writeUniformArray(buf)
     }
   }
-
+  
   func writeUniformArray<T>(_ values: UnsafeBufferPointer<T>) -> MTLGPUAddress {
     let aligned = (uniformOffset + 15) & ~15
     let size = MemoryLayout<T>.stride * values.count
@@ -145,7 +149,7 @@ extension MetalVisualizerRenderer {
     uniformOffset = end
     return addr
   }
-
+  
   func beginFrame() -> (any MTL4ComputeCommandEncoder)? {
     let nextFrame = frameNumber + 1
     if nextFrame > Self.maxFramesInFlight {
@@ -161,14 +165,14 @@ extension MetalVisualizerRenderer {
     currentUniformBuffer = uniformBuffers[frameIndex]
     allocator.reset()
     uniformOffset = 0
-
+    
     commandBuffer.beginCommandBuffer(allocator: allocator)
     commandBuffer.useResidencySet(residencySet)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
     encoder.setArgumentTable(argumentTable)
     return encoder
   }
-
+  
   func commitFrame(drawable: CAMetalDrawable) {
     commandBuffer.endCommandBuffer()
     commandQueue.waitForDrawable(drawable)
@@ -177,4 +181,13 @@ extension MetalVisualizerRenderer {
     commandQueue.signalDrawable(drawable)
     drawable.present()
   }
+
+  func commitCompute() {
+    commandBuffer.endCommandBuffer()
+    commandQueue.commit([commandBuffer])
+    commandQueue.signalEvent(sharedEvent, value: frameNumber)
+  }
+
 }
+
+#endif

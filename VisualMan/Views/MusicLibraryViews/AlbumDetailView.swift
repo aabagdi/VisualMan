@@ -39,7 +39,7 @@ struct AlbumDetailView: View {
         VStack(spacing: 12) {
           Image(uiImage: albumArt)
             .resizable()
-            .aspectRatio(contentMode: .fit)
+            .scaledToFit()
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .shadow(radius: 4)
             .frame(maxWidth: 300)

@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 3/15/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import simd
 
@@ -252,3 +253,5 @@ extension NavierStokesRenderer {
     }
   }
 }
+
+#endif

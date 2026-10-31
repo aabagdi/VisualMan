@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 3/15/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import os
 import QuartzCore
@@ -61,10 +62,10 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var psiC: MTLTexture
   var u0: MTLTexture
 
-  var displayIntermediate: MTLTexture?
-  private var lastDisplayWidth: Int = 0
-  private var lastDisplayHeight: Int = 0
-  var pendingDisplayReleases: [(frame: UInt64, texture: MTLTexture)] = []
+  /// Fraction of the drawable resolution the final image is rendered at.
+  /// The dye field is only 1024², so the display pass is already an upscale;
+  /// rendering it below native resolution costs almost no detail.
+  static let renderScale: Float = 0.75
 
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
@@ -108,17 +109,19 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var currentUniformBuffer: MTLBuffer
   
   static func create(device: MTLDevice) async -> NavierStokesRenderer? {
-    let pipelines = await Task.detached(priority: .userInitiated) {
-      guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
-        return nil as Pipelines?
-      }
-      return createPipelines(device: device, compiler: compiler)
-    }.value
-
-    guard let pipelines else { return nil }
+    guard let pipelines = await compilePipelines(device: device) else { return nil }
     guard let renderer = NavierStokesRenderer(device: device, pipelines: pipelines) else { return nil }
     renderer.warmUpGPU()
     return renderer
+  }
+
+  // Shader compilation is slow; @concurrent keeps it off the main actor.
+  @concurrent
+  nonisolated private static func compilePipelines(device: MTLDevice) async -> Pipelines? {
+    guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+      return nil
+    }
+    return createPipelines(device: device, compiler: compiler)
   }
 
   private init?(device: MTLDevice, pipelines: Pipelines) {
@@ -170,58 +173,18 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     resumeSuppressionRemaining = 0.5
   }
 
-  private func drainPendingDisplayReleases() {
-    drainPendingReleases(&pendingDisplayReleases)
-  }
-
-  private func ensureDisplayIntermediate(width: Int, height: Int) -> Bool {
-    if width == lastDisplayWidth
-        && height == lastDisplayHeight
-        && displayIntermediate != nil {
-      return true
-    }
-
-    if let old = displayIntermediate {
-      pendingDisplayReleases.append((frame: frameNumber, texture: old))
-    }
-
-    let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm,
-      width: width,
-      height: height,
-      mipmapped: false
-    )
-    desc.usage = [.shaderRead, .shaderWrite]
-    desc.storageMode = .private
-
-    guard let tex = device.makeTexture(descriptor: desc) else {
-      displayIntermediate = nil
-      lastDisplayWidth = 0
-      lastDisplayHeight = 0
-      return false
-    }
-
-    residencySet.addAllocation(tex)
-    residencySet.commit()
-
-    displayIntermediate = tex
-    lastDisplayWidth = width
-    lastDisplayHeight = height
-    return true
-  }
-
   func encodeFrame(bass: Float,
                    mid: Float,
                    high: Float,
                    drawableWidth: Int,
                    drawableHeight: Int) -> MTLTexture? {
-    drainPendingDisplayReleases()
+    let outWidth = max(1, Int((Float(drawableWidth) * Self.renderScale).rounded()))
+    let outHeight = max(1, Int((Float(drawableHeight) * Self.renderScale).rounded()))
 
-    guard ensureDisplayIntermediate(width: drawableWidth,
-                                    height: drawableHeight),
-          let displayTex = displayIntermediate else {
-      return nil
-    }
+    // The TAA history pair doubles as the display output, so it is also the
+    // only full-resolution allocation this renderer needs.
+    ensureTAAHistory(width: outWidth, height: outHeight)
+    guard taaHistoryA != nil, taaHistoryB != nil else { return nil }
 
     let now = CACurrentMediaTime()
     if lastFrameTime == 0 {
@@ -244,21 +207,26 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     time += dt * (1.0 + smoothedBass * 0.5 + smoothedMid * 0.3)
 
-    guard let encoder = beginFrame() else { return nil }
+    guard let encoder = beginFrame(),
+          let historyA = taaHistoryA,
+          let historyB = taaHistoryB else { return nil }
 
-    let hadTAAHistory = taaHistoryA != nil && taaHistoryB != nil
-    ensureTAAHistory(width: displayTex.width, height: displayTex.height)
+    // Ping-pong on frame parity (frameNumber was advanced by beginFrame).
+    let writeB = (frameNumber & 1) == 0
+    let historyIn = writeB ? historyA : historyB
+    let historyOut = writeB ? historyB : historyA
 
     runSimulationPass(encoder: encoder, bass: bass, mid: mid, high: high,
-                      output: displayTex)
+                      historyIn: historyIn, historyOut: historyOut)
 
-    if hadTAAHistory && taaHistoryA != nil && taaHistoryB != nil {
-      taaHistoryValid = true
-    }
+    // historyOut now holds a complete frame for the next frame to blend with.
+    taaHistoryValid = true
 
     encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
     encoder.endEncoding()
 
-    return displayTex
+    return historyOut
   }
 }
+
+#endif

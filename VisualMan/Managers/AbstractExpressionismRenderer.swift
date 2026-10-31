@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/23/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import MetalKit
 import os
@@ -33,7 +34,17 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var paintPipeline: MTLComputePipelineState
   var composePipeline: MTLComputePipelineState
   var velocityPipeline: MTLComputePipelineState
-  var passthroughPipeline: MTLComputePipelineState
+  var resamplePipeline: MTLComputePipelineState
+
+  // Canvas-resize content preservation. When the canvas is rebuilt at a new
+  // resolution we capture the current painting's "In" textures here and run
+  // abexResample on the next frame to copy them into the new canvas, instead
+  // of clearing. Released one frame after the resample runs.
+  var pendingResample: Bool = false
+  var resampleColorSrc: MTLTexture?
+  var resampleHeightWetSrc: MTLTexture?
+  var resampleDryColorSrc: MTLTexture?
+  var resampleSubstrateSrc: MTLTexture?
 
   var time: Float = 0
   var dt: Float = 1.0 / 60.0
@@ -95,6 +106,15 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
   static let canvasColor = AbstractExpressionismRenderer.srgbToLinear(
     SIMD3<Float>(0.95, 0.92, 0.87))
+  // Internal render scale for the simulation canvas relative to the display.
+  // The two per-frame full-canvas paint passes dominate GPU cost, so running
+  // them at 0.85× linear (~0.72× the pixels) is the single biggest saving.
+  // Compose runs at full display resolution and upscales the canvas.
+  static let canvasRenderScale: Float = 0.85
+  // Per-frame cap on total strokes handed to the GPU. Fewer strokes means
+  // fewer occupied tiles and less inner-loop work in the paint passes, and a
+  // somewhat sparser canvas. Lowered from 12.
+  static let maxStrokesPerFrame: Int = 9
   static let maxFramesInFlight: UInt64 = 3
 
   var commandAllocators = [any MTL4CommandAllocator]()
@@ -127,7 +147,22 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var substrateA: MTLTexture?
   var substrateB: MTLTexture?
 
-  var displayTex: MTLTexture?
+  /// Two display outputs alternated per frame so a frame's compose never
+  /// overwrites the image the previous frame's blit may still be reading.
+  var displayTextures: [MTLTexture] = []
+
+  /// When true, the paint and velocity passes only run over the part of the
+  /// square canvas the camera can show (plus a margin), instead of the whole
+  /// square. In portrait that skips roughly half the canvas. Off-screen paint
+  /// freezes until it becomes visible again (e.g. after rotating).
+  static let cullHiddenCanvas = true
+  /// Frames left that must paint the full canvas (after a clear or resample)
+  /// so every ping-pong texture holds valid content outside the visible area.
+  var fullCanvasFramesRemaining: Int = 0
+  /// Camera extents used by buildFrameParams. The visible-region cull must
+  /// cover them, so keep these in sync with the pan/zoom formulas there.
+  static let cameraMaxPan = SIMD2<Float>(0.015 + 0.006, 0.010 + 0.005)
+  static let cameraMinZoom: Float = 1.0 - 0.020 - 0.008
 
   var mixboxLUT: MTLTexture?
 
@@ -160,19 +195,21 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
   static func create(device: MTLDevice) async -> AbstractExpressionismRenderer? {
-    let pipelines = await Task.detached(priority: .userInitiated) {
-      guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
-        return nil as Pipelines?
-      }
-      return createPipelines(device: device, compiler: compiler)
-    }.value
-
-    guard let pipelines else { return nil }
+    guard let pipelines = await compilePipelines(device: device) else { return nil }
     guard let renderer = AbstractExpressionismRenderer(device: device, pipelines: pipelines) else {
       return nil
     }
     renderer.warmUpGPU()
     return renderer
+  }
+
+  // Shader compilation is slow; @concurrent keeps it off the main actor.
+  @concurrent
+  nonisolated private static func compilePipelines(device: MTLDevice) async -> Pipelines? {
+    guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
+      return nil
+    }
+    return createPipelines(device: device, compiler: compiler)
   }
 
   private init?(device: MTLDevice, pipelines: Pipelines) {
@@ -202,14 +239,17 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     self.paintPipeline   = pipelines.paint
     self.composePipeline = pipelines.compose
     self.velocityPipeline = pipelines.velocity
-    self.passthroughPipeline = pipelines.passthrough
+    self.resamplePipeline = pipelines.resample
     self.residencySet = residencySet
 
     let textureLoader = MTKTextureLoader(device: device)
     let lutOptions: [MTKTextureLoader.Option: Any] = [
       .textureUsage: NSNumber(value: MTLTextureUsage.shaderRead.rawValue),
       .textureStorageMode: NSNumber(value: MTLStorageMode.private.rawValue),
-      .SRGB: false
+      .SRGB: false,
+      // Pin the orientation so the shader can skip Mixbox's per-call
+      // orientation probe (see MIXBOX_LUT_TOP_LEFT_ORIGIN).
+      .origin: MTKTextureLoader.Origin.topLeft
     ]
     do {
       let lut = try textureLoader.newTexture(name: "mixbox_lut",
@@ -239,3 +279,5 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     cameraPhase = 0
   }
 }
+
+#endif

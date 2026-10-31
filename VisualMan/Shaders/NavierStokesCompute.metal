@@ -336,7 +336,6 @@ inline float2 curlNoiseOffset(float2 uv, float t) {
 }
 
 kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
-                        texture2d<float, access::write> output [[texture(1)]],
                         texture2d<float, access::sample> bloomHi [[texture(2)]],
                         texture2d<float, access::sample> bloomMid [[texture(3)]],
                         texture2d<float, access::sample> bloomLo [[texture(4)]],
@@ -349,8 +348,8 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float renderTime = frame.time;
   float taaBlend = frame.taaBlend;
   uint historyValid = frame.historyValid;
-  uint w = output.get_width();
-  uint h = output.get_height();
+  uint w = historyOut.get_width();
+  uint h = historyOut.get_height();
   if (gid.x >= w || gid.y >= h) return;
 
   constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
@@ -414,9 +413,7 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
     finalColor = mix(c, prev, taaBlend);
   }
 
-  float4 outColor = float4(finalColor, 1.0);
-  output.write(outColor, gid);
-  historyOut.write(outColor, gid);
+  historyOut.write(float4(finalColor, 1.0), gid);
 }
 
 kernel void fluidPsiInit(texture2d<float, access::write> psiOut [[texture(0)]],
@@ -455,7 +452,6 @@ kernel void fluidPsiAdvect(texture2d<float, access::read>  velocity [[texture(0)
 
 kernel void fluidPsiMacCormackCorrect(texture2d<float, access::sample> psiN     [[texture(0)]],
                                       texture2d<float, access::sample> psiHat1  [[texture(1)]],
-                                      texture2d<float, access::sample> psiHat0  [[texture(2)]],
                                       texture2d<float, access::read>   velocity [[texture(3)]],
                                       texture2d<float, access::write>  psiOut   [[texture(4)]],
                                       constant float &dt [[buffer(0)]],
@@ -472,7 +468,7 @@ kernel void fluidPsiMacCormackCorrect(texture2d<float, access::sample> psiN     
   float2 invSize = 1.0 / float2(w, h);
 
   float2 forward  = psiHat1.sample(linearSampler, backPos * invSize).xy;
-  float2 backward = psiHat0.sample(linearSampler, pos * invSize).xy;
+  float2 backward = psiHat1.sample(linearSampler, (pos + dt * vel) * invSize).xy;
   float2 source   = psiN.sample(linearSampler, backPos * invSize).xy;
 
   float2 corrected = forward + 0.5 * (source - backward);
@@ -593,7 +589,6 @@ kernel void fluidVorticityConfinementMerged(texture2d<float, access::read_write>
 
 kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[texture(0)]],
                                    texture2d<float, access::sample> phiHat1  [[texture(1)]],
-                                   texture2d<float, access::sample> phiHat0  [[texture(2)]],
                                    texture2d<float, access::read>   velocity [[texture(3)]],
                                    texture2d<float, access::write>  phiOut   [[texture(4)]],
                                    constant float &dt [[buffer(0)]],
@@ -611,7 +606,7 @@ kernel void fluidMacCormackCorrect(texture2d<float, access::sample> phiN     [[t
   float2 invSize = 1.0 / float2(w, h);
 
   float4 forward = phiHat1.sample(linearSampler, backPos * invSize);
-  float4 backward = phiHat0.sample(linearSampler, pos * invSize);
+  float4 backward = phiHat1.sample(linearSampler, (pos + dt * vel) * invSize);
   float4 source = phiN.sample(linearSampler, backPos * invSize);
 
   float4 corrected = forward + 0.5 * (source - backward);

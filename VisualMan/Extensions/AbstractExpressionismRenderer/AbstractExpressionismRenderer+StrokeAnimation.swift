@@ -5,6 +5,7 @@
 //  Created by on 4/29/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 
 extension AbstractExpressionismRenderer {
@@ -35,15 +36,15 @@ extension AbstractExpressionismRenderer {
                                           spread: Float) -> [AbExStroke] {
     var candidates = [AbExStroke]()
     if energy > 0.05
-        && (wallClock - lastGesturalTime) > 0.95
-        && candidates.count < 12
-        && nextSeed() < 0.32 {
+        && (wallClock - lastGesturalTime) > 1.8
+        && candidates.count < Self.maxStrokesPerFrame
+        && nextSeed() < 0.16 {
       appendGesturalStroke(to: &candidates, energy: energy, focus: focus, spread: spread)
     }
     if energy > 0.25
-        && (wallClock - lastGesturalTime) > 0.55
-        && candidates.count < 12
-        && nextSeed() < 0.07 {
+        && (wallClock - lastGesturalTime) > 1.1
+        && candidates.count < Self.maxStrokesPerFrame
+        && nextSeed() < 0.035 {
       appendGesturalStroke(to: &candidates, energy: energy, focus: focus, spread: spread)
     }
     return candidates
@@ -105,6 +106,13 @@ extension AbstractExpressionismRenderer {
     }
 
     appendPollockTrails(to: &strokes, energy: energy, focus: focus)
+
+    // CRITICAL: this call must always run, regardless of which append*
+    // functions are enabled. It moves smear-pipeline strokes from
+    // freshSmearStrokes into animatingStrokes, where emitAnimatedStrokes
+    // reads them. Knife, gestural, scumble, and wash all rely on this
+    // bus. Disable individual append* calls above to filter stroke
+    // types, but never disable this line.
     enqueueAnimatingStrokes(freshSmearStrokes)
 
     return emitAnimatedStrokes(into: strokes)
@@ -113,7 +121,7 @@ extension AbstractExpressionismRenderer {
   func emitAnimatedStrokes(into base: [AbExStroke]) -> [AbExStroke] {
     var out = base
     for anim in animatingStrokes where anim.currentFrame < anim.totalFrames
-                                    && out.count < 12 {
+                                    && out.count < Self.maxStrokesPerFrame {
       let typeRaw = Int(anim.stroke.sizeOpacity.w)
       let isWash = (typeRaw == 1)
       let extensionFrames = isWash ? 0 : 8
@@ -144,3 +152,5 @@ extension AbstractExpressionismRenderer {
     return out
   }
 }
+
+#endif

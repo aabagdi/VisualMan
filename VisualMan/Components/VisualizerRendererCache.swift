@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+#if !targetEnvironment(simulator)
 private nonisolated func drainGPU(event: MTLSharedEvent, target: UInt64) {
   event.wait(untilSignaledValue: target, timeoutMS: 1000)
 }
@@ -103,3 +104,14 @@ final class VisualizerRendererCache {
     }
   }
 }
+#else
+/// Simulator stand-in: the Metal 4 renderers aren't compiled for the simulator,
+/// so there is nothing to cache.
+@MainActor
+@Observable
+final class VisualizerRendererCache {
+  func preWarm() async {}
+  func resetAll() {}
+  func purge() {}
+}
+#endif

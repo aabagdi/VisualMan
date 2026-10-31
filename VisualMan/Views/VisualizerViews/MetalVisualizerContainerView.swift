@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 4/22/26.
 //
 
+#if !targetEnvironment(simulator)
 import SwiftUI
 import MetalKit
 
@@ -48,3 +49,5 @@ struct MetalVisualizerContainerView<R: MetalVisualizerRenderer>: View {
     }
   }
 }
+
+#endif

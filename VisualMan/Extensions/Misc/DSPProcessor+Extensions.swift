@@ -104,11 +104,10 @@ extension DSPProcessor {
     }
   }
 
-  func createVisualizerBars(from fftData: [1024 of Float], sampleRate: Float) -> [32 of Float] {
+  func createVisualizerBars(from fftData: borrowing [1024 of Float], sampleRate: Float) -> [32 of Float] {
     var bars = [32 of Float](repeating: 0.0)
 
-    var fftData = fftData
-    return fftData.withUnsafeElementPointer { fft in
+    return fftData.withUnsafeBorrowedElementPointer { fft in
       for i in 0..<Constants.barCount {
         let range = cachedBarBinRanges[i]
         let count = vDSP_Length(range.endBin - range.startBin)

@@ -5,6 +5,7 @@
 //  Created by on 4/25/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import simd
 
@@ -15,18 +16,18 @@ extension AbstractExpressionismRenderer {
     SIMD2( 0.08, 0.30),
     SIMD2(-0.24, -0.12),
   ]
-
+  
   func nextSeed() -> Float {
     strokeSeed &+= 1
     let x = strokeSeed &* 2654435769
     return Float(x) / Float(UInt32.max)
   }
-
+  
   private static let permanentDurabilityBase: Float = 0.80
   private static let permanentDurabilityJitter: Float = 0.15
   private static let stickyDurabilityBase: Float = 0.35
   private static let stickyDurabilityJitter: Float = 0.30
-
+  
   func pickDurability(permanentChance: Float, stickyChance: Float) -> Float {
     assert(permanentChance + stickyChance <= 1,
            "permanentChance + stickyChance must be <= 1; got \(permanentChance + stickyChance)")
@@ -39,11 +40,11 @@ extension AbstractExpressionismRenderer {
       return 0
     }
   }
-
+  
   func packColorW(shape: Float, durability: Float) -> Float {
     return shape + durability
   }
-
+  
   func pickCurvature(zeroChance: Float, midThreshold: Float,
                      ampBase: Float, ampJitter: Float) -> Float {
     let curveRoll = nextSeed()
@@ -53,7 +54,7 @@ extension AbstractExpressionismRenderer {
     if curveRoll < midThreshold { return amp * dir }
     return (1.0 + amp) * dir
   }
-
+  
   func compositionFocus() -> SIMD2<Float> {
     let t = time * 0.06 + songSeed * 7.3
     let anchors = Self.compositionAnchors
@@ -63,30 +64,31 @@ extension AbstractExpressionismRenderer {
     let i1 = (i0 + 1) % anchors.count
     let f = phase - Float(i0)
     let blend = f * f * (3 - 2 * f)
-
+    
     let a = anchors[i0]
     let b = anchors[i1]
     let lerped = a * (1 - blend) + b * blend
-
+    
     let jitterX = sin(t * 3.7 + songSeed * 1.7) * 0.04
     let jitterY = cos(t * 4.1 + songSeed * 2.3) * 0.04
-
+    
     return lerped + SIMD2(jitterX, jitterY)
   }
-
+  
   func dominantAngle() -> Float {
     return time * 0.045 + songSeed * 1.2
   }
-
+  
   func sampleGesturedStroke(suggestedPos: SIMD2<Float>,
                             suggestedAngle: Float,
                             continueProb: Float = 0.70)
-                          -> (pos: SIMD2<Float>, angle: Float) {
+  -> (pos: SIMD2<Float>, angle: Float) {
     let timedOut = (wallClock - currentGestureStarted)
-                   > Self.gestureTimeoutSeconds
+    > Self.gestureTimeoutSeconds
     let active = currentGestureRemaining > 0 && !timedOut
-
+    
     if active && nextSeed() < continueProb {
+      // Continue the gesture: emit a stroke along the gesture's line.
       currentGestureRemaining -= 1
       let along = (nextSeed() - 0.5) * 2.0 * currentGestureSpan
       let perp  = (nextSeed() - 0.5) * 0.08
@@ -98,15 +100,15 @@ extension AbstractExpressionismRenderer {
       let jitter = (nextSeed() - 0.5) * (10.0 * .pi / 180.0)
       return (pos: pos, angle: currentGestureAngle + jitter)
     }
-
-    currentGestureRemaining = 1 + Int(nextSeed() * 4.0)
+    
+    currentGestureRemaining = 1 + Int(nextSeed() * 4.0)  // 1..4 more after this one
     currentGestureAngle = suggestedAngle
     currentGestureCenter = suggestedPos
     currentGestureStarted = wallClock
     currentGestureSpan = 0.18 + nextSeed() * 0.20
     return (pos: suggestedPos, angle: suggestedAngle)
   }
-
+  
   private func flowIndex(at p: SIMD2<Float>) -> Int {
     let n = Float(Self.flowGridSize)
     let u = max(0, min(0.999, p.x + 0.5))
@@ -115,7 +117,7 @@ extension AbstractExpressionismRenderer {
     let iy = Int(v * n)
     return iy * Self.flowGridSize + ix
   }
-
+  
   func depositFlow(at p: SIMD2<Float>, angle: Float, weight: Float = 1.0) {
     let n = Self.flowGridSize
     let nf = Float(n)
@@ -136,13 +138,13 @@ extension AbstractExpressionismRenderer {
       }
     }
   }
-
+  
   func decayFlow() {
     for i in 0..<flowField.count {
       flowField[i] *= Self.flowDecayPerFrame
     }
   }
-
+  
   private func densityIndex(at p: SIMD2<Float>) -> Int {
     let n = Float(Self.densityGridSize)
     let u = max(0, min(0.999, p.x + 0.5))
@@ -151,7 +153,7 @@ extension AbstractExpressionismRenderer {
     let iy = Int(v * n)
     return iy * Self.densityGridSize + ix
   }
-
+  
   func depositDensity(at p: SIMD2<Float>, weight: Float = 1.0) {
     let n = Self.densityGridSize
     let nf = Float(n)
@@ -171,21 +173,41 @@ extension AbstractExpressionismRenderer {
       }
     }
   }
-
+  
+  func consumeDensity(at p: SIMD2<Float>, amount: Float = 0.6) {
+    let n = Self.densityGridSize
+    let nf = Float(n)
+    let cu = (p.x + 0.5) * nf
+    let cv = (p.y + 0.5) * nf
+    let cx = Int(cu)
+    let cy = Int(cv)
+    for dy in -2...2 {
+      for dx in -2...2 {
+        let gx = cx + dx
+        let gy = cy + dy
+        guard gx >= 0, gx < n, gy >= 0, gy < n else { continue }
+        let dist2 = Float(dx * dx + dy * dy)
+        let falloff = exp(-dist2 * 0.5)
+        let idx = gy * n + gx
+        densityGrid[idx] = max(0, densityGrid[idx] - amount * falloff)
+      }
+    }
+  }
+  
   func decayDensity() {
     for i in 0..<densityGrid.count {
       densityGrid[i] *= Self.densityDecayPerFrame
     }
   }
-
+  
   func sampleDensity(at p: SIMD2<Float>) -> Float {
     return densityGrid[densityIndex(at: p)]
   }
-
+  
   func isInAttentionZone(_ p: SIMD2<Float>) -> Bool {
     return attentionStrength(at: p) > 0.5
   }
-
+  
   func attentionStrength(at p: SIMD2<Float>) -> Float {
     let t = wallClock * 0.012
     let p1 = SIMD2(p.x * 1.5 + t, p.y * 1.5 + t * 0.7)
@@ -195,7 +217,7 @@ extension AbstractExpressionismRenderer {
     let combined = n1 + n2
     return min(1.0, max(0.0, combined * 0.5 + 0.55))
   }
-
+  
   private func simplexLike(_ p: SIMD2<Float>) -> Float {
     let i = SIMD2(floor(p.x), floor(p.y))
     let f = p - i
@@ -208,18 +230,18 @@ extension AbstractExpressionismRenderer {
     let mix1 = h01 + (h11 - h01) * u.x
     return (mix0 + (mix1 - mix0) * u.y) * 2.0 - 1.0
   }
-
+  
   private func hashCell(_ i: SIMD2<Float>) -> Float {
     var h = i.x * 12.9898 + i.y * 78.233
     h = sin(h) * 43758.5453
     return h - floor(h)
   }
-
+  
   func applyDensityBias(at suggested: SIMD2<Float>,
                         dispersion: Float = 0.30) -> SIMD2<Float> {
     let dHere = sampleDensity(at: suggested)
     if dHere < 0.4 { return suggested }
-
+    
     var best = suggested
     var bestD = dHere
     for _ in 0..<4 {
@@ -234,48 +256,93 @@ extension AbstractExpressionismRenderer {
         bestD = d
       }
     }
-
+    
     let biasStrength = min(Self.densityMaxBias,
                            (dHere - 0.4) / 2.0)
     return suggested + (best - suggested) * biasStrength
   }
-
-  private func sampleFlow(at p: SIMD2<Float>) -> SIMD2<Float> {
+  
+  func applyDensitySeek(at suggested: SIMD2<Float>,
+                        dispersion: Float = 0.40) -> SIMD2<Float> {
+    var best = suggested
+    var bestD = sampleDensity(at: suggested)
+    for _ in 0..<6 {
+      let dx = (nextSeed() * 2 - 1) * dispersion
+      let dy = (nextSeed() * 2 - 1) * dispersion
+      let candidate = SIMD2(
+        max(-0.50, min(0.50, suggested.x + dx)),
+        max(-0.55, min(0.55, suggested.y + dy)))
+      let d = sampleDensity(at: candidate)
+      if d > bestD {
+        best = candidate
+        bestD = d
+      }
+    }
+    
+    if bestD < 0.50 { return suggested }
+    
+    let pullStrength: Float = min(0.75, bestD * 0.5)
+    
+    return suggested + (best - suggested) * pullStrength
+  }
+  
+  func findStrongestTarget(minDensity: Float = 0.50)
+  -> (pos: SIMD2<Float>, density: Float)? {
+    let n = Self.densityGridSize
+    let nf = Float(n)
+    var bestIdx = -1
+    var bestD: Float = minDensity
+    for i in 0..<densityGrid.count where densityGrid[i] > bestD {
+      bestD = densityGrid[i]
+      bestIdx = i
+    }
+    guard bestIdx >= 0 else { return nil }
+    let cy = bestIdx / n
+    let cx = bestIdx % n
+    let px = (Float(cx) + 0.5) / nf - 0.5
+    let py = (Float(cy) + 0.5) / nf - 0.5
+    let jitterScale = 0.5 / nf
+    let jx = (nextSeed() - 0.5) * jitterScale
+    let jy = (nextSeed() - 0.5) * jitterScale
+    return (SIMD2(px + jx, py + jy), bestD)
+  }
+  
+  func sampleFlow(at p: SIMD2<Float>) -> SIMD2<Float> {
     return flowField[flowIndex(at: p)]
   }
-
+  
   func localStrokeAngle(at p: SIMD2<Float>) -> Float {
     let scale: Float = 1.6
     let phase = songSeed * 3.7
     let fx = sin(p.x * scale + phase)
-           + 0.5 * cos(p.y * scale * 1.3 + phase * 1.7)
+    + 0.5 * cos(p.y * scale * 1.3 + phase * 1.7)
     let fy = cos(p.x * scale * 1.1 + phase * 0.9)
-           + 0.5 * sin(p.y * scale + phase * 1.3)
+    + 0.5 * sin(p.y * scale + phase * 1.3)
     let analytic = SIMD2<Float>(fx, fy)
-
+    
     let flow = sampleFlow(at: p)
     let flowMag = simd_length(flow)
-
+    
     if flowMag < 0.05 {
       return atan2(analytic.y, analytic.x)
     }
-
+    
     let blend = min(flowMag / 2.0, Self.flowMaxBlend)
     let analyticDir = simd_normalize(analytic)
     let flowDir = flow / flowMag
     let blended = analyticDir * (1 - blend) + flowDir * blend
     return atan2(blended.y, blended.x)
   }
-
+  
   func splatterFocus() -> SIMD2<Float> {
     let t = time + songSeed * 11.9
     let fx = sin(t * 0.45 + songSeed * 3.1) * 0.32
-           + cos(t * 1.10 + songSeed * 5.7) * 0.14
+    + cos(t * 1.10 + songSeed * 5.7) * 0.14
     let fy = cos(t * 0.38 + songSeed * 2.3) * 0.38
-           + sin(t * 0.95 + songSeed * 4.1) * 0.15
+    + sin(t * 0.95 + songSeed * 4.1) * 0.15
     return SIMD2(fx, fy)
   }
-
+  
   func trailHash(_ a: UInt32, _ b: UInt32) -> Float {
     var x = a &+ b &* 1664525
     x ^= x &>> 16
@@ -286,3 +353,5 @@ extension AbstractExpressionismRenderer {
     return Float(x) / Float(UInt32.max)
   }
 }
+
+#endif

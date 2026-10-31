@@ -5,65 +5,11 @@
 //  Created by on 4/23/26.
 //
 
+#if !targetEnvironment(simulator)
 import Metal
 import QuartzCore
 
 extension AbstractExpressionismRenderer {
-  private func handleResumeState(gap: Double) {
-    let gapResume = gap > 0.2
-    let isResume = (lastFrameTime == 0) || gapResume
-    if isResume {
-      dt = 0
-      if gapResume {
-        resumeSuppressionRemaining = Self.resumeFadeDuration
-        envelope = .zero
-        slowEnvelope = .zero
-        smoothedBass = 0
-        if gap > 2.0 { resumeFadeIn = 0 }
-      }
-    } else {
-      dt = Float(max(1.0 / 240.0, min(1.0 / 30.0, gap)))
-    }
-  }
-
-  func processAudio(bass: Float, mid: Float, high: Float) -> SIMD3<Float> {
-    let now = CACurrentMediaTime()
-    let gap = lastFrameTime == 0 ? 0 : (now - lastFrameTime)
-    handleResumeState(gap: gap)
-    lastFrameTime = now
-    wallClock += dt
-    time += dt
-    resumeSuppressionRemaining = max(0, resumeSuppressionRemaining - dt)
-
-    let input = SIMD3<Float>(bass, mid, high)
-    let fastA = 1 - exp(-dt / 0.015)
-    let fastD = 1 - exp(-dt / 0.15)
-    var fastRate = SIMD3<Float>(repeating: fastD)
-    fastRate.replace(with: SIMD3<Float>(repeating: fastA), where: input .> envelope)
-    envelope += (input - envelope) * fastRate
-
-    let slowA = 1 - exp(-dt / 0.4)
-    slowEnvelope += (input - slowEnvelope) * slowA
-
-    let bassA = 1 - exp(-dt / (bass > smoothedBass ? 0.06 : 0.25))
-    smoothedBass += (bass - smoothedBass) * bassA
-
-    hueOffset += dt * 0.02
-
-    let atmTarget = min(1.0, ((slowEnvelope.x + slowEnvelope.y + slowEnvelope.z) / 3.0) * 1.6)
-    let atmRate = 1 - exp(-dt / (atmTarget > atmosphereIntensity ? 1.5 : 3.0))
-    atmosphereIntensity += (atmTarget - atmosphereIntensity) * atmRate
-
-    atmosphereHue = (atmosphereHue + dt * 0.0033).truncatingRemainder(dividingBy: 1.0)
-
-    if resumeFadeIn < 1 {
-      resumeFadeIn = min(1, resumeFadeIn + dt / Self.resumeFadeDuration)
-    }
-    let u = resumeFadeIn
-    let fade = u * u * (3 - 2 * u)
-    return envelope * fade
-  }
-
   func renderPaint(encoder: any MTL4ComputeCommandEncoder,
                    colorIn: MTLTexture, colorOut: MTLTexture,
                    hwIn: MTLTexture, hwOut: MTLTexture,
@@ -71,7 +17,8 @@ extension AbstractExpressionismRenderer {
                    dryColorIn: MTLTexture, dryColorOut: MTLTexture,
                    substrateIn: MTLTexture, substrateOut: MTLTexture,
                    params: AbExParams, strokes: [AbExStroke],
-                   tileMap: TileMap) {
+                   tileMap: TileMap,
+                   region: CanvasRegion) {
     encoder.setComputePipelineState(paintPipeline)
     argumentTable.setTexture(colorIn.gpuResourceID, index: 0)
     argumentTable.setTexture(colorOut.gpuResourceID, index: 1)
@@ -96,17 +43,18 @@ extension AbstractExpressionismRenderer {
     }
     argumentTable.setAddress(writeUniformArray(tileMap.counts), index: 2)
     argumentTable.setAddress(writeUniformArray(tileMap.indices), index: 3)
+    argumentTable.setAddress(writeUniform(region.origin), index: 4)
 
-    let tg = MTLSize(width: 32, height: 16, depth: 1)
-    let grid = MTLSize(width: colorOut.width, height: colorOut.height, depth: 1)
-    encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
+    dispatch(encoder: encoder, pipeline: paintPipeline,
+             width: region.width, height: region.height)
   }
 
   func renderVelocityDeposit(encoder: any MTL4ComputeCommandEncoder,
                              velocityIn: MTLTexture, velocityOut: MTLTexture,
                              heightWetIn: MTLTexture,
                              params: AbExParams, strokes: [AbExStroke],
-                             tileMap: TileMap) {
+                             tileMap: TileMap,
+                             region: CanvasRegion) {
     encoder.setComputePipelineState(velocityPipeline)
     argumentTable.setTexture(velocityIn.gpuResourceID, index: 0)
     argumentTable.setTexture(velocityOut.gpuResourceID, index: 1)
@@ -122,27 +70,32 @@ extension AbstractExpressionismRenderer {
     }
     argumentTable.setAddress(writeUniformArray(tileMap.counts), index: 2)
     argumentTable.setAddress(writeUniformArray(tileMap.indices), index: 3)
+    let half = region.halved
+    argumentTable.setAddress(writeUniform(half.origin), index: 4)
 
-    let tg = MTLSize(width: 32, height: 16, depth: 1)
-    let grid = MTLSize(width: velocityOut.width, height: velocityOut.height, depth: 1)
-    encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
+    dispatch(encoder: encoder, pipeline: velocityPipeline,
+             width: half.width, height: half.height)
   }
 
-  func renderPassthrough(encoder: any MTL4ComputeCommandEncoder,
-                         colorIn: MTLTexture, colorOut: MTLTexture,
-                         hwIn: MTLTexture, hwOut: MTLTexture,
-                         dryColorIn: MTLTexture, dryColorOut: MTLTexture) {
-    encoder.setComputePipelineState(passthroughPipeline)
-    argumentTable.setTexture(colorIn.gpuResourceID, index: 0)
-    argumentTable.setTexture(colorOut.gpuResourceID, index: 1)
-    argumentTable.setTexture(hwIn.gpuResourceID, index: 2)
-    argumentTable.setTexture(hwOut.gpuResourceID, index: 3)
-    argumentTable.setTexture(dryColorIn.gpuResourceID, index: 4)
-    argumentTable.setTexture(dryColorOut.gpuResourceID, index: 5)
+  func renderResample(encoder: any MTL4ComputeCommandEncoder,
+                      colorSrc: MTLTexture, colorDst: MTLTexture,
+                      hwSrc: MTLTexture, hwDst: MTLTexture,
+                      drySrc: MTLTexture, dryDst: MTLTexture,
+                      subSrc: MTLTexture, subDst: MTLTexture,
+                      velDst: MTLTexture) {
+    encoder.setComputePipelineState(resamplePipeline)
+    argumentTable.setTexture(colorSrc.gpuResourceID, index: 0)
+    argumentTable.setTexture(colorDst.gpuResourceID, index: 1)
+    argumentTable.setTexture(hwSrc.gpuResourceID, index: 2)
+    argumentTable.setTexture(hwDst.gpuResourceID, index: 3)
+    argumentTable.setTexture(drySrc.gpuResourceID, index: 4)
+    argumentTable.setTexture(dryDst.gpuResourceID, index: 5)
+    argumentTable.setTexture(subSrc.gpuResourceID, index: 6)
+    argumentTable.setTexture(subDst.gpuResourceID, index: 7)
+    argumentTable.setTexture(velDst.gpuResourceID, index: 8)
 
-    let tg = MTLSize(width: 32, height: 16, depth: 1)
-    let grid = MTLSize(width: colorOut.width, height: colorOut.height, depth: 1)
-    encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
+    dispatch(encoder: encoder, pipeline: resamplePipeline,
+             width: colorDst.width, height: colorDst.height)
   }
 
   func renderCompose(encoder: any MTL4ComputeCommandEncoder,
@@ -158,9 +111,8 @@ extension AbstractExpressionismRenderer {
     argumentTable.setTexture(substrate.gpuResourceID, index: 4)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
-    let tg = MTLSize(width: 32, height: 16, depth: 1)
-    let grid = MTLSize(width: output.width, height: output.height, depth: 1)
-    encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
+    dispatch(encoder: encoder, pipeline: composePipeline,
+             width: output.width, height: output.height)
   }
 
   private struct PingPongTextures {
@@ -188,7 +140,8 @@ extension AbstractExpressionismRenderer {
           let cMid  = colorMid,
           let hwMid = heightWetMid,
           let dcMid = dryColorMid,
-          let disp  = displayTex else { return nil }
+          displayTextures.count == 2 else { return nil }
+    let disp = displayTextures[readA ? 0 : 1]
     return PingPongTextures(colorIn: cIn, colorOut: cOut,
                             hwIn: hwIn, hwOut: hwOut,
                             colorMid: cMid, hwMid: hwMid,
@@ -243,7 +196,8 @@ extension AbstractExpressionismRenderer {
                                       smoothed: SIMD3<Float>,
                                       smearStrokes: [AbExStroke],
                                       smearTileMap: TileMap,
-                                      velocityFieldQuiet: Bool) {
+                                      runSmearPass: Bool,
+                                      region: CanvasRegion) {
     var pass2Params = buildFrameParams(smoothed: smoothed,
                                         strokeCount: smearStrokes.count)
     pass2Params.atmosphere = SIMD4(pass2Params.atmosphere.x,
@@ -253,7 +207,8 @@ extension AbstractExpressionismRenderer {
     pass2Params.config = SIMD4(pass2Params.config.x, 0.0,
                                 Float(smearStrokes.count),
                                 pass2Params.config.w)
-    if !smearStrokes.isEmpty || !velocityFieldQuiet {
+    
+    if runSmearPass {
       renderPaint(encoder: encoder,
                   colorIn: tex.colorMid, colorOut: tex.colorOut,
                   hwIn: tex.hwMid, hwOut: tex.hwOut,
@@ -261,14 +216,10 @@ extension AbstractExpressionismRenderer {
                   dryColorIn: tex.dryColorMid, dryColorOut: tex.dryColorOut,
                   substrateIn: tex.substrateOut, substrateOut: tex.substrateOut,
                   params: pass2Params, strokes: smearStrokes,
-                  tileMap: smearTileMap)
-    } else {
-      renderPassthrough(encoder: encoder,
-                         colorIn: tex.colorMid, colorOut: tex.colorOut,
-                         hwIn: tex.hwMid, hwOut: tex.hwOut,
-                         dryColorIn: tex.dryColorMid, dryColorOut: tex.dryColorOut)
+                  tileMap: smearTileMap,
+                  region: region)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     renderCompose(encoder: encoder,
                   color: tex.colorOut, heightWet: tex.hwOut,
@@ -280,21 +231,10 @@ extension AbstractExpressionismRenderer {
   private func executePaintPipeline(encoder: any MTL4ComputeCommandEncoder,
                                     tex: PingPongTextures,
                                     smoothed: SIMD3<Float>,
-                                    strokes: SplitStrokes) {
+                                    strokes: SplitStrokes,
+                                    region: CanvasRegion) {
     let depositTileMap = buildTileMap(strokes: strokes.deposit)
     let smearTileMap   = buildTileMap(strokes: strokes.smear)
-
-    let pass1Params = buildFrameParams(smoothed: smoothed,
-                                        strokeCount: strokes.deposit.count)
-    renderPaint(encoder: encoder,
-                colorIn: tex.colorIn, colorOut: tex.colorMid,
-                hwIn: tex.hwIn, hwOut: tex.hwMid,
-                velocityIn: tex.velocityIn,
-                dryColorIn: tex.dryColorIn, dryColorOut: tex.dryColorMid,
-                substrateIn: tex.substrateIn, substrateOut: tex.substrateOut,
-                params: pass1Params, strokes: strokes.deposit,
-                tileMap: depositTileMap)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     if strokes.smear.isEmpty {
       framesSinceSmear += 1
@@ -302,22 +242,42 @@ extension AbstractExpressionismRenderer {
       framesSinceSmear = 0
     }
     let velocityFieldQuiet = framesSinceSmear > 12
+    let runSmearPass = !strokes.smear.isEmpty || !velocityFieldQuiet
+
+    let pass1Color   = runSmearPass ? tex.colorMid    : tex.colorOut
+    let pass1HW      = runSmearPass ? tex.hwMid       : tex.hwOut
+    let pass1DryCol  = runSmearPass ? tex.dryColorMid : tex.dryColorOut
+
+    let pass1Params = buildFrameParams(smoothed: smoothed,
+                                        strokeCount: strokes.deposit.count)
+    renderPaint(encoder: encoder,
+                colorIn: tex.colorIn, colorOut: pass1Color,
+                hwIn: tex.hwIn, hwOut: pass1HW,
+                velocityIn: tex.velocityIn,
+                dryColorIn: tex.dryColorIn, dryColorOut: pass1DryCol,
+                substrateIn: tex.substrateIn, substrateOut: tex.substrateOut,
+                params: pass1Params, strokes: strokes.deposit,
+                tileMap: depositTileMap,
+                region: region)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     let velocityParams = buildFrameParams(smoothed: smoothed,
                                            strokeCount: strokes.smear.count)
     renderVelocityDeposit(encoder: encoder,
                           velocityIn: tex.velocityIn,
                           velocityOut: tex.velocityOut,
-                          heightWetIn: tex.hwMid,
+                          heightWetIn: pass1HW,
                           params: velocityParams,
                           strokes: strokes.smear,
-                          tileMap: smearTileMap)
+                          tileMap: smearTileMap,
+                          region: region)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     executeSmearAndCompose(encoder: encoder, tex: tex, smoothed: smoothed,
                             smearStrokes: strokes.smear,
                             smearTileMap: smearTileMap,
-                            velocityFieldQuiet: velocityFieldQuiet)
+                            runSmearPass: runSmearPass,
+                            region: region)
   }
 
   func encodeFrame(bass: Float,
@@ -331,20 +291,48 @@ extension AbstractExpressionismRenderer {
           let tex = currentPingPongTextures(),
           let encoder = beginFrame() else { return nil }
 
+    if pendingResample,
+       let cSrc = resampleColorSrc, let hwSrc = resampleHeightWetSrc,
+       let dSrc = resampleDryColorSrc, let sSrc = resampleSubstrateSrc {
+      renderResample(encoder: encoder,
+                     colorSrc: cSrc, colorDst: tex.colorIn,
+                     hwSrc: hwSrc, hwDst: tex.hwIn,
+                     drySrc: dSrc, dryDst: tex.dryColorIn,
+                     subSrc: sSrc, subDst: tex.substrateIn,
+                     velDst: tex.velocityIn)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+      for t in [cSrc, hwSrc, dSrc, sSrc] {
+        pendingTextureReleases.append((frame: frameNumber, texture: t))
+      }
+      resampleColorSrc = nil; resampleHeightWetSrc = nil
+      resampleDryColorSrc = nil; resampleSubstrateSrc = nil
+      pendingResample = false
+      fullCanvasFramesRemaining = 2
+    }
+
     let isClearing = pendingClearFrames > 0
     if isClearing {
       pendingClearFrames -= 1
       isFirstFrame = true
     }
+    if isFirstFrame {
+      fullCanvasFramesRemaining = 2
+    }
+    let paintFullCanvas = fullCanvasFramesRemaining > 0
+    fullCanvasFramesRemaining = max(0, fullCanvasFramesRemaining - 1)
 
     let allStrokes = isClearing ? [] : generateStrokes(audio: smoothed)
-    let split = splitStrokesByPhase(allStrokes)
+    let (region, paintedStrokes) = paintRegion(full: paintFullCanvas,
+                                               strokes: allStrokes)
+    let split = splitStrokesByPhase(paintedStrokes)
 
     if isPlaying {
       cameraPhase += dt * 0.30
     }
 
-    executePaintPipeline(encoder: encoder, tex: tex, smoothed: smoothed, strokes: split)
+    executePaintPipeline(encoder: encoder, tex: tex, smoothed: smoothed,
+                         strokes: split, region: region)
 
     encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
     encoder.endEncoding()
@@ -353,4 +341,15 @@ extension AbstractExpressionismRenderer {
     currentIsA.toggle()
     return tex.display
   }
+
+  func dispatch(encoder: any MTL4ComputeCommandEncoder,
+                pipeline: MTLComputePipelineState,
+                width: Int, height: Int) {
+    let tgWidth = min(32, pipeline.maxTotalThreadsPerThreadgroup)
+    let tgHeight = max(1, min(16, pipeline.maxTotalThreadsPerThreadgroup / tgWidth))
+    encoder.dispatchThreads(threadsPerGrid: MTLSize(width: width, height: height, depth: 1),
+                            threadsPerThreadgroup: MTLSize(width: tgWidth, height: tgHeight, depth: 1))
+  }
 }
+
+#endif
