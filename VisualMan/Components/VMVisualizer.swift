@@ -10,7 +10,7 @@ import Observation
 @Observable @MainActor
 final class VisualizerSelection {
   var current: VMVisualizer = .bars
-  var navierStokesProjectionMode: NavierStokesProjectionMode = .pressureMultigrid
+  var navierStokesSolver: NavierStokesSolver = .pressureMultigrid
 }
 
 enum VMVisualizer: String, CaseIterable {
@@ -31,4 +31,11 @@ enum VMVisualizer: String, CaseIterable {
   case liquidLight = "'60s Liquid Light"
   case gameOfLife = "LCD Game of Life"
   case abstractExpressionism = "Abstract Expressionism"
+
+  var toolbarName: String {
+    switch self {
+    case .abstractExpressionism: "AbEx"
+    default: rawValue
+    }
+  }
 }

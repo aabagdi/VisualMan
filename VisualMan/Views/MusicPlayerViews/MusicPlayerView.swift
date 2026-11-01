@@ -103,39 +103,31 @@ struct MusicPlayerView: View {
       }
     }
     .toolbar {
-      #if !targetEnvironment(simulator)
-      if visualizerSelection.current == .abstractExpressionism {
-        ToolbarItem(placement: .topBarTrailing) {
+      ToolbarItemGroup(placement: .topBarTrailing) {
+        #if !targetEnvironment(simulator)
+        if visualizerSelection.current == .abstractExpressionism {
           Button {
             rendererCache.renderer(AbstractExpressionismRenderer.self)?.reset()
           } label: {
-            Image(systemName: "trash")
+            Image(systemName: "eraser")
           }
           .accessibilityLabel("Clear Canvas")
         }
 
-        ToolbarSpacer(.fixed, placement: .topBarTrailing)
-      }
-
-      if visualizerSelection.current == .navierStokes {
-        ToolbarItem(placement: .topBarTrailing) {
+        if visualizerSelection.current == .navierStokes {
           Menu {
-            Picker("Solver", selection: Bindable(visualizerSelection).navierStokesProjectionMode) {
-              ForEach(NavierStokesProjectionMode.allCases, id: \.self) { mode in
+            Picker("Solver", selection: Bindable(visualizerSelection).navierStokesSolver) {
+              ForEach(NavierStokesSolver.allCases, id: \.self) { mode in
                 Text(mode.rawValue)
               }
             }
           } label: {
-            Image(systemName: "slider.horizontal.3")
+            Image(systemName: "graph.2d")
           }
-          .accessibilityLabel("Solver")
+          .accessibilityLabel("Navier-Stokes Solver Mode")
         }
+        #endif
 
-        ToolbarSpacer(.fixed, placement: .topBarTrailing)
-      }
-      #endif
-
-      ToolbarItem(placement: .topBarTrailing) {
         Button {
           captureScreenshot()
         } label: {
@@ -147,22 +139,28 @@ struct MusicPlayerView: View {
       ToolbarSpacer(.fixed, placement: .topBarTrailing)
 
       ToolbarItem(placement: .topBarTrailing) {
-        Menu {
-          ForEach(VMVisualizer.allCases, id: \.self) { type in
-            Button {
-              visualizerSelection.current = type
-            } label: {
-              if type == visualizerSelection.current {
-                Label(type.rawValue, systemImage: "checkmark")
-              } else {
-                Text(type.rawValue)
-              }
-            }
-          }
+        visualizerSelectorMenu
+      }
+    }
+  }
+
+  private var visualizerSelectorMenu: some View {
+    Menu {
+      ForEach(VMVisualizer.allCases, id: \.self) { type in
+        Button {
+          visualizerSelection.current = type
         } label: {
-          Text(visualizerSelection.current.rawValue)
+          if type == visualizerSelection.current {
+            Label(type.rawValue, systemImage: "checkmark")
+          } else {
+            Text(type.rawValue)
+          }
         }
       }
+    } label: {
+      Text(visualizerSelection.current.toolbarName)
+        .fixedSize(horizontal: true, vertical: true)
+        .accessibilityLabel(visualizerSelection.current.rawValue)
     }
   }
 

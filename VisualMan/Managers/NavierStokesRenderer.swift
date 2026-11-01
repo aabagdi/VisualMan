@@ -5,7 +5,7 @@
 //  Created by Aadit Bagdi on 3/15/26.
 //
 
-enum NavierStokesProjectionMode: String, CaseIterable {
+enum NavierStokesSolver: String, CaseIterable {
   case pressureMultigrid = "V-grid solver (slightly more realistic)"
   case jacobi = "Jacobi solver (slightly faster)"
 }
@@ -63,7 +63,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
   let pipelines: Pipelines
 
-  var projectionMode: NavierStokesProjectionMode = .pressureMultigrid
+  var solver: NavierStokesSolver = .pressureMultigrid
   
   var velocityA: MTLTexture
   var velocityB: MTLTexture

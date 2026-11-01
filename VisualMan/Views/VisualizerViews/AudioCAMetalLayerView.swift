@@ -94,10 +94,12 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private let blitPipeline: (any MTLRenderPipelineState)?
 
     nonisolated(unsafe) private var thermalObserver: (any NSObjectProtocol)?
+    private var lifecycle: AppLifecycleObserver?
     private var currentThermalState: ProcessInfo.ThermalState = .nominal
     private var drawableScaleFactor: CGFloat = 1.0
     private weak var hostView: CAMetalHostView?
     private var displayLink: CADisplayLink?
+    private var isInBackground = false
     private var targetFPS: Int = 120
     private var framesRendered: Int = 0
     private var gpuRampedUp = false
@@ -152,11 +154,22 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
           self?.thermalStateChanged()
         }
       }
+      lifecycle = AppLifecycleObserver(
+        onBackground: { [weak self] in self?.setBackgrounded(true) },
+        onForeground: { [weak self] in self?.setBackgrounded(false) })
     }
 
     deinit {
       if let observer = thermalObserver {
         NotificationCenter.default.removeObserver(observer)
+      }
+    }
+
+    private func setBackgrounded(_ background: Bool) {
+      isInBackground = background
+      displayLink?.isPaused = background
+      if !background {
+        renderer.recoverFromStalledGPU()
       }
     }
 
@@ -200,36 +213,8 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       }
     }
 
-    private func thermalStateChanged() {
-      let newState = ProcessInfo.processInfo.thermalState
-      guard newState != currentThermalState else { return }
-      currentThermalState = newState
-      applyThermalPolicy()
-    }
-
-    private func applyThermalPolicy() {
-      switch currentThermalState {
-      case .nominal:
-        targetFPS = 120
-        drawableScaleFactor = 1.0
-      case .fair:
-        targetFPS = 120
-        drawableScaleFactor = 0.9
-      case .serious:
-        targetFPS = 60
-        drawableScaleFactor = 0.7
-      case .critical:
-        targetFPS = 60
-        drawableScaleFactor = 0.55
-      @unknown default:
-        targetFPS = 60
-        drawableScaleFactor = 1.0
-      }
-      displayLink?.preferredFrameRateRange = makeFrameRateRange()
-    }
-
     private func drawFrame() {
-      guard let view = hostView else { return }
+      guard let view = hostView, !isInBackground else { return }
 
       framesRendered += 1
       if !gpuRampedUp && framesRendered >= rampUpFrameThreshold {
@@ -243,6 +228,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
       let now = CACurrentMediaTime()
       if lastFrameTime > 0, now - lastFrameTime > 0.1 {
+        renderer.recoverFromStalledGPU()
         renderer.prepareForResume()
       }
       lastFrameTime = now
@@ -329,6 +315,36 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       cmdBuf.present(drawable)
       cmdBuf.commit()
     }
+  }
+}
+
+extension AudioCAMetalLayerView.Coordinator {
+  private func thermalStateChanged() {
+    let newState = ProcessInfo.processInfo.thermalState
+    guard newState != currentThermalState else { return }
+    currentThermalState = newState
+    applyThermalPolicy()
+  }
+
+  private func applyThermalPolicy() {
+    switch currentThermalState {
+    case .nominal:
+      targetFPS = 120
+      drawableScaleFactor = 1.0
+    case .fair:
+      targetFPS = 120
+      drawableScaleFactor = 0.9
+    case .serious:
+      targetFPS = 60
+      drawableScaleFactor = 0.7
+    case .critical:
+      targetFPS = 60
+      drawableScaleFactor = 0.55
+    @unknown default:
+      targetFPS = 60
+      drawableScaleFactor = 1.0
+    }
+    displayLink?.preferredFrameRateRange = makeFrameRateRange()
   }
 }
 

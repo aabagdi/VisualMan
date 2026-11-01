@@ -21,12 +21,12 @@ struct NavierStokesVisualizerView: View {
       config: MetalViewConfig(
         clearColor: MTLClearColor(red: 0, green: 0, blue: 0.02, alpha: 1)),
       factory: { device in await NavierStokesRenderer.create(device: device) })
-    .task(id: visualizerSelection.navierStokesProjectionMode) {
+    .task(id: visualizerSelection.navierStokesSolver) {
       let renderer = await cache.renderer(NavierStokesRenderer.self) {
         guard let device = cache.sharedDevice ?? MTLCreateSystemDefaultDevice() else { return nil }
         return await NavierStokesRenderer.create(device: device)
       }
-      renderer?.projectionMode = visualizerSelection.navierStokesProjectionMode
+      renderer?.solver = visualizerSelection.navierStokesSolver
     }
   }
 }

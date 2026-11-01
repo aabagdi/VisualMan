@@ -91,7 +91,18 @@ extension MetalVisualizerRenderer {
       residencySet.commit()
     }
   }
-  
+
+  func recoverFromStalledGPU() {
+    guard sharedEvent.signaledValue < frameNumber else { return }
+    sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 250)
+    let signaled = sharedEvent.signaledValue
+    let target = frameNumber
+    guard signaled < target else { return }
+    rendererLogger.warning(
+      "GPU work for frames \(signaled + 1)...\(target) never completed (backgrounded?); resynchronising")
+    sharedEvent.signaledValue = target
+  }
+
   func canRenderThisFrame() -> Bool {
     let nextFrame = frameNumber + 1
     if nextFrame > Self.maxFramesInFlight {

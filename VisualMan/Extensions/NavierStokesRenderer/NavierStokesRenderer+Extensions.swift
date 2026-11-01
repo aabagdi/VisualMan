@@ -303,7 +303,7 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
     applyVorticityConfinement(encoder: encoder, bass: injBass, mid: injMid)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    switch projectionMode {
+    switch solver {
     case .jacobi:
       project(encoder: encoder, jacobiIterations: jacobiIterations)
     case .pressureMultigrid:

@@ -62,9 +62,11 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private let blitArgumentTables: [any MTL4ArgumentTable]
 
     nonisolated(unsafe) private var thermalObserver: (any NSObjectProtocol)?
+    private var lifecycle: AppLifecycleObserver?
     private var currentThermalState: ProcessInfo.ThermalState = .nominal
     private var drawableScaleFactor: CGFloat = 1.0
     private weak var mtkView: MTKView?
+    private var isInBackground = false
     private var targetFPS: Int = 120
     private var framesRendered: Int = 0
     private var gpuRampedUp = false
@@ -125,11 +127,22 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
           self?.thermalStateChanged()
         }
       }
+      lifecycle = AppLifecycleObserver(
+        onBackground: { [weak self] in self?.setBackgrounded(true) },
+        onForeground: { [weak self] in self?.setBackgrounded(false) })
     }
 
     deinit {
       if let observer = thermalObserver {
         NotificationCenter.default.removeObserver(observer)
+      }
+    }
+
+    private func setBackgrounded(_ background: Bool) {
+      isInBackground = background
+      mtkView?.isPaused = background
+      if !background {
+        renderer.recoverFromStalledGPU()
       }
     }
 
@@ -177,6 +190,7 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         mtkView = view
         view.preferredFramesPerSecond = targetFPS
       }
+      guard !isInBackground else { return }
 
       framesRendered += 1
       if !gpuRampedUp && framesRendered >= rampUpFrameThreshold {
@@ -190,6 +204,7 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
       let now = CACurrentMediaTime()
       if lastFrameTime > 0, now - lastFrameTime > 0.1 {
+        renderer.recoverFromStalledGPU()
         renderer.prepareForResume()
       }
       lastFrameTime = now
