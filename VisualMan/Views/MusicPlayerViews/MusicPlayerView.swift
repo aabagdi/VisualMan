@@ -116,6 +116,23 @@ struct MusicPlayerView: View {
 
         ToolbarSpacer(.fixed, placement: .topBarTrailing)
       }
+
+      if visualizerSelection.current == .navierStokes {
+        ToolbarItem(placement: .topBarTrailing) {
+          Menu {
+            Picker("Solver", selection: Bindable(visualizerSelection).navierStokesProjectionMode) {
+              ForEach(NavierStokesProjectionMode.allCases, id: \.self) { mode in
+                Text(mode.rawValue)
+              }
+            }
+          } label: {
+            Image(systemName: "slider.horizontal.3")
+          }
+          .accessibilityLabel("Solver")
+        }
+
+        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+      }
       #endif
 
       ToolbarItem(placement: .topBarTrailing) {

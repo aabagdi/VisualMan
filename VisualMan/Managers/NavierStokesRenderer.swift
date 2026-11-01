@@ -5,6 +5,11 @@
 //  Created by Aadit Bagdi on 3/15/26.
 //
 
+enum NavierStokesProjectionMode: String, CaseIterable {
+  case pressureMultigrid = "V-grid solver (slightly more realistic)"
+  case jacobi = "Jacobi solver (slightly faster)"
+}
+
 #if !targetEnvironment(simulator)
 import Metal
 import os
@@ -58,6 +63,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
   let pipelines: Pipelines
 
+  var projectionMode: NavierStokesProjectionMode = .pressureMultigrid
+  
   var velocityA: MTLTexture
   var velocityB: MTLTexture
   var pressure: MTLTexture
@@ -74,7 +81,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var psiC: MTLTexture
   var u0: MTLTexture
 
-  var mgPsi: [MTLTexture]
+  var mgPressure: [MTLTexture]
   var mgRHS: [MTLTexture]
 
   let stretchStatsBuffer: MTLBuffer
@@ -197,7 +204,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.psiB = textures.psiB
     self.psiC = textures.psiC
     self.u0 = textures.u0
-    self.mgPsi = textures.mgPsi
+    self.mgPressure = textures.mgPressure
     self.mgRHS = textures.mgRHS
     self.stretchStatsBuffer = stretchStatsBuffer
     self.residencySet = residencySet

@@ -26,13 +26,7 @@ extension NavierStokesRenderer {
   static let viscosityAudioReduction: Float = 0.05
   static let maxSpeed: Float = 32.0
   static let vorticityConfinementScale: Float = 0.10
-
-  enum ProjectionMode {
-    case jacobi
-    case pressureMultigrid
-    case streamfunctionMultigrid
-  }
-  static let projectionMode: ProjectionMode = .pressureMultigrid
+  
   static let multigridCoarseCells: Int = 2048
   static let multigridCycles: Int = 2
   static let multigridPreSmooth: Int = 1

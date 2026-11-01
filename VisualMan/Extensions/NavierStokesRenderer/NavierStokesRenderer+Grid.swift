@@ -73,7 +73,7 @@ extension NavierStokesRenderer {
     psiB = t.psiB
     psiC = t.psiC
     u0 = t.u0
-    mgPsi = t.mgPsi
+    mgPressure = t.mgPressure
     mgRHS = t.mgRHS
   }
 
@@ -81,7 +81,7 @@ extension NavierStokesRenderer {
     [velocityA, velocityB, pressure, divergenceTexture,
      dyeA, dyeB, dyeC,
      bloomA, bloomB, bloomMidA, bloomLoA,
-     psiA, psiB, psiC, u0] + mgPsi + mgRHS
+     psiA, psiB, psiC, u0] + mgPressure + mgRHS
   }
 }
 

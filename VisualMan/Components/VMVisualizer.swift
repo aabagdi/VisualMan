@@ -10,6 +10,7 @@ import Observation
 @Observable @MainActor
 final class VisualizerSelection {
   var current: VMVisualizer = .bars
+  var navierStokesProjectionMode: NavierStokesProjectionMode = .pressureMultigrid
 }
 
 enum VMVisualizer: String, CaseIterable {

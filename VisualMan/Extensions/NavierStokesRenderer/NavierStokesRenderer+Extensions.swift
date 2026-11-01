@@ -303,13 +303,11 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
     applyVorticityConfinement(encoder: encoder, bass: injBass, mid: injMid)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    switch Self.projectionMode {
+    switch projectionMode {
     case .jacobi:
       project(encoder: encoder, jacobiIterations: jacobiIterations)
     case .pressureMultigrid:
       projectPressureMultigrid(encoder: encoder)
-    case .streamfunctionMultigrid:
-      projectStreamfunction(encoder: encoder)
     }
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 

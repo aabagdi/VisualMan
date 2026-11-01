@@ -30,13 +30,11 @@ extension NavierStokesRenderer {
     let vorticityConfinementMerged: MTLComputePipelineState
     let macCormackCorrect: MTLComputePipelineState
     let dyeDiffuse: MTLComputePipelineState
-    let vorticityRHS: MTLComputePipelineState
     let divergenceRHS: MTLComputePipelineState
     let mgSmooth: MTLComputePipelineState
     let mgRestrict: MTLComputePipelineState
     let mgProlong: MTLComputePipelineState
     let mgCoarseSolve: MTLComputePipelineState
-    let curlPsi: MTLComputePipelineState
     let viscosity: MTLComputePipelineState
     let resample: MTLComputePipelineState
   }
@@ -57,7 +55,7 @@ extension NavierStokesRenderer {
     let psiB: MTLTexture
     let psiC: MTLTexture
     let u0: MTLTexture
-    let mgPsi: [MTLTexture]
+    let mgPressure: [MTLTexture]
     let mgRHS: [MTLTexture]
   }
 
@@ -84,13 +82,12 @@ extension NavierStokesRenderer {
           let vorticityConfinementMerged = make("fluidVorticityConfinementMerged"),
           let macCormackCorrect = make("fluidMacCormackCorrect"),
           let dyeDiffuse = make("fluidDyeDiffuse"),
-          let vorticityRHS = make("fluidVorticityRHS"),
           let divergenceRHS = make("fluidDivergenceRHS"),
           let mgSmooth = make("fluidMGSmooth"),
           let mgRestrict = make("fluidMGRestrict"),
           let mgProlong = make("fluidMGProlong"),
           let mgCoarseSolve = make("fluidMGCoarseSolve"),
-          let curlPsi = make("fluidCurlPsi"), let viscosity = make("fluidViscosity"),
+          let viscosity = make("fluidViscosity"),
           let resample = make("fluidResample") else {
       return nil
     }
@@ -107,11 +104,11 @@ extension NavierStokesRenderer {
                      vorticityConfinementMerged: vorticityConfinementMerged,
                      macCormackCorrect: macCormackCorrect,
                      dyeDiffuse: dyeDiffuse,
-                     vorticityRHS: vorticityRHS, divergenceRHS: divergenceRHS,
+                     divergenceRHS: divergenceRHS,
                      mgSmooth: mgSmooth,
                      mgRestrict: mgRestrict, mgProlong: mgProlong,
                      mgCoarseSolve: mgCoarseSolve,
-                     curlPsi: curlPsi, viscosity: viscosity, resample: resample)
+                     viscosity: viscosity, resample: resample)
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
@@ -185,7 +182,7 @@ extension NavierStokesRenderer {
       return nil
     }
 
-    guard let (mgPsi, mgRHS) = createMultigridLevels(device: device, width: width, height: height) else {
+    guard let (mgPressure, mgRHS) = createMultigridLevels(device: device, width: width, height: height) else {
       return nil
     }
 
@@ -195,13 +192,13 @@ extension NavierStokesRenderer {
                     bloomA: bloomA, bloomB: bloomB,
                     bloomMidA: bloomMidA, bloomLoA: bloomLoA,
                     psiA: psiA, psiB: psiB, psiC: psiC, u0: u0,
-                    mgPsi: mgPsi, mgRHS: mgRHS)
+                    mgPressure: mgPressure, mgRHS: mgRHS)
   }
 
   static func createMultigridLevels(device: MTLDevice,
                                     width: Int,
-                                    height: Int) -> (psi: [MTLTexture], rhs: [MTLTexture])? {
-    var mgPsi = [MTLTexture]()
+                                    height: Int) -> (pressure: [MTLTexture], rhs: [MTLTexture])? {
+    var mgPressure = [MTLTexture]()
     var mgRHS = [MTLTexture]()
     var w = width
     var h = height
@@ -211,20 +208,20 @@ extension NavierStokesRenderer {
       )
       desc.usage = [.shaderRead, .shaderWrite]
       desc.storageMode = .private
-      guard let psi = device.makeTexture(descriptor: desc),
+      guard let pressure = device.makeTexture(descriptor: desc),
             let rhs = device.makeTexture(descriptor: desc) else {
         logger.error("Failed to create multigrid level \(w)x\(h)")
         return nil
       }
-      psi.label = "mgPsi\(w)x\(h)"
+      pressure.label = "mgPressure\(w)x\(h)"
       rhs.label = "mgRHS\(w)x\(h)"
-      mgPsi.append(psi)
+      mgPressure.append(pressure)
       mgRHS.append(rhs)
       if w * h <= multigridCoarseCells || (w <= 2 && h <= 2) { break }
       w = (w + 1) / 2
       h = (h + 1) / 2
     }
-    return (mgPsi, mgRHS)
+    return (mgPressure, mgRHS)
   }
 
   func warmUpGPU() {
