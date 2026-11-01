@@ -57,8 +57,6 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     let layer = view.metalLayer
     layer.device = renderer.device
     layer.pixelFormat = .bgra8Unorm
-    // The drawable is only ever a render-pass target (blit), never a compute
-    // write target, so it can stay framebuffer-only for faster presentation.
     layer.framebufferOnly = true
     layer.maximumDrawableCount = 3
     layer.isOpaque = true

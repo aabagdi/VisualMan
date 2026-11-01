@@ -5,8 +5,6 @@
 //  Created by Aadit Bagdi on 4/9/26.
 //
 
-// Metal 4 (MTL4*) is not available in the iOS Simulator SDK, so the Metal 4
-// renderer stack is compiled only for device builds.
 #if !targetEnvironment(simulator)
 import Metal
 import os

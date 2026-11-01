@@ -253,8 +253,6 @@ actor DSPProcessor {
   }
   
   private func updateAutomaticGainControl(bars: borrowing [32 of Float], dt: Float) {
-    // A scalar reduction over 32 elements beats vDSP here: the call overhead
-    // exceeds the work, and it avoids needing a mutable copy of `bars`.
     var maxBar: Float = 0
     for i in 0..<Constants.barCount {
       maxBar = max(maxBar, bars[i])

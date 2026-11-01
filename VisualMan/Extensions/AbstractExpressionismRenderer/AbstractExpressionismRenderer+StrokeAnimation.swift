@@ -107,12 +107,6 @@ extension AbstractExpressionismRenderer {
 
     appendPollockTrails(to: &strokes, energy: energy, focus: focus)
 
-    // CRITICAL: this call must always run, regardless of which append*
-    // functions are enabled. It moves smear-pipeline strokes from
-    // freshSmearStrokes into animatingStrokes, where emitAnimatedStrokes
-    // reads them. Knife, gestural, scumble, and wash all rely on this
-    // bus. Disable individual append* calls above to filter stroke
-    // types, but never disable this line.
     enqueueAnimatingStrokes(freshSmearStrokes)
 
     return emitAnimatedStrokes(into: strokes)

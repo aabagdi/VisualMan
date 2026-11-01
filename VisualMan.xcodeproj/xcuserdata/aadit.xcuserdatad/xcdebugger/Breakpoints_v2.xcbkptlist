@@ -408,6 +408,24 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 9f11ade6bc10094"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[BWDeferredCaptureContainer abort]"
+                  moduleName = "CMCapture"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 689de956be0ef509"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::IDBServer::MemoryBackingStoreTransaction::abort()"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 99ff04c85e9dcc39"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
@@ -450,24 +468,6 @@
                   continueAfterRunningActions = "No"
                   symbolName = "WebKit::WebSpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&lt;unsigned long long&gt;, unsigned long long&gt;)"
                   moduleName = "WebKit"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 9f11ade6bc10094"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[BWDeferredCaptureContainer abort]"
-                  moduleName = "CMCapture"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 689de956be0ef509"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::IDBServer::MemoryBackingStoreTransaction::abort()"
-                  moduleName = "WebCore"
                   usesParentBreakpointCondition = "Yes">
                </Location>
             </Locations>

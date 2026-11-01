@@ -88,17 +88,6 @@ extension AbstractExpressionismRenderer {
     let energy = (slowEnvelope.x + slowEnvelope.y + slowEnvelope.z) / 3.0
     let dissonance = min(max(energy * 1.5, 0.05), 0.95)
 
-    // Hue offset distribution. Previously the 60% "small offset" path
-    // used ±0.12 jitter - which keeps all picks within the same pigment
-    // family (e.g. all greens when baseHue is in the green range,
-    // producing visually identical strokes since pure-pigment snapping
-    // collapses near-identical hues to the same pigment).
-    //
-    // Now the small offset is ±0.35 (about 4 pigments of spread on the
-    // 13-pigment palette). Combined with the wider 0.42 jumps and full
-    // complements, the picker can produce ANY of the 13 pigments at
-    // any moment, with a gentle audio-reactive bias toward baseHue's
-    // current family.
     let r = nextSeed()
     let offset: Float
     if r < 0.55 {
@@ -138,9 +127,6 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    // Exact pigment, no variation. valueBias 0.4 still prefers brighter
-    // pigments for knife strokes (cadmium yellow/red/orange) since
-    // knives should read as bold gestures.
     return Self.nearestPigment(toHue: hue, valueBias: 0.4).linearRgb
   }
 
@@ -163,12 +149,6 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    // Exact pigment, no dilution. Stains will now look saturated rather
-    // than pastel - the previous "dilute toward white" produced
-    // pastel-looking stains but the diluted color wasn't a Mixbox
-    // pigment, defeating the K-M mixing for stain-stain overlaps.
-    // Saturated stains are more aggressive but the palette purity
-    // matters more for accurate downstream mixing.
     return Self.nearestPigment(toHue: hue, valueBias: 0.0).linearRgb
   }
 

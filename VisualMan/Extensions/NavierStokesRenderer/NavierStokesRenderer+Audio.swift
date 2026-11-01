@@ -20,54 +20,89 @@ private func hsv2rgb(h: Float, s: Float, v: Float) -> SIMD3<Float> {
   return v * simd_mix(SIMD3<Float>(repeating: 1.0), clamped, SIMD3<Float>(repeating: s))
 }
 
+private func rotate(_ v: SIMD2<Float>, by angle: Float) -> SIMD2<Float> {
+  let c = cos(angle)
+  let s = sin(angle)
+  return SIMD2<Float>(c * v.x - s * v.y, s * v.x + c * v.y)
+}
+
+private struct Nozzle {
+  var anchor: SIMD2<Float>
+  var direction: SIMD2<Float>
+  var slide: SIMD2<Float>
+  var phase: Float
+}
+
+private let bassNozzles: [Nozzle] = [
+  Nozzle(anchor: SIMD2(0.20, 0.04), direction: simd_normalize(SIMD2(0.30, 0.51)),
+         slide: SIMD2(1, 0), phase: 0.0),
+  Nozzle(anchor: SIMD2(0.80, 0.04), direction: simd_normalize(SIMD2(-0.30, 0.51)),
+         slide: SIMD2(1, 0), phase: 2.1)
+]
+
+private let midNozzles: [Nozzle] = [
+  Nozzle(anchor: SIMD2(0.03, 0.58), direction: simd_normalize(SIMD2(0.47, -0.08)),
+         slide: SIMD2(0, 1), phase: 0.7),
+  Nozzle(anchor: SIMD2(0.97, 0.42), direction: simd_normalize(SIMD2(-0.47, 0.08)),
+         slide: SIMD2(0, 1), phase: 3.3)
+]
+
+private let highNozzles: [Nozzle] = [
+  Nozzle(anchor: SIMD2(0.30, 0.96), direction: simd_normalize(SIMD2(0.20, -0.46)),
+         slide: SIMD2(1, 0), phase: 1.3),
+  Nozzle(anchor: SIMD2(0.50, 0.96), direction: SIMD2(0.0, -1.0),
+         slide: SIMD2(1, 0), phase: 4.2),
+  Nozzle(anchor: SIMD2(0.70, 0.96), direction: simd_normalize(SIMD2(-0.20, -0.46)),
+         slide: SIMD2(1, 0), phase: 5.6)
+]
+
 extension NavierStokesRenderer {
   func injectAudioSplats(encoder: any MTL4ComputeCommandEncoder,
                          bass: Float,
                          mid: Float,
                          high: Float) {
-    let center = Float(gridSize) * 0.5
-    let gs = Float(gridSize)
-    let s = gs / 1024.0
-
-    forceSplats.removeAll(keepingCapacity: true)
-    dyeSplats.removeAll(keepingCapacity: true)
-
-    let audioEnergy = (bass + mid + high) / 3.0
-    collectVortexSplats(center: center, s: s, audioEnergy: audioEnergy,
-                        forceSplats: &forceSplats, dyeSplats: &dyeSplats)
+    let high = min(high * Self.highBandGain, 1.0)
+    updateDynamics(bass: bass, mid: mid, high: high)
 
     if bass > 0.01 {
-      collectBassSplats(bass: bass, center: center, gs: gs,
-                        forceSplats: &forceSplats, dyeSplats: &dyeSplats)
+      collectBassJets(bass: bass)
+      flushSplats(encoder: encoder)
     }
-
     if mid > 0.01 {
-      collectMidSplats(mid: mid, center: center, gs: gs,
-                       forceSplats: &forceSplats, dyeSplats: &dyeSplats)
+      collectMidJets(mid: mid)
+      flushSplats(encoder: encoder)
     }
-
     if high > 0.02 {
-      collectHighSplats(high: high, center: center, gs: gs,
-                        forceSplats: &forceSplats, dyeSplats: &dyeSplats)
-    }
-
-    if !forceSplats.isEmpty {
-      dispatchBatchedSplats(encoder: encoder, texture: velocityA, splats: forceSplats)
-    }
-    if !dyeSplats.isEmpty {
-      dispatchBatchedSplats(encoder: encoder, texture: dyeA, splats: dyeSplats)
+      collectHighJets(high: high)
+      flushSplats(encoder: encoder)
     }
 
     prevBass = bass
     prevMid = mid
   }
 
+  private func flushSplats(encoder: any MTL4ComputeCommandEncoder) {
+    if !forceSplats.isEmpty {
+      dispatchBatchedSplats(encoder: encoder, texture: velocityA, splats: forceSplats,
+                            isVelocity: true)
+      dispatchBatchedSplats(encoder: encoder, texture: u0, splats: forceSplats,
+                            isVelocity: true)
+    }
+    if !dyeSplats.isEmpty {
+      dispatchBatchedSplats(encoder: encoder, texture: dyeA, splats: dyeSplats,
+                            isVelocity: false)
+    }
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    forceSplats.removeAll(keepingCapacity: true)
+    dyeSplats.removeAll(keepingCapacity: true)
+  }
+
   private func dispatchBatchedSplats(encoder: any MTL4ComputeCommandEncoder,
                                      texture: MTLTexture,
-                                     splats: [SplatParams]) {
-    let gsF = Float(gridSize)
-    var minX: Float = gsF
-    var minY: Float = gsF
+                                     splats: [SplatParams],
+                                     isVelocity: Bool) {
+    var minX: Float = Float(gridWidth)
+    var minY: Float = Float(gridHeight)
     var maxX: Float = 0
     var maxY: Float = 0
     let rMult: Float = sqrt(6.0)
@@ -80,8 +115,8 @@ extension NavierStokesRenderer {
     }
     let ox = max(0, Int(floor(minX)))
     let oy = max(0, Int(floor(minY)))
-    let ex = min(gridSize, Int(ceil(maxX)))
-    let ey = min(gridSize, Int(ceil(maxY)))
+    let ex = min(gridWidth, Int(ceil(maxX)))
+    let ey = min(gridHeight, Int(ceil(maxY)))
     let regionW = ex - ox
     let regionH = ey - oy
     if regionW <= 0 || regionH <= 0 { return }
@@ -93,163 +128,133 @@ extension NavierStokesRenderer {
     argumentTable.setAddress(writeUniform(count), index: 1)
     let origin = SIMD2<UInt32>(UInt32(ox), UInt32(oy))
     argumentTable.setAddress(writeUniform(origin), index: 2)
+    argumentTable.setAddress(writeUniform(UInt32(isVelocity ? 1 : 0)), index: 3)
     dispatchGrid(encoder: encoder, width: regionW, height: regionH)
   }
 
-  private func collectBassSplats(bass: Float,
-                                 center: Float,
-                                 gs: Float,
-                                 forceSplats: inout [SplatParams],
-                                 dyeSplats: inout [SplatParams]) {
-    let bassForce = bass * 300.0
-    let bassRadius = gs * 0.08 * (1.0 + bass * 0.5)
+  private func updateDynamics(bass: Float, mid: Float, high: Float) {
+    if !dynamicsWarm {
+      bassFast = bass; midFast = mid; highFast = high
+      bassEnvelope = bass; midEnvelope = mid; highEnvelope = high
+      bassBurst = 0; midBurst = 0; highBurst = 0
+      dynamicsWarm = true
+    }
+    trackBand(level: bass, fast: &bassFast, envelope: &bassEnvelope, burst: &bassBurst)
+    trackBand(level: mid, fast: &midFast, envelope: &midEnvelope, burst: &midBurst)
+    trackBand(level: high, fast: &highFast, envelope: &highEnvelope, burst: &highBurst)
 
-    let bassOnset = max(bass - prevBass, 0)
-    let onsetBoost = 1.0 + bassOnset * 5.0
+    let swell = max(dynamics(level: bass, envelope: bassEnvelope),
+                    dynamics(level: mid, envelope: midEnvelope),
+                    dynamics(level: high, envelope: highEnvelope))
+    let swellTerm = simd_clamp((swell - 1.0) / (Self.dynamicsMax - 1.0), 0, 1)
+    let burstTerm = min(max(bassBurst, midBurst, highBurst) / 2.5, 1.0)
+    lastExcitement = simd_clamp(swellTerm * 0.7 + burstTerm * 0.6, 0, 1)
+  }
 
-    let angle1 = time * 0.7
-    let angle2 = angle1 + .pi
-    let orbitRadius = gs * 0.15
+  private func trackBand(level: Float, fast: inout Float, envelope: inout Float, burst: inout Float) {
+    let hit = max(0, level - fast) / max(envelope, Self.dynamicsFloor)
+    burst = max(burst * exp(-dt / Self.burstDecaySeconds), min(hit, 2.5))
+    fast += (level - fast) * (1 - exp(-dt / Self.transientFollowerSeconds))
+    envelope += (level - envelope) * (1 - exp(-dt / Self.dynamicsEnvelopeSeconds))
+  }
 
-    let pos1 = SIMD2<Float>(center + cos(angle1) * orbitRadius,
-                            center + sin(angle1) * orbitRadius)
-    let pos2 = SIMD2<Float>(center + cos(angle2) * orbitRadius,
-                            center + sin(angle2) * orbitRadius)
+  private func dynamics(level: Float, envelope: Float) -> Float {
+    simd_clamp(level / max(envelope, Self.dynamicsFloor), Self.dynamicsMin, Self.dynamicsMax)
+  }
 
-    let dir1 = normalize(pos1 - SIMD2<Float>(center, center))
-    let dir2 = normalize(pos2 - SIMD2<Float>(center, center))
+  private struct DynamicsScales {
+    let speed: Float
+    let volume: Float
+    let drive: Float
+    let dye: Float
+  }
 
-    let force1 = SIMD3<Float>(dir1.x, dir1.y, 0) * bassForce * onsetBoost
-    let force2 = SIMD3<Float>(dir2.x, dir2.y, 0) * bassForce * onsetBoost
+  private func dynamicsScales(_ dyn: Float) -> DynamicsScales {
+    DynamicsScales(speed: pow(dyn, Self.dynamicsSpeedExponent),
+                   volume: pow(dyn, Self.dynamicsVolumeExponent),
+                   drive: pow(dyn, 0.5),
+                   dye: pow(dyn, 0.8))
+  }
 
-    forceSplats.append(SplatParams(position: pos1, value: force1, radius: bassRadius))
-    forceSplats.append(SplatParams(position: pos2, value: force2, radius: bassRadius))
+  private func emitJet(_ nozzle: Nozzle,
+                       speed: Float,
+                       radius: Float,
+                       strength: Float,
+                       wobble: Float,
+                       slideAmount: Float,
+                       color: SIMD3<Float>,
+                       density: Float) {
+    let flap = 1.0 + Self.excitementWobbleGain * lastExcitement
+    let angle = (sin(time * 0.9 * flap + nozzle.phase)
+                 + 0.4 * lastExcitement * sin(time * 3.1 * flap + nozzle.phase * 2.3)) * wobble * flap
+    let dir = rotate(nozzle.direction, by: angle)
+    let slide = nozzle.slide * sin(time * 0.37 + nozzle.phase * 1.7) * slideAmount
+    let pos = (nozzle.anchor + slide) * SIMD2<Float>(Float(gridWidth), Float(gridHeight))
 
-    let bassHue = fmod(time * 0.05, 1.0)
-    let bassColor = hsv2rgb(h: bassHue, s: 0.85, v: bass * 0.75) * onsetBoost
-    dyeSplats.append(SplatParams(position: pos1, value: bassColor, radius: bassRadius * 1.2))
-    dyeSplats.append(SplatParams(position: pos2, value: bassColor * 0.8, radius: bassRadius * 1.2))
+    forceSplats.append(SplatParams(position: pos,
+                                   value: SIMD3<Float>(dir.x * speed, dir.y * speed, strength),
+                                   radius: radius))
+    dyeSplats.append(SplatParams(position: pos + dir * radius * 0.8,
+                                 value: color * Self.dyeInjectionScale,
+                                 radius: radius * 1.4,
+                                 weight: density * Self.dyeInjectionScale))
+  }
 
-    if bassOnset > 0.15 {
-      let burstCount = 7
-      let burstCenter = SIMD2<Float>(
-        center + sin(time * 1.7) * gs * 0.1,
-        center + cos(time * 2.3) * gs * 0.1
-      )
-      let burstForceScale = bassOnset * 500.0
-      let burstRadius = gs * 0.05
+  private func collectBassJets(bass: Float) {
+    let gs = gridScale
+    let hit = bassBurst * Self.burstGain + highBurst * Self.percussiveSpillGain
+    let dyn = dynamicsScales(dynamics(level: bass, envelope: bassEnvelope))
 
-      for i in 0..<burstCount {
-        let angle = Float(i) * (.pi * 2.0 / Float(burstCount)) + time * 0.5
-        let dir = SIMD2<Float>(cos(angle), sin(angle))
-        let splatPos = burstCenter + dir * gs * 0.06
+    let speed = (Self.bassJetSpeed + bass * Self.bassJetSpeedRange) * dyn.speed * (1.0 + hit)
+    let radius = gs * Self.bassJetRadius * (0.5 + bass * 1.0) * dyn.volume * (1.0 + hit * 0.6)
+    let strength = min((0.3 + bass * 0.3 + hit * 0.8) * dyn.drive, 1.0)
+    let hue = fmod(time * 0.05, 1.0)
+    let brightness = (0.35 + bass * 0.9) * dyn.dye * (1.0 + hit * 0.5)
+    let color = hsv2rgb(h: hue, s: 0.85, v: brightness)
+    let density = Self.bassGasWeight * brightness
 
-        let force = SIMD3<Float>(dir.x, dir.y, 0) * burstForceScale
-        forceSplats.append(SplatParams(position: splatPos, value: force, radius: burstRadius))
-
-        let burstHue = fmod(time * 0.05 + Float(i) / Float(burstCount), 1.0)
-        let burstColor = hsv2rgb(h: burstHue, s: 0.95, v: bass)
-        dyeSplats.append(SplatParams(position: splatPos, value: burstColor, radius: burstRadius * 1.4))
-      }
+    for (i, nozzle) in bassNozzles.enumerated() {
+      let tint = hsv2rgb(h: hue + Float(i) * 0.08, s: 0.85, v: 1.0)
+      emitJet(nozzle, speed: speed, radius: radius, strength: strength,
+              wobble: 0.30, slideAmount: 0.05, color: color * tint, density: density)
     }
   }
 
-  private func collectMidSplats(mid: Float,
-                                center: Float,
-                                gs: Float,
-                                forceSplats: inout [SplatParams],
-                                dyeSplats: inout [SplatParams]) {
-    let midForce = mid * 200.0
-    let midRadius = gs * 0.04 * (1.0 + mid * 0.3)
+  private func collectMidJets(mid: Float) {
+    let gs = gridScale
+    let hit = midBurst * Self.burstGain + highBurst * Self.percussiveSpillGain
+    let dyn = dynamicsScales(dynamics(level: mid, envelope: midEnvelope))
 
-    let midOnset = max(mid - prevMid, 0)
-    let midBoost = 1.0 + midOnset * 3.0
+    let speed = (Self.midJetSpeed + mid * Self.midJetSpeedRange) * dyn.speed * (1.0 + hit)
+    let radius = gs * Self.midJetRadius * (0.5 + mid * 0.9) * dyn.volume * (1.0 + hit * 0.6)
+    let strength = min((0.25 + mid * 0.3 + hit * 0.8) * dyn.drive, 1.0)
 
-    for i in 0..<3 {
-      let angle = time * 1.3 + Float(i) * (.pi * 2.0 / 3.0)
-      let orbit = gs * 0.25
-      let pos = SIMD2<Float>(center + cos(angle) * orbit,
-                             center + sin(angle) * orbit)
-
-      let tangent = SIMD2<Float>(-sin(angle), cos(angle))
-      let force = SIMD3<Float>(tangent.x, tangent.y, 0) * midForce * midBoost
-
-      forceSplats.append(SplatParams(position: pos, value: force, radius: midRadius))
-
-      let midHue = fmod(time * 0.07 + Float(i) * 0.33, 1.0)
-      let midColor = hsv2rgb(h: midHue, s: 0.75, v: mid * 0.6) * midBoost
-      dyeSplats.append(SplatParams(position: pos, value: midColor, radius: midRadius * 1.3))
-    }
-
-    if midOnset > 0.12 {
-      let burstCount = 5
-      let burstForce = midOnset * 350.0
-      let burstRadius = gs * 0.035
-      for i in 0..<burstCount {
-        let angle = Float(i) * (.pi * 2.0 / Float(burstCount)) + time * 1.5
-        let dir = SIMD2<Float>(cos(angle), sin(angle))
-        let splatPos = SIMD2<Float>(center, center) + dir * gs * 0.2
-        let tangent = SIMD2<Float>(-dir.y, dir.x)
-        let force = SIMD3<Float>(tangent.x, tangent.y, 0) * burstForce
-        forceSplats.append(SplatParams(position: splatPos, value: force, radius: burstRadius))
-
-        let hue = fmod(time * 0.07 + Float(i) * 0.2, 1.0)
-        let color = hsv2rgb(h: hue, s: 0.9, v: mid * 0.8)
-        dyeSplats.append(SplatParams(position: splatPos, value: color, radius: burstRadius * 1.3))
-      }
+    for (i, nozzle) in midNozzles.enumerated() {
+      let hue = fmod(time * 0.07 + Float(i) * 0.45, 1.0)
+      let brightness = (0.3 + mid * 0.9) * dyn.dye * (1.0 + hit * 0.5)
+      let color = hsv2rgb(h: hue, s: 0.8, v: brightness)
+      emitJet(nozzle, speed: speed, radius: radius, strength: strength,
+              wobble: 0.45, slideAmount: 0.08, color: color,
+              density: Self.midGasWeight * brightness)
     }
   }
 
-  private func collectHighSplats(high: Float,
-                                 center: Float,
-                                 gs: Float,
-                                 forceSplats: inout [SplatParams],
-                                 dyeSplats: inout [SplatParams]) {
-    let highForce = high * 120.0
-    let highRadius = gs * 0.02
+  private func collectHighJets(high: Float) {
+    let gs = gridScale
+    let hit = highBurst * Self.burstGain
+    let dyn = dynamicsScales(dynamics(level: high, envelope: highEnvelope))
 
-    for i in 0..<4 {
-      let angle = time * 2.1 + Float(i) * (.pi * 0.5) + sin(time * 3.0 + Float(i)) * 0.5
-      let orbit = gs * 0.35
-      let pos = SIMD2<Float>(center + cos(angle) * orbit,
-                             center + sin(angle) * orbit)
+    let speed = (Self.highJetSpeed + high * Self.highJetSpeedRange) * dyn.speed * (1.0 + hit)
+    let radius = gs * Self.highJetRadius * (0.5 + high * 1.0) * dyn.volume * (1.0 + hit * 0.8)
+    let strength = min((0.2 + high * 0.3 + hit * 0.8) * dyn.drive, 1.0)
 
-      let dir = SIMD2<Float>(cos(angle + Float(i)), sin(angle + Float(i)))
-      let force = SIMD3<Float>(dir.x, dir.y, 0) * highForce
-
-      forceSplats.append(SplatParams(position: pos, value: force, radius: highRadius))
-
-      let highHue = fmod(time * 0.09 + Float(i) * 0.25, 1.0)
-      let highColor = hsv2rgb(h: highHue, s: 0.9, v: high)
-      dyeSplats.append(SplatParams(position: pos, value: highColor, radius: highRadius * 1.5))
-    }
-  }
-
-  private func collectVortexSplats(center: Float,
-                                   s: Float,
-                                   audioEnergy: Float,
-                                   forceSplats: inout [SplatParams],
-                                   dyeSplats: inout [SplatParams]) {
-    let vortexAngle = time * 0.3
-    let vortexR: Float = 80.0 * s
-    let strength: Float = 200.0 * s * (0.3 + audioEnergy * 0.7)
-    for i in 0..<2 {
-      let a = vortexAngle + Float(i) * .pi
-      let pos = SIMD2<Float>(center + cos(a) * vortexR, center + sin(a) * vortexR)
-      forceSplats.append(SplatParams(position: pos,
-                                     value: SIMD3<Float>(-sin(a) * strength, cos(a) * strength, 0),
-                                     radius: 100.0 * s))
-    }
-    let hue = fmod(time * 0.1, 1.0)
-    let color = SIMD3<Float>(
-      0.3 + 0.2 * sin(hue * .pi * 2.0),
-      0.15 + 0.2 * sin(hue * .pi * 2.0 + 2.094),
-      0.25 + 0.2 * sin(hue * .pi * 2.0 + 4.189)
-    )
-    if audioEnergy > 0.05 {
-      dyeSplats.append(SplatParams(position: SIMD2<Float>(center, center),
-                                   value: color * (0.3 + audioEnergy * 0.7),
-                                   radius: 90.0 * s))
+    for (i, nozzle) in highNozzles.enumerated() {
+      let hue = fmod(time * 0.09 + Float(i) * 0.3, 1.0)
+      let brightness = (0.35 + high * 1.0) * dyn.dye * (1.0 + hit * 0.6)
+      let color = hsv2rgb(h: hue, s: 0.9, v: brightness)
+      emitJet(nozzle, speed: speed, radius: radius, strength: strength,
+              wobble: 0.6, slideAmount: 0.04, color: color,
+              density: Self.highGasWeight * brightness)
     }
   }
 }

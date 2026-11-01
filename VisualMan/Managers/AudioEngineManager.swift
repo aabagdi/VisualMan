@@ -98,7 +98,9 @@ final class AudioEngineManager {
     for observer in [interruptionObserver, routeChangeObserver, configChangeObserver].compactMap({ $0 }) {
       NotificationCenter.default.removeObserver(observer)
     }
-    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    Task.detached(priority: .utility) {
+      try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
   }
   
   private func setupAudioEngine() throws {
@@ -208,12 +210,21 @@ final class AudioEngineManager {
     }
   }
   
-  private func activateAudioSession() async throws {
+  func activateAudioSession() async throws {
     let session = AVAudioSession.sharedInstance()
     if #available(iOS 27.0, *) {
       try await session.activate(options: [])
     } else {
       try session.setActive(true)
+    }
+  }
+
+  func deactivateAudioSession() async throws {
+    let session = AVAudioSession.sharedInstance()
+    if #available(iOS 27.0, *) {
+      try await session.deactivate(options: .notifyOthersOnDeactivation)
+    } else {
+      try session.setActive(false, options: .notifyOthersOnDeactivation)
     }
   }
   

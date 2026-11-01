@@ -66,12 +66,6 @@ extension InlineArray where Element: BitwiseCopyable {
     }
   }
 
-  /// Read-only pointer access that borrows storage in place.
-  ///
-  /// The `mutating` variant above requires an exclusive `inout` access, so a
-  /// caller holding a `let` or a borrowed parameter has to spill it into a local
-  /// `var` first — a full element-by-element copy. This overload borrows instead,
-  /// which matters for the large buffers on the per-frame audio path.
   nonisolated borrowing func withUnsafeBorrowedElementPointer<Result>(
     _ body: (UnsafePointer<Element>) throws -> Result
   ) rethrows -> Result {

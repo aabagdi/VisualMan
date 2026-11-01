@@ -105,8 +105,7 @@ final class VisualizerRendererCache {
   }
 }
 #else
-/// Simulator stand-in: the Metal 4 renderers aren't compiled for the simulator,
-/// so there is nothing to cache.
+
 @MainActor
 @Observable
 final class VisualizerRendererCache {

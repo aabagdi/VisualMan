@@ -88,7 +88,6 @@ extension AbstractExpressionismRenderer {
     let active = currentGestureRemaining > 0 && !timedOut
     
     if active && nextSeed() < continueProb {
-      // Continue the gesture: emit a stroke along the gesture's line.
       currentGestureRemaining -= 1
       let along = (nextSeed() - 0.5) * 2.0 * currentGestureSpan
       let perp  = (nextSeed() - 0.5) * 0.08
@@ -101,7 +100,7 @@ extension AbstractExpressionismRenderer {
       return (pos: pos, angle: currentGestureAngle + jitter)
     }
     
-    currentGestureRemaining = 1 + Int(nextSeed() * 4.0)  // 1..4 more after this one
+    currentGestureRemaining = 1 + Int(nextSeed() * 4.0)
     currentGestureAngle = suggestedAngle
     currentGestureCenter = suggestedPos
     currentGestureStarted = wallClock

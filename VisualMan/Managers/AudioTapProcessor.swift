@@ -80,9 +80,6 @@ final class AudioTapProcessor: Sendable {
     writeIndex.store(write &+ effective, ordering: .releasing)
   }
 
-  // Runs on the DSP actor so the drain copy (and any wait on ringLock while the
-  // audio thread writes) stays off the main actor. The read cursor is only
-  // touched from DSP-actor-isolated code, which serializes it with reset.
   private func drainAndProcess(dsp: isolated DSPProcessor) -> DSPProcessor.DSPResult? {
     let w = writeIndex.load(ordering: .acquiring)
     var r = readIndex.load(ordering: .relaxed)

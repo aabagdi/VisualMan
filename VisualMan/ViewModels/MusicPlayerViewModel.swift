@@ -68,7 +68,10 @@ extension MusicPlayerView {
       if audioManager.isPlaying {
         audioManager.pause()
       } else if audioManager.currentTime > 0 && audioManager.currentTime < audioManager.duration {
-        audioManager.resume()
+        Task { [weak self] in
+          await self?.audioManager.resume()
+          self?.updateNowPlayingInfo()
+        }
       } else {
         setupLockScreenControls()
         playCurrentSong()

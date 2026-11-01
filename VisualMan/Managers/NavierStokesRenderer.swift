@@ -15,12 +15,13 @@ struct SplatParams {
   var radius: Float
   var padding: Float = 0
   var value: SIMD3<Float>
-  var padding2: Float = 0
+  var weight: Float = 0
 
-  init(position: SIMD2<Float>, value: SIMD3<Float>, radius: Float) {
+  init(position: SIMD2<Float>, value: SIMD3<Float>, radius: Float, weight: Float = 0) {
     self.position = position
     self.value = value
     self.radius = radius
+    self.weight = weight
   }
 }
 
@@ -33,6 +34,10 @@ struct FrameUniforms {
   var taaBlend: Float
   var historyValid: UInt32
   var _pad: UInt32 = 0
+  var shading: Float
+  var detail: Float
+  var jitter: Float
+  var thinFade: Float
 }
 
 @MainActor
@@ -41,11 +46,18 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   let commandQueue: any MTL4CommandQueue
   
   nonisolated static let logger = Logger(subsystem: "com.VisualMan", category: "NavierStokesRenderer")
-  static let gridSize: Int = 1024
-  var gridSize: Int { Self.gridSize }
-  
+
+  static let simulationCellBudget: Int = 1024 * 1024
+  static let gridAlignment: Int = 32
+  static let minGridDimension: Int = 128
+  static let maxGridDimension: Int = 2048
+  var gridWidth: Int
+  var gridHeight: Int
+  var gridAspect: Float = 1
+  var gridScale: Float { sqrt(Float(gridWidth * gridHeight)) }
+
   let pipelines: Pipelines
-  
+
   var velocityA: MTLTexture
   var velocityB: MTLTexture
   var pressure: MTLTexture
@@ -62,9 +74,15 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var psiC: MTLTexture
   var u0: MTLTexture
 
-  /// Fraction of the drawable resolution the final image is rendered at.
-  /// The dye field is only 1024², so the display pass is already an upscale;
-  /// rendering it below native resolution costs almost no detail.
+  var mgPsi: [MTLTexture]
+  var mgRHS: [MTLTexture]
+
+  let stretchStatsBuffer: MTLBuffer
+  static let stretchStatsStride: Int = 16
+  var lastStretchedFraction: Float = 0
+  var lastFastFraction: Float = 0
+  var statsLogCountdown: Int = 0
+
   static let renderScale: Float = 0.75
 
   var time: Float = 0
@@ -74,10 +92,19 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   private var smoothedMid: Float = 0
   var prevBass: Float = 0
   var prevMid: Float = 0
+  var bassEnvelope: Float = 0
+  var midEnvelope: Float = 0
+  var highEnvelope: Float = 0
+  var bassFast: Float = 0
+  var midFast: Float = 0
+  var highFast: Float = 0
+  var bassBurst: Float = 0
+  var midBurst: Float = 0
+  var highBurst: Float = 0
+  var dynamicsWarm: Bool = false
+  var lastExcitement: Float = 0
 
   var resumeSuppressionRemaining: Float = 0
-  private let velocityDissipation: Float = 0.985
-  private let dyeDissipation: Float = 0.98
   let jacobiIterations: Int = 16
 
   static let maxFramesInFlight: UInt64 = 3
@@ -90,7 +117,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   let sharedEvent: MTLSharedEvent
   var frameNumber: UInt64 = 0
   let residencySet: MTLResidencySet
-  let reinitInterval: Int = 6
 
   var taaHistoryA: MTLTexture?
   var taaHistoryB: MTLTexture?
@@ -101,7 +127,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var pendingTAAHistoryReleases = [(frame: UInt64, texture: MTLTexture)]()
 
   var frameUniformsAddress: MTLGPUAddress = 0
-  var framesSinceReinit: Int = 6
+  var framesSinceReinit: Int = NavierStokesRenderer.reinitMaxInterval
 
   var forceSplats = [SplatParams]()
   var dyeSplats = [SplatParams]()
@@ -115,7 +141,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     return renderer
   }
 
-  // Shader compilation is slow; @concurrent keeps it off the main actor.
   @concurrent
   nonisolated private static func compilePipelines(device: MTLDevice) async -> Pipelines? {
     guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {
@@ -136,8 +161,15 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
           let firstUniformBuffer = allocatorsAndBuffers.buffers.first else { return nil }
 
     guard let argumentTables = Self.createArgumentTables(device: device) else { return nil }
-    guard let textures = Self.createTextures(device: device) else { return nil }
+    let initialGrid = 1024
+    guard let textures = Self.createTextures(device: device, width: initialGrid, height: initialGrid) else {
+      return nil
+    }
     guard let residencySet = Self.createResidencySet(device: device) else { return nil }
+    guard let stretchStatsBuffer = device.makeBuffer(
+      length: Self.stretchStatsStride * Int(Self.maxFramesInFlight),
+      options: .storageModeShared) else { return nil }
+    memset(stretchStatsBuffer.contents(), 0, stretchStatsBuffer.length)
 
     self.device = device
     self.commandQueue = commandQueue
@@ -148,6 +180,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.currentUniformBuffer = firstUniformBuffer
     self.argumentTables = argumentTables
     self.pipelines = pipelines
+    self.gridWidth = initialGrid
+    self.gridHeight = initialGrid
     self.velocityA = textures.velocityA
     self.velocityB = textures.velocityB
     self.pressure = textures.pressure
@@ -163,6 +197,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.psiB = textures.psiB
     self.psiC = textures.psiC
     self.u0 = textures.u0
+    self.mgPsi = textures.mgPsi
+    self.mgRHS = textures.mgRHS
+    self.stretchStatsBuffer = stretchStatsBuffer
     self.residencySet = residencySet
 
     configureResidencySet()
@@ -181,8 +218,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     let outWidth = max(1, Int((Float(drawableWidth) * Self.renderScale).rounded()))
     let outHeight = max(1, Int((Float(drawableHeight) * Self.renderScale).rounded()))
 
-    // The TAA history pair doubles as the display output, so it is also the
-    // only full-resolution allocation this renderer needs.
+    ensureSimulationGrid(drawableWidth: drawableWidth, drawableHeight: drawableHeight)
+
     ensureTAAHistory(width: outWidth, height: outHeight)
     guard taaHistoryA != nil, taaHistoryB != nil else { return nil }
 
@@ -211,7 +248,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
           let historyA = taaHistoryA,
           let historyB = taaHistoryB else { return nil }
 
-    // Ping-pong on frame parity (frameNumber was advanced by beginFrame).
     let writeB = (frameNumber & 1) == 0
     let historyIn = writeB ? historyA : historyB
     let historyOut = writeB ? historyB : historyA
@@ -219,7 +255,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     runSimulationPass(encoder: encoder, bass: bass, mid: mid, high: high,
                       historyIn: historyIn, historyOut: historyOut)
 
-    // historyOut now holds a complete frame for the next frame to blend with.
     taaHistoryValid = true
 
     encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)

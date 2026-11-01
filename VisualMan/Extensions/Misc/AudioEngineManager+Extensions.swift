@@ -27,10 +27,10 @@ extension AudioEngineManager {
     startPauseDecay()
   }
 
-  func resume() {
+  func resume() async {
     stopPauseDecay()
     do {
-      try AVAudioSession.sharedInstance().setActive(true)
+      try await activateAudioSession()
     } catch {
       audioLogger.error("Failed to activate audio session on resume: \(error.localizedDescription)")
     }
@@ -66,10 +66,12 @@ extension AudioEngineManager {
     stopForTransition()
     engine?.stop()
     stopNowPlayingTimer()
-    do {
-      try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-    } catch {
-      audioLogger.error("Failed to deactivate audio session: \(error.localizedDescription)")
+    Task { [weak self] in
+      do {
+        try await self?.deactivateAudioSession()
+      } catch {
+        audioLogger.error("Failed to deactivate audio session: \(error.localizedDescription)")
+      }
     }
   }
 
@@ -248,29 +250,35 @@ extension AudioEngineManager {
         startPauseDecay()
       }
     case .ended:
-      do {
-        try AVAudioSession.sharedInstance().setActive(true)
-      } catch {
-        audioLogger.error("Failed to reactivate audio session after interruption: \(error.localizedDescription)")
-      }
-      if let engine, !engine.isRunning {
-        do {
-          try engine.start()
-        } catch {
-          audioLogger.error("Failed to restart engine after interruption: \(error.localizedDescription)")
-        }
-      }
-      if let options, options.contains(.shouldResume) {
-        stopPauseDecay()
-        player?.play()
-        playbackState = .playing
-        startDisplayLink()
+      Task { [weak self] in
+        await self?.reactivateAfterInterruption(options: options)
       }
     @unknown default:
       break
     }
   }
-  
+
+  private func reactivateAfterInterruption(options: AVAudioSession.InterruptionOptions?) async {
+    do {
+      try await activateAudioSession()
+    } catch {
+      audioLogger.error("Failed to reactivate audio session after interruption: \(error.localizedDescription)")
+    }
+    if let engine, !engine.isRunning {
+      do {
+        try engine.start()
+      } catch {
+        audioLogger.error("Failed to restart engine after interruption: \(error.localizedDescription)")
+      }
+    }
+    if let options, options.contains(.shouldResume) {
+      stopPauseDecay()
+      player?.play()
+      playbackState = .playing
+      startDisplayLink()
+    }
+  }
+
   private func handleRouteChange(reason: AVAudioSession.RouteChangeReason) {
     switch reason {
     case .oldDeviceUnavailable:

@@ -88,13 +88,9 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
 
   var currentUniformBuffer: MTLBuffer
 
-  /// Fraction of the drawable resolution the effect renders at. The image is
-  /// soft and the glass blur hides the bilinear upscale in the blit pass.
   static let renderScale: Float = 0.75
 
   private var intermediateTexture: MTLTexture?
-  /// Two outputs, alternated per frame, so the next frame's compute never
-  /// writes the texture the previous frame's blit may still be reading.
   private var finalTextures: [MTLTexture] = []
   private var lastDrawableWidth: Int = 0
   private var lastDrawableHeight: Int = 0
@@ -113,7 +109,6 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     return renderer
   }
 
-  // Shader compilation is slow; @concurrent keeps it off the main actor.
   @concurrent
   nonisolated private static func compilePipelines(device: MTLDevice) async -> Pipelines? {
     guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {

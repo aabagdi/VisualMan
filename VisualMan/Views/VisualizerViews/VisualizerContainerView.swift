@@ -52,7 +52,6 @@ struct VisualizerContainerView: View {
     case .ink:
       return AnyView(InkVisualizerView(audioLevels: audioLevels))
     #if targetEnvironment(simulator)
-    // Metal 4 renderers aren't compiled for the simulator.
     case .navierStokes, .liquidLight, .gameOfLife, .abstractExpressionism:
       return AnyView(
         ContentUnavailableView("Not Available in Simulator",

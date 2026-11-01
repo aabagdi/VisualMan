@@ -79,7 +79,6 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
     return renderer
   }
 
-  // Shader compilation is slow; @concurrent keeps it off the main actor.
   @concurrent
   nonisolated private static func compilePipelines(device: MTLDevice) async -> Pipelines? {
     guard let compiler = try? device.makeCompiler(descriptor: MTL4CompilerDescriptor()) else {

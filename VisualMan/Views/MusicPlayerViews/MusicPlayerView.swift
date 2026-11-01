@@ -15,7 +15,6 @@ struct MusicPlayerView: View {
   @State private var toastDismissTask: Task<Void, Never>?
 
   @Environment(VisualizerSelection.self) private var visualizerSelection
-
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(AudioPlaylistManager.self) private var playlistManager
   @Environment(VisualizerRendererCache.self) private var rendererCache

@@ -22,7 +22,6 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     mtkView.delegate = context.coordinator
     mtkView.preferredFramesPerSecond = 120
     mtkView.colorPixelFormat = .bgra8Unorm
-    // Drawable is only a render-pass target (blit), so framebuffer-only is safe.
     mtkView.framebufferOnly = true
     mtkView.isPaused = false
     mtkView.enableSetNeedsDisplay = false

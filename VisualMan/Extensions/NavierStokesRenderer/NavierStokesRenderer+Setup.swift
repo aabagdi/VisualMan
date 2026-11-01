@@ -30,8 +30,17 @@ extension NavierStokesRenderer {
     let vorticityConfinementMerged: MTLComputePipelineState
     let macCormackCorrect: MTLComputePipelineState
     let dyeDiffuse: MTLComputePipelineState
+    let vorticityRHS: MTLComputePipelineState
+    let divergenceRHS: MTLComputePipelineState
+    let mgSmooth: MTLComputePipelineState
+    let mgRestrict: MTLComputePipelineState
+    let mgProlong: MTLComputePipelineState
+    let mgCoarseSolve: MTLComputePipelineState
+    let curlPsi: MTLComputePipelineState
+    let viscosity: MTLComputePipelineState
+    let resample: MTLComputePipelineState
   }
-  
+
   struct Textures {
     let velocityA: MTLTexture
     let velocityB: MTLTexture
@@ -48,6 +57,8 @@ extension NavierStokesRenderer {
     let psiB: MTLTexture
     let psiC: MTLTexture
     let u0: MTLTexture
+    let mgPsi: [MTLTexture]
+    let mgRHS: [MTLTexture]
   }
 
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
@@ -56,29 +67,31 @@ extension NavierStokesRenderer {
       return nil
     }
 
-    func makePipeline(_ name: String) -> MTLComputePipelineState? {
-      Self.makePipeline(name, library: library, compiler: compiler)
-    }
+    let make = { (name: String) in Self.makePipeline(name, library: library, compiler: compiler) }
 
-    guard let splatBatch = makePipeline("fluidSplatBatch"),
-          let advect = makePipeline("fluidAdvect"),
-          let psiInit = makePipeline("fluidPsiInit"),
-          let psiAdvect = makePipeline("fluidPsiAdvect"),
-          let psiMacCormackCorrect = makePipeline("fluidPsiMacCormackCorrect"),
-          let covectorPullback = makePipeline("fluidCovectorPullback"),
-          let copyRG = makePipeline("fluidCopyRG"),
-          let divergence = makePipeline("fluidDivergence"),
-          let jacobiMerged = makePipeline("fluidJacobiMerged"),
-          let gradientSubtract = makePipeline("fluidGradientSubtract"),
-          let blurH = makePipeline("fluidBlurH"),
-          let blurV = makePipeline("fluidBlurV"),
-          let bloomThresholdBlurH = makePipeline("fluidBloomThresholdBlurH"),
-          let bloomDownsample = makePipeline("fluidBloomDownsample"),
-          let render = makePipeline("fluidRender"),
-          let clearRGBA = makePipeline("fluidClearRGBA"),
-          let vorticityConfinementMerged = makePipeline("fluidVorticityConfinementMerged"),
-          let macCormackCorrect = makePipeline("fluidMacCormackCorrect"),
-          let dyeDiffuse = makePipeline("fluidDyeDiffuse") else {
+    guard let splatBatch = make("fluidSplatBatch"), let advect = make("fluidAdvect"),
+          let psiInit = make("fluidPsiInit"), let psiAdvect = make("fluidPsiAdvect"),
+          let psiMacCormackCorrect = make("fluidPsiMacCormackCorrect"),
+          let covectorPullback = make("fluidCovectorPullback"),
+          let copyRG = make("fluidCopyRG"), let divergence = make("fluidDivergence"),
+          let jacobiMerged = make("fluidJacobiMerged"),
+          let gradientSubtract = make("fluidGradientSubtract"),
+          let blurH = make("fluidBlurH"), let blurV = make("fluidBlurV"),
+          let bloomThresholdBlurH = make("fluidBloomThresholdBlurH"),
+          let bloomDownsample = make("fluidBloomDownsample"),
+          let render = make("fluidRender"),
+          let clearRGBA = make("fluidClearRGBA"),
+          let vorticityConfinementMerged = make("fluidVorticityConfinementMerged"),
+          let macCormackCorrect = make("fluidMacCormackCorrect"),
+          let dyeDiffuse = make("fluidDyeDiffuse"),
+          let vorticityRHS = make("fluidVorticityRHS"),
+          let divergenceRHS = make("fluidDivergenceRHS"),
+          let mgSmooth = make("fluidMGSmooth"),
+          let mgRestrict = make("fluidMGRestrict"),
+          let mgProlong = make("fluidMGProlong"),
+          let mgCoarseSolve = make("fluidMGCoarseSolve"),
+          let curlPsi = make("fluidCurlPsi"), let viscosity = make("fluidViscosity"),
+          let resample = make("fluidResample") else {
       return nil
     }
 
@@ -93,13 +106,18 @@ extension NavierStokesRenderer {
                      render: render, clearRGBA: clearRGBA,
                      vorticityConfinementMerged: vorticityConfinementMerged,
                      macCormackCorrect: macCormackCorrect,
-                     dyeDiffuse: dyeDiffuse)
+                     dyeDiffuse: dyeDiffuse,
+                     vorticityRHS: vorticityRHS, divergenceRHS: divergenceRHS,
+                     mgSmooth: mgSmooth,
+                     mgRestrict: mgRestrict, mgProlong: mgProlong,
+                     mgCoarseSolve: mgCoarseSolve,
+                     curlPsi: curlPsi, viscosity: viscosity, resample: resample)
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
     let desc = MTL4ArgumentTableDescriptor()
     desc.maxTextureBindCount = 7
-    desc.maxBufferBindCount = 3
+    desc.maxBufferBindCount = 4
     var tables = [any MTL4ArgumentTable]()
     for _ in 0..<maxFramesInFlight {
       do {
@@ -114,7 +132,7 @@ extension NavierStokesRenderer {
 
   static func createResidencySet(device: MTLDevice) -> MTLResidencySet? {
     let desc = MTLResidencySetDescriptor()
-    desc.initialCapacity = 20
+    desc.initialCapacity = 40
     do {
       return try device.makeResidencySet(descriptor: desc)
     } catch {
@@ -127,10 +145,10 @@ extension NavierStokesRenderer {
   static let bloomSizeMid: Int = 128
   static let bloomSizeLo: Int = 64
 
-  static func createTextures(device: MTLDevice) -> Textures? {
+  static func createTextures(device: MTLDevice, width: Int, height: Int) -> Textures? {
     func makeTexture(format: MTLPixelFormat, label: String,
-                     width: Int = gridSize,
-                     height: Int = gridSize,
+                     width: Int = width,
+                     height: Int = height,
                      usage: MTLTextureUsage = [.shaderRead, .shaderWrite]) -> MTLTexture? {
       let desc = MTLTextureDescriptor.texture2DDescriptor(
         pixelFormat: format, width: width, height: height, mipmapped: false
@@ -141,6 +159,7 @@ extension NavierStokesRenderer {
         logger.error("Failed to create texture '\(label)'")
         return nil
       }
+      texture.label = label
       return texture
     }
 
@@ -159,10 +178,14 @@ extension NavierStokesRenderer {
                                       width: bloomSizeMid, height: bloomSizeMid),
           let bloomLoA = makeTexture(format: .rgba16Float, label: "bloomLoA",
                                      width: bloomSizeLo, height: bloomSizeLo),
-          let psiA = makeTexture(format: .rg16Float, label: "psiA"),
-          let psiB = makeTexture(format: .rg16Float, label: "psiB"),
-          let psiC = makeTexture(format: .rg16Float, label: "psiC"),
+          let psiA = makeTexture(format: .rg32Float, label: "psiA"),
+          let psiB = makeTexture(format: .rg32Float, label: "psiB"),
+          let psiC = makeTexture(format: .rg32Float, label: "psiC"),
           let u0 = makeTexture(format: .rg16Float, label: "u0") else {
+      return nil
+    }
+
+    guard let (mgPsi, mgRHS) = createMultigridLevels(device: device, width: width, height: height) else {
       return nil
     }
 
@@ -171,7 +194,37 @@ extension NavierStokesRenderer {
                     divergence: divergence, dyeA: dyeA, dyeB: dyeB, dyeC: dyeC,
                     bloomA: bloomA, bloomB: bloomB,
                     bloomMidA: bloomMidA, bloomLoA: bloomLoA,
-                    psiA: psiA, psiB: psiB, psiC: psiC, u0: u0)
+                    psiA: psiA, psiB: psiB, psiC: psiC, u0: u0,
+                    mgPsi: mgPsi, mgRHS: mgRHS)
+  }
+
+  static func createMultigridLevels(device: MTLDevice,
+                                    width: Int,
+                                    height: Int) -> (psi: [MTLTexture], rhs: [MTLTexture])? {
+    var mgPsi = [MTLTexture]()
+    var mgRHS = [MTLTexture]()
+    var w = width
+    var h = height
+    while true {
+      let desc = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .r32Float, width: w, height: h, mipmapped: false
+      )
+      desc.usage = [.shaderRead, .shaderWrite]
+      desc.storageMode = .private
+      guard let psi = device.makeTexture(descriptor: desc),
+            let rhs = device.makeTexture(descriptor: desc) else {
+        logger.error("Failed to create multigrid level \(w)x\(h)")
+        return nil
+      }
+      psi.label = "mgPsi\(w)x\(h)"
+      rhs.label = "mgRHS\(w)x\(h)"
+      mgPsi.append(psi)
+      mgRHS.append(rhs)
+      if w * h <= multigridCoarseCells || (w <= 2 && h <= 2) { break }
+      w = (w + 1) / 2
+      h = (h + 1) / 2
+    }
+    return (mgPsi, mgRHS)
   }
 
   func warmUpGPU() {
@@ -188,10 +241,9 @@ extension NavierStokesRenderer {
     encoder.setArgumentTable(argumentTable)
 
     encoder.setComputePipelineState(pipelines.clearRGBA)
-    for tex in [velocityA, velocityB, u0, pressure, divergenceTexture,
-                dyeA, dyeB, dyeC, bloomA, bloomB, bloomMidA, bloomLoA] {
+    for tex in allSimulationTextures {
       argumentTable.setTexture(tex.gpuResourceID, index: 0)
-      dispatchGrid(encoder: encoder)
+      dispatchGrid(encoder: encoder, width: tex.width, height: tex.height)
     }
 
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
@@ -253,22 +305,8 @@ extension NavierStokesRenderer {
   }
 
   func configureResidencySet() {
-    residencySet.addAllocation(velocityA)
-    residencySet.addAllocation(velocityB)
-    residencySet.addAllocation(pressure)
-    residencySet.addAllocation(divergenceTexture)
-    residencySet.addAllocation(dyeA)
-    residencySet.addAllocation(dyeB)
-    residencySet.addAllocation(dyeC)
-    residencySet.addAllocation(bloomA)
-    residencySet.addAllocation(bloomB)
-    residencySet.addAllocation(bloomMidA)
-    residencySet.addAllocation(bloomLoA)
-    residencySet.addAllocation(psiA)
-    residencySet.addAllocation(psiB)
-    residencySet.addAllocation(psiC)
-    residencySet.addAllocation(u0)
-
+    for tex in allSimulationTextures { residencySet.addAllocation(tex) }
+    residencySet.addAllocation(stretchStatsBuffer)
     for buf in uniformBuffers { residencySet.addAllocation(buf) }
 
     residencySet.commit()
