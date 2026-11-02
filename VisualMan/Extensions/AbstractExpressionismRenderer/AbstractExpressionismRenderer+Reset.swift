@@ -61,6 +61,7 @@ extension AbstractExpressionismRenderer {
     for i in 0..<paintedGrid.count { paintedGrid[i] = 0 }
 
     animatingStrokes.removeAll()
+    recentSplats.removeAll()
 
     paintTestClock = 0
     paintTestEventIndex = 0

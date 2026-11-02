@@ -115,6 +115,7 @@ extension AbstractExpressionismRenderer {
     if let cracks = crackTexture {
       argumentTable.setTexture(cracks.gpuResourceID, index: 6)
     }
+    argumentTable.setTexture((pigmentTexture ?? color).gpuResourceID, index: 7)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     dispatch(encoder: encoder, pipeline: composePipeline,
@@ -228,6 +229,10 @@ extension AbstractExpressionismRenderer {
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
 
+    renderPigment(encoder: encoder, wet: tex.colorOut, dry: tex.dryColorOut,
+                  params: pass2Params, regions: pigmentRegionsThisFrame)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
     renderCompose(encoder: encoder,
                   color: tex.colorOut, heightWet: tex.hwOut,
                   dryColor: tex.dryColorOut,
@@ -240,6 +245,8 @@ extension AbstractExpressionismRenderer {
                                     smoothed: SIMD3<Float>,
                                     strokes: SplitStrokes,
                                     region: CanvasRegion) {
+    pigmentRegionsThisFrame = pigmentRegions(paintRegion: region,
+                                             strokes: strokes.deposit + strokes.smear)
     let depositTileMap = buildTileMap(strokes: strokes.deposit)
     let smearTileMap   = buildTileMap(strokes: strokes.smear)
 
@@ -327,6 +334,7 @@ extension AbstractExpressionismRenderer {
       fullCanvasFramesRemaining = 2
     }
     let paintFullCanvas = fullCanvasFramesRemaining > 0
+    if paintFullCanvas { pigmentFullRefreshFrames = max(pigmentFullRefreshFrames, 3) }
     fullCanvasFramesRemaining = max(0, fullCanvasFramesRemaining - 1)
 
     let allStrokes = isClearing ? [] : generateStrokes(audio: smoothed)

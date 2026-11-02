@@ -20,7 +20,8 @@ struct AbstractExpressionismVisualizerView: View {
       audioLevels: audioLevels,
       config: MetalViewConfig(
         clearColor: MTLClearColor(red: 0.95, green: 0.92, blue: 0.87, alpha: 1),
-        backgroundColor: UIColor(red: 0.95, green: 0.92, blue: 0.87, alpha: 1)),
+        backgroundColor: UIColor(red: 0.95, green: 0.92, blue: 0.87, alpha: 1),
+        maxFramesPerSecond: 60),
       factory: { [isPlaying] device in
         let renderer = await AbstractExpressionismRenderer.create(device: device)
         renderer?.isPlaying = isPlaying

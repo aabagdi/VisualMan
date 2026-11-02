@@ -20,7 +20,8 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     let mtkView = MTKView()
     mtkView.device = renderer.device
     mtkView.delegate = context.coordinator
-    mtkView.preferredFramesPerSecond = 120
+    context.coordinator.maxFPS = config.maxFramesPerSecond
+    mtkView.preferredFramesPerSecond = min(120, config.maxFramesPerSecond)
     mtkView.colorPixelFormat = .bgra8Unorm
     mtkView.framebufferOnly = true
     mtkView.isPaused = false
@@ -38,6 +39,7 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
   func updateUIView(_ uiView: MTKView, context: Context) {
     context.coordinator.audioLevels = audioLevels
+    context.coordinator.maxFPS = config.maxFramesPerSecond
   }
 
   static func dismantleUIView(_ uiView: MTKView, coordinator: Coordinator) {
@@ -68,6 +70,13 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private weak var mtkView: MTKView?
     private var isInBackground = false
     private var targetFPS: Int = 120
+    var maxFPS: Int = 120 {
+      didSet {
+        guard maxFPS != oldValue else { return }
+        mtkView?.preferredFramesPerSecond = effectiveFPS
+      }
+    }
+    private var effectiveFPS: Int { min(targetFPS, maxFPS) }
     private var framesRendered: Int = 0
     private var gpuRampedUp = false
     private let rampUpFrameThreshold = 30
@@ -171,12 +180,12 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         targetFPS = 60
         drawableScaleFactor = 1.0
       }
-      mtkView?.preferredFramesPerSecond = targetFPS
+      mtkView?.preferredFramesPerSecond = effectiveFPS
     }
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
       mtkView = view
-      view.preferredFramesPerSecond = targetFPS
+      view.preferredFramesPerSecond = effectiveFPS
     }
 
     func draw(in view: MTKView) {
@@ -188,7 +197,7 @@ struct AudioMTKMetalView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private func drawFrame(in view: MTKView) {
       if mtkView == nil {
         mtkView = view
-        view.preferredFramesPerSecond = targetFPS
+        view.preferredFramesPerSecond = effectiveFPS
       }
       guard !isInBackground else { return }
 

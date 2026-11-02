@@ -14,6 +14,7 @@ import os
 struct MetalViewConfig {
   var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
   var backgroundColor: UIColor?
+  var maxFramesPerSecond: Int = 120
 }
 
 enum MetalHostingBackend {

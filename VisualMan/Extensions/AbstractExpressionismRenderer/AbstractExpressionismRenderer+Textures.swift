@@ -57,7 +57,7 @@ extension AbstractExpressionismRenderer {
     for old in [colorA, colorB, heightWetA, heightWetB, colorMid, heightWetMid,
                 velocityA, velocityB,
                 dryColorA, dryColorB, dryColorMid,
-                substrateA, substrateB] {
+                substrateA, substrateB, pigmentTexture] {
       if let t = old, !excluding.contains(ObjectIdentifier(t as AnyObject)) {
         pendingTextureReleases.append((frame: frameNumber, texture: t))
       }
@@ -83,6 +83,7 @@ extension AbstractExpressionismRenderer {
     velocityA = nil; velocityB = nil
     dryColorA = nil; dryColorB = nil; dryColorMid = nil
     substrateA = nil; substrateB = nil
+    pigmentTexture = nil
     canvasSize = 0
   }
 
@@ -125,14 +126,15 @@ extension AbstractExpressionismRenderer {
           let dcB = device.makeTexture(descriptor: dryDesc),
           let dcMid = device.makeTexture(descriptor: dryDesc),
           let sA = device.makeTexture(descriptor: subDesc),
-          let sB = device.makeTexture(descriptor: subDesc) else {
+          let sB = device.makeTexture(descriptor: subDesc),
+          let pig = device.makeTexture(descriptor: colDesc) else {
       clearResampleSources()
       clearCanvasTextures()
       return false
     }
 
     for t in [cA, cB, cMid, hwA, hwB, hwMid, vA, vB,
-              dcA, dcB, dcMid, sA, sB] {
+              dcA, dcB, dcMid, sA, sB, pig] {
       residencySet.addAllocation(t)
     }
 
@@ -141,6 +143,8 @@ extension AbstractExpressionismRenderer {
     velocityA = vA; velocityB = vB
     dryColorA = dcA; dryColorB = dcB; dryColorMid = dcMid
     substrateA = sA; substrateB = sB
+    pigmentTexture = pig
+    pigmentFullRefreshFrames = 3
     canvasSize = size
     isFirstFrame = !preserveContent
     pendingResample = preserveContent
@@ -176,7 +180,7 @@ extension AbstractExpressionismRenderer {
         && heightWetA != nil && heightWetB != nil && heightWetMid != nil
         && velocityA != nil && velocityB != nil
         && dryColorA != nil && dryColorB != nil && dryColorMid != nil
-        && substrateA != nil && substrateB != nil
+        && substrateA != nil && substrateB != nil && pigmentTexture != nil
 
     let grow = requestedCanvasSize > canvasSize
     let shrink = requestedCanvasSize < canvasSize - max(2, canvasSize / 16)

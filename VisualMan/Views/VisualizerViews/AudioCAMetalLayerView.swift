@@ -65,6 +65,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     view.isOpaque = true
 
     context.coordinator.clearColor = config.clearColor
+    context.coordinator.maxFPS = config.maxFramesPerSecond
     context.coordinator.attach(view: view)
     return view
   }
@@ -72,6 +73,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   func updateUIView(_ uiView: CAMetalHostView, context: Context) {
     context.coordinator.audioLevels = audioLevels
     context.coordinator.clearColor = config.clearColor
+    context.coordinator.maxFPS = config.maxFramesPerSecond
   }
 
   static func dismantleUIView(_ uiView: CAMetalHostView, coordinator: Coordinator) {
@@ -101,6 +103,12 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var displayLink: CADisplayLink?
     private var isInBackground = false
     private var targetFPS: Int = 120
+    var maxFPS: Int = 120 {
+      didSet {
+        guard maxFPS != oldValue else { return }
+        displayLink?.preferredFrameRateRange = makeFrameRateRange()
+      }
+    }
     private var framesRendered: Int = 0
     private var gpuRampedUp = false
     private let rampUpFrameThreshold = 30
@@ -199,7 +207,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     }
 
     private func makeFrameRateRange() -> CAFrameRateRange {
-      let preferred = Float(targetFPS)
+      let preferred = Float(min(targetFPS, maxFPS))
       
       if preferred >= 120 {
         return CAFrameRateRange(minimum: 60, maximum: preferred, preferred: preferred)

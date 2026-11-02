@@ -7,15 +7,30 @@
 
 #if !targetEnvironment(simulator)
 import Metal
+import simd
 
 extension AbstractExpressionismRenderer {
+  private static let splatHistoryLimit = 24
+
   private func splatterPosition(focus: SIMD2<Float>) -> (Float, Float) {
-    let isOutlier = nextSeed() < 0.60
-    if isOutlier {
-      return ((nextSeed() - 0.5) * 1.05, (nextSeed() - 0.5) * 1.10)
+    var candidates: [SIMD2<Float>] = (0..<4).map { _ in
+      SIMD2((nextSeed() - 0.5) * 1.05, (nextSeed() - 0.5) * 1.10)
     }
-    return (focus.x + (nextSeed() - 0.5) * 1.40,
-            focus.y + (nextSeed() - 0.5) * 1.50)
+    if nextSeed() < 0.20 {
+      candidates.append(SIMD2(focus.x + (nextSeed() - 0.5) * 0.6,
+                              focus.y + (nextSeed() - 0.5) * 0.6))
+    }
+    var best = candidates[0]
+    var bestDist: Float = -1
+    for c in candidates {
+      let d = recentSplats.map { simd_distance_squared($0, c) }.min() ?? 1
+      if d > bestDist { bestDist = d; best = c }
+    }
+    recentSplats.append(best)
+    if recentSplats.count > Self.splatHistoryLimit {
+      recentSplats.removeFirst(recentSplats.count - Self.splatHistoryLimit)
+    }
+    return (best.x, best.y)
   }
 
   private func splatterSizeAndOpacity(high: Float) -> (radius: Float, opacity: Float) {
@@ -72,16 +87,28 @@ extension AbstractExpressionismRenderer {
       animation: SIMD4(0, 1, 0, 0))
   }
 
+  static let splatterInterval: Float = 0.3
+
+  private static func splatDensityWeight(typeRoll: Float) -> Float {
+    switch typeRoll {
+    case ..<0.33: return 0.10
+    case ..<0.66: return 0.30
+    case ..<0.88: return 0.80
+    default:      return 1.50
+    }
+  }
+
   func appendSplatters(to strokes: inout [AbExStroke], high: Float) {
-    guard high > 0.05, (wallClock - lastSplatterTime) > 0.9, strokes.count < Self.maxStrokesPerFrame else { return }
+    guard high > 0.03, (wallClock - lastSplatterTime) > Self.splatterInterval,
+          strokes.count < Self.maxStrokesPerFrame else { return }
     lastSplatterTime = wallClock
     let count: Int
-    if high > 0.45 {
+    if high > 0.40 {
+      count = 4
+    } else if high > 0.20 {
       count = 3
-    } else if high > 0.25 {
-      count = 2
     } else {
-      count = 1
+      count = 2
     }
     for _ in 0..<count where strokes.count < Self.maxStrokesPerFrame {
       let focus = splatterFocus()
@@ -93,25 +120,16 @@ extension AbstractExpressionismRenderer {
       let mainRadius = mainStroke.posAngle.w
       strokes.append(mainStroke)
       
-      let densityWeight: Float
-      if burstTypeRoll < 0.10 {
-        densityWeight = 0.10
-      } else if burstTypeRoll < 0.30 {
-        densityWeight = 0.30
-      } else if burstTypeRoll < 0.70 {
-        densityWeight = 0.80
-      } else {
-        densityWeight = 1.50
-      }
-      depositDensity(at: SIMD2(focus.x, focus.y), weight: densityWeight)
+      let landed = SIMD2(mainStroke.posAngle.x, mainStroke.posAngle.y)
+      depositDensity(at: landed, weight: Self.splatDensityWeight(typeRoll: burstTypeRoll))
 
       if mainRadius > 0.012 && nextSeed() < 0.55 && strokes.count < Self.maxStrokesPerFrame {
         let satCount = (mainRadius > 0.030) ? Int(2 + nextSeed() * 2) : 1
         for _ in 0..<satCount where strokes.count < Self.maxStrokesPerFrame {
           let satAngle = nextSeed() * .pi * 2
           let satDist = mainRadius * (2.0 + nextSeed() * 4.0)
-          let satX = focus.x + cos(satAngle) * satDist
-          let satY = focus.y + sin(satAngle) * satDist
+          let satX = landed.x + cos(satAngle) * satDist
+          let satY = landed.y + sin(satAngle) * satDist
           let satRadius = 0.0010 + nextSeed() * 0.0025
           let bristleSeed = nextSeed() * 100
           let satTypeRoll = nextSeed()

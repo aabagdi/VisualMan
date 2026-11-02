@@ -111,7 +111,7 @@ extension AbstractExpressionismRenderer {
                            pigment: TestPigment, heavy: Bool,
                            seed: Float) -> AbExStroke {
     let c = pigment.linearRgb
-    let typeRoll: Float = heavy ? 0.85 : 0.50
+    let typeRoll: Float = heavy ? 0.94 : 0.50
     return AbExStroke(
       posAngle: SIMD4(pos.x, pos.y, 0, radius),
       sizeOpacity: SIMD4(typeRoll, 0.95, seed, 2),

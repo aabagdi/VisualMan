@@ -63,21 +63,16 @@ inline half4 upstreamPickup(texture2d<half, access::sample> canvas,
 inline half4 upstreamPickupWide(texture2d<half, access::sample> canvas,
                                 texture2d<half, access::sample> heightWet,
                                 sampler s, float2 uv, float2 dir, float2 perp,
-                                float halfWidth, thread half &upstreamHeight) {
-  const float offs[3] = { -0.6, 0.0, 0.6 };
-  half3 rgbSum = half3(0.0h);
-  half  aSum   = 0.0h;
-  half  hSum   = 0.0h;
-  for (int k = 0; k < 3; k++) {
-    half h = 0.0h;
-    half4 c = upstreamPickup(canvas, heightWet, s,
-                             uv + perp * (offs[k] * halfWidth), dir, h);
-    rgbSum += c.rgb * c.a;
-    aSum   += c.a;
-    hSum   += h;
-  }
-  upstreamHeight = hSum / 3.0h;
-  half3 rgb = aSum > 0.001h ? rgbSum / aSum : half3(0.0h);
+                                float halfWidth, half4 centre, half centreHeight,
+                                thread half &upstreamHeight) {
+  half hL = 0.0h, hR = 0.0h;
+  half4 cL = upstreamPickup(canvas, heightWet, s, uv - perp * (0.6 * halfWidth), dir, hL);
+  half4 cR = upstreamPickup(canvas, heightWet, s, uv + perp * (0.6 * halfWidth), dir, hR);
+  half aSum = cL.a + centre.a + cR.a;
+  half3 rgb = aSum > 0.001h
+            ? (cL.rgb * cL.a + centre.rgb * centre.a + cR.rgb * cR.a) / aSum
+            : half3(0.0h);
+  upstreamHeight = (hL + centreHeight + hR) / 3.0h;
   return half4(rgb, saturate(aSum / 3.0h));
 }
 
@@ -113,11 +108,26 @@ inline float canvasWeaveIrregularity(float2 pixelPos) {
   return 0.80 + 0.40 * (shaderSimplex2D(pixelPos * 0.013) * 0.5 + 0.5);
 }
 
+inline half canvasWeave(float2 pixelPos, float irregular) {
+  float threadX = sin(pixelPos.x * 0.85) * 0.5 + 0.5;
+  float threadY = sin(pixelPos.y * 0.85) * 0.5 + 0.5;
+  return half(threadX * threadY * irregular * 0.075);
+}
+
 inline half canvasWeave(float2 pixelPos) {
   float threadX = sin(pixelPos.x * 0.85) * 0.5 + 0.5;
   float threadY = sin(pixelPos.y * 0.85) * 0.5 + 0.5;
   float weave = threadX * threadY * canvasWeaveIrregularity(pixelPos);
   return half(weave * 0.075);
+}
+
+inline float2 canvasWeaveGradient(float2 pixelPos, float irregular) {
+  float c = 0.85;
+  float tX = sin(pixelPos.x * c) * 0.5 + 0.5;
+  float tY = sin(pixelPos.y * c) * 0.5 + 0.5;
+  float dtX = 0.5 * c * cos(pixelPos.x * c);
+  float dtY = 0.5 * c * cos(pixelPos.y * c);
+  return float2(dtX * tY, tX * dtY) * (0.055 * irregular);
 }
 
 inline float2 canvasWeaveGradient(float2 pixelPos) {
@@ -399,13 +409,14 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
   float typeRoll = clamp(s.sizeOpacity.x, 0.0, 1.0);
   float mainHeight;
   float impastoPermanence;
-  if (typeRoll < 0.10) {
+  
+  if (typeRoll < 0.33) {
     mainHeight        = 0.0 + hash11(seed * 1.77) * 0.05;
     impastoPermanence = 0.0;
-  } else if (typeRoll < 0.30) {
+  } else if (typeRoll < 0.66) {
     mainHeight        = 0.30 + hash11(seed * 3.13) * 0.30;
     impastoPermanence = 0.50;
-  } else if (typeRoll < 0.70) {
+  } else if (typeRoll < 0.88) {
     mainHeight        = 0.80 + hash11(seed * 5.71) * 0.60;
     impastoPermanence = 1.0;
   } else {
@@ -1405,6 +1416,7 @@ kernel void abexPaint(
       half4 wideCarried = upstreamPickupWide(colorIn, heightWetIn, advSampler,
                                              uv, gdir, gperp,
                                              strokes[i].sizeOpacity.x,
+                                             laneCarried, gUpHeight,
                                              gUpHeightWide);
       half wLane = laneCarried.a * 0.5h, wWide = wideCarried.a * 0.5h;
       half4 carried = half4(0.0h);
@@ -1665,6 +1677,37 @@ kernel void abexResample(
   }
 }
 
+kernel void abexPigment(
+    texture2d<half, access::read>    wet        [[texture(0)]],
+    texture2d<half, access::sample>  dry        [[texture(1)]],
+    texture2d<half, access::write>   pigmentOut [[texture(2)]],
+    texture2d<float, access::sample> mixboxLUT  [[texture(3)]],
+    constant AbExParams &params                 [[buffer(0)]],
+    constant uint2 &regionOrigin                [[buffer(1)]],
+    uint2 tid [[thread_position_in_grid]])
+{
+  uint2 gid = tid + regionOrigin;
+  uint w = pigmentOut.get_width(), h = pigmentOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  constexpr sampler s(coord::normalized, address::clamp_to_edge, filter::linear);
+
+  half4 c  = wet.read(gid);
+  half4 dc = dry.sample(s, (float2(gid) + 0.5) / float2(w, h));
+  half3 ground = half3(params.canvas.xyz);
+  half3 result = ground;
+  if (dc.a > 0.002h || c.a > 0.002h) {
+    mixbox_latent z = toLatent(mixboxLUT, ground);
+    if (dc.a > 0.002h) {
+      z = lerpLatent(z, toLatent(mixboxLUT, dc.rgb), float(saturate(dc.a)));
+    }
+    if (c.a > 0.002h) {
+      z = lerpLatent(z, toLatent(mixboxLUT, c.rgb), float(saturate(c.a)));
+    }
+    result = fromLatent(z);
+  }
+  pigmentOut.write(half4(result, 1.0h), gid);
+}
+
 kernel void abexCompose(
                         texture2d<half, access::sample> color     [[texture(0)]],
                         texture2d<half, access::sample> heightWet [[texture(1)]],
@@ -1673,6 +1716,7 @@ kernel void abexCompose(
                         texture2d<half, access::sample> substrate [[texture(4)]],
                         texture2d<float, access::sample> mixboxLUT [[texture(5)]],
                         texture2d<half, access::sample>  crackTex  [[texture(6)]],
+                        texture2d<half, access::sample>  pigment   [[texture(7)]],
                         constant AbExParams &params              [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]])
 {
@@ -1722,20 +1766,15 @@ kernel void abexCompose(
   half bumpSurfaceTexture = max(0.10h, 1.0h - washAmt * 0.90h);
   float bumpSurfaceF = float(bumpSurfaceTexture);
 
-  half3 canvasBaseRaw = half3(params.canvas.xyz) - canvasWeave(canvasPx);
+  float weaveIrr = canvasWeaveIrregularity(canvasPx);
+  half  weave    = canvasWeave(canvasPx, weaveIrr);
+  half3 canvasBaseRaw = half3(params.canvas.xyz) - weave;
 
   half3 result;
   if (dc.a <= 0.002h && c.a <= 0.002h) {
     result = canvasBaseRaw;
   } else {
-    mixbox_latent z = toLatent(mixboxLUT, canvasBaseRaw);
-    if (dc.a > 0.002h) {
-      z = lerpLatent(z, toLatent(mixboxLUT, dc.rgb), float(saturate(dc.a)));
-    }
-    if (c.a > 0.002h) {
-      z = lerpLatent(z, toLatent(mixboxLUT, c.rgb), float(saturate(c.a)));
-    }
-    result = fromLatent(z);
+    result = pigment.sample(hwSampler, uvAll).rgb - weave * (1.0h - totalA);
   }
 
   if (c.a < 0.005h && hC < 0.005) {
@@ -1765,7 +1804,7 @@ kernel void abexCompose(
   half dryness = 1.0h - clamp(wetTotal * 1.5h, 0.0h, 1.0h);
   half wetEffect = (1.0h - dryness) * paintMask;
 
-  half weaveThroughPaint = canvasWeave(canvasPx) * paintMask
+  half weaveThroughPaint = weave * paintMask
                          * (1.0h - smoothstep(0.05h, 0.30h, half(hC)));
   result *= (1.0h - weaveThroughPaint * 0.6h);
 
@@ -1889,7 +1928,7 @@ kernel void abexCompose(
                     + half3(wx, wy, 0.0h) * skinAmp);
   }
 
-  float2 cvGrad = canvasWeaveGradient(ng);
+  float2 cvGrad = canvasWeaveGradient(ng, weaveIrr);
   half cvStrength = 0.45h * (1.0h - paintMask * 0.35h)
                   * (1.0h - smoothstep(0.05h, 0.35h, half(hC)));
   N = normalize(N + half3(half(-cvGrad.x), half(-cvGrad.y), 0.0h) * cvStrength);
