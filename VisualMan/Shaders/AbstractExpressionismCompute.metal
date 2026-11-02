@@ -1164,8 +1164,11 @@ kernel void abexPaint(
       half kDepositT = kLayerT * (1.0h - (resist + laneCut) * paintGate);
       mixbox_latent cleanLatent = lerpLatent(colorLatent, kTintLatent,
                                              float(kDepositT));
-      colorLatent = lerpLatent(colorLatent, cleanLatent, float(newness));
-      color.a = max(color.a, smoothstep(0.04h, 0.30h, kCov));
+      half kNewA = max(color.a, smoothstep(0.04h, 0.30h, kCov));
+      half kAdded = max(0.0h, kNewA - color.a) / max(kNewA, 0.001h);
+      colorLatent = lerpLatent(colorLatent, cleanLatent,
+                               float(max(newness, kAdded)));
+      color.a = kNewA;
 
       half acrossAbs = half(abs(sr.acrossT));
       half ridgeMask = smoothstep(0.80h, 1.00h, acrossAbs)
@@ -1424,15 +1427,18 @@ kernel void abexPaint(
       wetMixT = saturate(wetMixT * mix(1.0h, laneCover, wetGate));
     }
 
-    half depositT = mix(wetMixT, layerT, layerWeight) * newness;
+    half covA = isGestural ? smoothstep(0.04h, 0.30h, cov) : cov;
+    half mixedAlpha = color.a * (1.0h - covA) + covA;
+    half layeredAlpha = max(color.a, covA);
+    half newAlpha = mix(mixedAlpha, layeredAlpha, layerWeight);
+
+    half addedShare = max(0.0h, newAlpha - color.a) / max(newAlpha, 0.001h);
+    half depositT = max(mix(wetMixT, layerT, layerWeight) * newness, addedShare);
     ensureLatent(mixboxLUT, color.rgb, colorLatent, colorLatentValid);
     colorLatent = lerpLatent(colorLatent, tintLatent, float(depositT));
     substrate.g *= (1.0h - cov * newness);
 
-    half covA = isGestural ? smoothstep(0.04h, 0.30h, cov) : cov;
-    half mixedAlpha = color.a * (1.0h - covA) + covA;
-    half layeredAlpha = max(color.a, covA);
-    color.a = mix(mixedAlpha, layeredAlpha, layerWeight);
+    color.a = newAlpha;
     height = min(height + hd, HEIGHT_MAX);
 
     half thicknessGate = smoothstep(0.08h, 0.45h, hd);

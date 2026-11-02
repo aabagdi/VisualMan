@@ -60,7 +60,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-AbExPaintTest cracks"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-AbExPaintTestDebug black"
