@@ -17,18 +17,6 @@ extension AbstractExpressionismRenderer {
     return SIMD3(f(c.x), f(c.y), f(c.z))
   }
 
-  static let warmColors: [SIMD3<Float>] = [
-    SIMD3(0.85, 0.15, 0.05), SIMD3(0.90, 0.55, 0.05),
-    SIMD3(0.80, 0.60, 0.10), SIMD3(0.55, 0.25, 0.08),
-    SIMD3(0.35, 0.15, 0.08), SIMD3(0.75, 0.05, 0.20),
-  ].map(srgbToLinear)
-
-  static let coolColors: [SIMD3<Float>] = [
-    SIMD3(0.05, 0.10, 0.70), SIMD3(0.05, 0.35, 0.65),
-    SIMD3(0.10, 0.40, 0.25), SIMD3(0.25, 0.10, 0.50),
-    SIMD3(0.02, 0.20, 0.45), SIMD3(0.15, 0.55, 0.35),
-  ].map(srgbToLinear)
-
   struct Pigment {
     let linearRgb: SIMD3<Float>
     let hue: Float
@@ -52,35 +40,65 @@ extension AbstractExpressionismRenderer {
     Pigment(linearRgb: SIMD3(0.002, 0.153, 0.008), hue: 0.339, value: 0.15, saturation: 0.99, name: "Permanent Green"),
     Pigment(linearRgb: SIMD3(0.147, 0.296, 0.001), hue: 0.250, value: 0.30, saturation: 1.00, name: "Sap Green"),
     Pigment(linearRgb: SIMD3(0.198, 0.065, 0.0), hue: 0.055, value: 0.20, saturation: 1.00, name: "Burnt Sienna"),
+    Pigment(linearRgb: SIMD3(1.0, 1.0, 1.0), hue: -1, value: 1.00, saturation: 0.00, name: "Titanium White"),
   ]
 
-  static func nearestPigment(toHue targetHue: Float,
-                             valueBias: Float = 0.0) -> Pigment {
-    var bestIdx = 0
-    var bestScore: Float = .infinity
-    for (idx, p) in mixboxPigments.enumerated() {
+  static var titaniumWhite: Pigment { mixboxPigments[13] }
+
+  static let brushWhiteChance: Float = 0.10
+  static let knifeWhiteChance: Float = 0.22
+
+  static func makePigmentWeights(seed: Float) -> [Float] {
+    func hash(_ i: Int) -> Float {
+      var x = sin(seed * 12.9898 + Float(i) * 78.233) * 43758.5453
+      x -= x.rounded(.down)
+      return x
+    }
+    var weights = mixboxPigments.map { p -> Float in
+      p.hue >= 0 ? 0.25 : 0
+    }
+    for i in weights.indices where weights[i] > 0 {
+      weights[i] += 0.75 * hash(i)
+    }
+    let stars = weights.indices
+      .filter { weights[$0] > 0 }
+      .sorted { hash($0 + 100) > hash($1 + 100) }
+      .prefix(3)
+    for i in stars { weights[i] *= 2.2 }
+    return weights
+  }
+
+  func currentPigmentWeights() -> [Float] {
+    if pigmentWeightsSeed != songSeed || pigmentWeights.isEmpty {
+      pigmentWeights = Self.makePigmentWeights(seed: songSeed)
+      pigmentWeightsSeed = songSeed
+    }
+    return pigmentWeights
+  }
+
+  func weightedPigment(nearHue targetHue: Float, valueBias: Float = 0.0) -> Pigment {
+    let weights = currentPigmentWeights()
+    var odds = [Float](repeating: 0, count: weights.count)
+    var total: Float = 0
+    for (idx, p) in Self.mixboxPigments.enumerated() where weights[idx] > 0 {
       let dh = abs(p.hue - targetHue)
       let hueDist = min(dh, 1.0 - dh)
-      let score = hueDist - valueBias * p.value * 0.10
-      if score < bestScore {
-        bestScore = score
-        bestIdx = idx
-      }
+      let kernel = exp(-(hueDist * hueDist) / (0.11 * 0.11)) + 0.10
+      odds[idx] = weights[idx] * kernel * (1 + valueBias * p.value)
+      total += odds[idx]
     }
-    return mixboxPigments[bestIdx]
+    var roll = nextSeed() * total
+    for idx in odds.indices where odds[idx] > 0 {
+      roll -= odds[idx]
+      if roll <= 0 { return Self.mixboxPigments[idx] }
+    }
+    return Self.mixboxPigments[0]
   }
 
-  func pickColor(warm: Bool) -> SIMD3<Float> {
-    let palette = warm ? Self.warmColors : Self.coolColors
-    let r = nextSeed()
-    let idx = Int(r * Float(palette.count)) % palette.count
-    var color = palette[idx]
-    let variation = SIMD3<Float>(nextSeed() - 0.5, nextSeed() - 0.5, nextSeed() - 0.5) * 0.1
-    color = pointwiseMin(pointwiseMax(color + variation, .zero), SIMD3(repeating: 1))
-    return color
-  }
-
-  func pickColorBiased() -> SIMD3<Float> {
+  func pickColorBiased(at pos: SIMD2<Float>) -> SIMD3<Float> {
+    if nextSeed() < Self.brushWhiteChance, whiteAllowed(at: pos) {
+      return Self.titaniumWhite.linearRgb
+    }
     var baseHue = (time * 0.0042 + songSeed * 0.7)
       .truncatingRemainder(dividingBy: 1.0)
     if baseHue < 0 { baseHue += 1 }
@@ -102,10 +120,13 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    return Self.nearestPigment(toHue: hue, valueBias: 0.0).linearRgb
+    return weightedPigment(nearHue: hue).linearRgb
   }
 
-  func pickKnifeColor() -> SIMD3<Float> {
+  func pickKnifeColor(at pos: SIMD2<Float>) -> SIMD3<Float> {
+    if nextSeed() < Self.knifeWhiteChance, whiteAllowed(at: pos) {
+      return Self.titaniumWhite.linearRgb
+    }
     var baseHue = (time * 0.0042 + songSeed * 0.7)
       .truncatingRemainder(dividingBy: 1.0)
     if baseHue < 0 { baseHue += 1 }
@@ -127,7 +148,7 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    return Self.nearestPigment(toHue: hue, valueBias: 0.4).linearRgb
+    return weightedPigment(nearHue: hue, valueBias: 0.4).linearRgb
   }
 
   func pickStainColor() -> SIMD3<Float> {
@@ -149,27 +170,9 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    return Self.nearestPigment(toHue: hue, valueBias: 0.0).linearRgb
+    return weightedPigment(nearHue: hue).linearRgb
   }
 
-  nonisolated static func hsvToRgb(_ hsv: SIMD3<Float>) -> SIMD3<Float> {
-    let h = hsv.x * 6.0
-    let s = hsv.y
-    let v = hsv.z
-    let c = v * s
-    let x = c * (1.0 - abs(h.truncatingRemainder(dividingBy: 2.0) - 1.0))
-    let m = v - c
-    let rgb: SIMD3<Float>
-    switch Int(h) {
-    case 0:  rgb = SIMD3(c, x, 0)
-    case 1:  rgb = SIMD3(x, c, 0)
-    case 2:  rgb = SIMD3(0, c, x)
-    case 3:  rgb = SIMD3(0, x, c)
-    case 4:  rgb = SIMD3(x, 0, c)
-    default: rgb = SIMD3(c, 0, x)
-    }
-    return rgb + SIMD3<Float>(repeating: m)
-  }
 }
 
 #endif

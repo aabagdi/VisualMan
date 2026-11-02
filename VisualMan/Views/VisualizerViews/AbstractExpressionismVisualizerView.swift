@@ -29,6 +29,26 @@ struct AbstractExpressionismVisualizerView: View {
       .onChange(of: isPlaying, initial: true) { _, newValue in
         cache.renderer(AbstractExpressionismRenderer.self)?.isPlaying = newValue
       }
+      .overlay(alignment: .bottomLeading) {
+        if AbstractExpressionismRenderer.paintTestEnabled {
+          paintTestCaption
+        }
+      }
+  }
+
+  // Polls the renderer's current test step; the renderer is not observable,
+  // so a periodic timeline keeps the caption in sync with the script.
+  private var paintTestCaption: some View {
+    TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+      Text(cache.renderer(AbstractExpressionismRenderer.self)?.paintTestStatus
+           ?? "Paint test: waiting for renderer…")
+        .font(.caption.monospaced())
+        .foregroundStyle(.white)
+        .padding(10)
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+        .padding()
+        .accessibilityHidden(true)
+    }
   }
 }
 

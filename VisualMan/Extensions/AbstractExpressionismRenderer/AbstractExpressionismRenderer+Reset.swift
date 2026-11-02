@@ -9,6 +9,16 @@
 import Foundation
 
 extension AbstractExpressionismRenderer {
+  func beginSong(key: String) {
+    var h: UInt32 = 2166136261
+    for byte in key.utf8 {
+      h ^= UInt32(byte)
+      h = h &* 16777619
+    }
+    songSeed = Float(h % 100_000) / 100.0
+    pigmentWeightsSeed = -1
+  }
+
   func reset() {
     time = 0
     wallClock = 0
@@ -31,8 +41,6 @@ extension AbstractExpressionismRenderer {
     strokeSeed = 0
     songSeed = Float.random(in: 0..<1000)
     warmBias = Float.random(in: 0.2..<0.8)
-    atmosphereIntensity = 0
-    atmosphereHue = Float.random(in: 0..<1)
 
     resumeSuppressionRemaining = 0
     resumeFadeIn = 1.0
@@ -50,8 +58,12 @@ extension AbstractExpressionismRenderer {
 
     for i in 0..<flowField.count { flowField[i] = .zero }
     for i in 0..<densityGrid.count { densityGrid[i] = 0 }
+    for i in 0..<paintedGrid.count { paintedGrid[i] = 0 }
 
     animatingStrokes.removeAll()
+
+    paintTestClock = 0
+    paintTestEventIndex = 0
 
     pendingClearFrames = Int(Self.maxFramesInFlight) + 1
   }

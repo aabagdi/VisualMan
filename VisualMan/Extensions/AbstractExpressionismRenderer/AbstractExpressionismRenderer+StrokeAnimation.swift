@@ -51,6 +51,9 @@ extension AbstractExpressionismRenderer {
   }
 
   func generateStrokes(audio: SIMD3<Float>) -> [AbExStroke] {
+    if Self.paintTestEnabled {
+      return generatePaintTestStrokes()
+    }
     decayFlow()
     decayDensity()
     advanceAnimatingStrokes()
@@ -76,33 +79,21 @@ extension AbstractExpressionismRenderer {
       }
     }
 
-    var preWash = strokes
-    appendWash(to: &preWash, mid: mid, focus: focus)
-    appendAmbientWash(to: &preWash, energy: energy, focus: focus)
-    let washPriorCount = strokes.count
-    let washAdded = preWash.count - washPriorCount
-    for k in 0..<washAdded {
-      freshSmearStrokes.append(preWash[washPriorCount + k])
+    collectAppended(after: strokes, into: &freshSmearStrokes) {
+      appendWash(to: &$0, mid: mid, focus: focus)
+      appendAmbientWash(to: &$0, energy: energy, focus: focus)
     }
 
     appendRogueStroke(to: &strokes, energy: energy)
 
-    var preScumble = strokes
-    appendScumble(to: &preScumble, mid: mid, energy: energy, focus: focus)
-    let scumblePriorCount = strokes.count
-    let scumbleAdded = preScumble.count - scumblePriorCount
-    for k in 0..<scumbleAdded {
-      freshSmearStrokes.append(preScumble[scumblePriorCount + k])
+    collectAppended(after: strokes, into: &freshSmearStrokes) {
+      appendScumble(to: &$0, mid: mid, energy: energy, focus: focus)
     }
 
     appendSplatters(to: &strokes, high: high)
 
-    var preKnife = strokes
-    appendKnifeStroke(to: &preKnife, energy: energy, focus: focus)
-    let priorCount = strokes.count
-    let knifeAdded = preKnife.count - priorCount
-    for k in 0..<knifeAdded {
-      freshSmearStrokes.append(preKnife[priorCount + k])
+    collectAppended(after: strokes, into: &freshSmearStrokes) {
+      appendKnifeStroke(to: &$0, energy: energy, focus: focus)
     }
 
     appendPollockTrails(to: &strokes, energy: energy, focus: focus)
@@ -110,6 +101,14 @@ extension AbstractExpressionismRenderer {
     enqueueAnimatingStrokes(freshSmearStrokes)
 
     return emitAnimatedStrokes(into: strokes)
+  }
+
+  func collectAppended(after base: [AbExStroke],
+                       into fresh: inout [AbExStroke],
+                       _ append: (inout [AbExStroke]) -> Void) {
+    var scratch = base
+    append(&scratch)
+    fresh.append(contentsOf: scratch[base.count...])
   }
 
   func emitAnimatedStrokes(into base: [AbExStroke]) -> [AbExStroke] {

@@ -26,9 +26,9 @@ struct CreditsView: View {
           Text("""
             Pigment mixing in the Abstract Expressionism visualizer is \
             powered by [Mixbox](https://github.com/scrtwpns/mixbox) by \
-            Secret Weapons. Copyright © Secret Weapons. Licensed under \
+            Secret Weapons. Copyright © 2022 Secret Weapons. Licensed under \
             [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). \
-            Used in modified form (integrated into the rendering pipeline). \
+            Integrated into the rendering pipeline. \
             Provided as-is, without warranty of any kind.
             """)
         }

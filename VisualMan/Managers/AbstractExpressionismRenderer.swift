@@ -59,6 +59,11 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var lastScumbleTime: Float = -10
   var lastLineTime: Float = -10
   var lastDebugTrailTime: Float = -10
+
+  var paintTestClock: Float = 0
+  var paintTestEventIndex: Int = 0
+  var paintTestStatus: String = "Paint test starting…"
+  var paintTestDryMultiplier: Float = 1
   var framesSinceSmear: Int = 999
   var pollockEventCounter: Int = 0
   var hueOffset: Float = 0
@@ -66,6 +71,8 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var isFirstFrame: Bool = true
 
   var songSeed: Float = Float.random(in: 0..<1000)
+  var pigmentWeights: [Float] = []
+  var pigmentWeightsSeed: Float = -1
   var warmBias: Float = Float.random(in: 0.2..<0.8)
 
   var cameraPhase: Float = 0
@@ -76,9 +83,6 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var currentGestureStarted: Float = 0
   var currentGestureSpan: Float = 0.30
   static let gestureTimeoutSeconds: Float = 2.0
-
-  var atmosphereIntensity: Float = 0
-  var atmosphereHue: Float = 0
 
   static let flowGridSize: Int = 32
   static let flowDecayPerFrame: Float = 0.985
@@ -96,6 +100,11 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   static let densityMaxBias: Float = 0.65
 
   var densityGrid: [Float] = Array(
+    repeating: 0,
+    count: AbstractExpressionismRenderer.densityGridSize
+         * AbstractExpressionismRenderer.densityGridSize)
+
+  var paintedGrid: [Float] = Array(
     repeating: 0,
     count: AbstractExpressionismRenderer.densityGridSize
          * AbstractExpressionismRenderer.densityGridSize)
@@ -144,6 +153,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   static let cameraMinZoom: Float = 1.0 - 0.020 - 0.008
 
   var mixboxLUT: MTLTexture?
+  var crackTexture: MTLTexture?
 
   var canvasSize: Int = 0
   var lastDisplayWidth: Int = 0
@@ -220,25 +230,9 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     self.resamplePipeline = pipelines.resample
     self.residencySet = residencySet
 
-    let textureLoader = MTKTextureLoader(device: device)
-    let lutOptions: [MTKTextureLoader.Option: Any] = [
-      .textureUsage: NSNumber(value: MTLTextureUsage.shaderRead.rawValue),
-      .textureStorageMode: NSNumber(value: MTLStorageMode.private.rawValue),
-      .SRGB: false,
-      .origin: MTKTextureLoader.Origin.topLeft
-    ]
-    do {
-      let lut = try textureLoader.newTexture(name: "mixbox_lut",
-                                              scaleFactor: 1.0,
-                                              bundle: .main,
-                                              options: lutOptions)
-      self.mixboxLUT = lut
-      Self.logger.info(
-        "Loaded Mixbox LUT: \(lut.width)x\(lut.height), format=\(lut.pixelFormat.rawValue)")
-    } catch {
-      Self.logger.error("Failed to load Mixbox LUT: \(error)")
-      return nil
-    }
+    guard let lut = Self.makeMixboxLUT(device: device) else { return nil }
+    self.mixboxLUT = lut
+    self.crackTexture = Self.makeCrackTexture(device: device)
 
     configureResidencySet()
   }

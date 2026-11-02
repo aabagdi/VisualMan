@@ -169,8 +169,26 @@ extension AbstractExpressionismRenderer {
         let dist2 = Float(dx * dx + dy * dy)
         let falloff = exp(-dist2 * 0.7)
         densityGrid[gy * n + gx] += w * falloff
+        let idx = gy * n + gx
+        paintedGrid[idx] = min(1, paintedGrid[idx] + weight * 0.6 * falloff)
       }
     }
+  }
+
+  static let paintedThreshold: Float = 0.35
+  static let mostlyPaintedFraction: Float = 0.55
+
+  func isPainted(at p: SIMD2<Float>) -> Bool {
+    paintedGrid[densityIndex(at: p)] >= Self.paintedThreshold
+  }
+
+  var paintedFraction: Float {
+    let painted = paintedGrid.reduce(0) { $0 + ($1 >= Self.paintedThreshold ? 1 : 0) }
+    return Float(painted) / Float(paintedGrid.count)
+  }
+
+  func whiteAllowed(at p: SIMD2<Float>) -> Bool {
+    isPainted(at: p) || paintedFraction >= Self.mostlyPaintedFraction
   }
   
   func consumeDensity(at p: SIMD2<Float>, amount: Float = 0.6) {

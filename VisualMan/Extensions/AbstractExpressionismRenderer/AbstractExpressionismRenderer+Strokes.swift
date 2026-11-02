@@ -47,7 +47,7 @@ extension AbstractExpressionismRenderer {
     let halfWidth = 0.012 + energy * 0.016 + nextSeed() * 0.008
     let opacity = 0.84 + energy * 0.16
     let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
+    let color = pickColorBiased(at: SIMD2(x, y))
     let dur = pickDurability(permanentChance: 0.03, stickyChance: 0.15)
     let curvature = pickCurvature(zeroChance: 0.30, midThreshold: 0.65,
                                    ampBase: 0.25, ampJitter: 0.40)
@@ -66,7 +66,7 @@ extension AbstractExpressionismRenderer {
     let y = (nextSeed() - 0.5) * 1.10
     let angle = nextSeed() * .pi * 2
     let typeRoll = nextSeed()
-    let color = pickColorBiased()
+    let color = pickColorBiased(at: SIMD2(x, y))
     if typeRoll < 0.55 {
       let halfLen = 0.10 + nextSeed() * 0.22
       let halfWidth = 0.009 + nextSeed() * 0.010
@@ -238,7 +238,7 @@ extension AbstractExpressionismRenderer {
     let halfWidth = 0.011 + nextSeed() * 0.010
     let opacity: Float = 0.78 + nextSeed() * 0.20 + energy * 0.05
     let bristleSeed = nextSeed() * 100
-    let color = pickKnifeColor()
+    let color = pickKnifeColor(at: SIMD2(x, y))
     let curvature = pickCurvature(zeroChance: 0.40, midThreshold: 0.75,
                                    ampBase: 0.20, ampJitter: 0.35)
     strokes.append(AbExStroke(
@@ -268,7 +268,7 @@ extension AbstractExpressionismRenderer {
     let halfWidth = 0.06 + nextSeed() * 0.06 + energy * 0.02
     let opacity: Float = 0.60 + nextSeed() * 0.30
     let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
+    let color = pickColorBiased(at: SIMD2(x, y))
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
       sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 5),

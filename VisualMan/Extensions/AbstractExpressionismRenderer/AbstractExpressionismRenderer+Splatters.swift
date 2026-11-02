@@ -63,7 +63,7 @@ extension AbstractExpressionismRenderer {
     let (radius, opacity) = splatterSizeAndOpacity(high: high)
     let (shapeVariant, angle) = splatterShape(radius: radius, at: SIMD2(x, y), burstRoll: burstShapeRoll)
     let bristleSeed = nextSeed() * 100
-    let color = pickColorBiased()
+    let color = pickColorBiased(at: SIMD2(x, y))
     let dur = pickDurability(permanentChance: 0.12, stickyChance: 0.28)
     return AbExStroke(
       posAngle: SIMD4(x, y, angle, radius),

@@ -109,6 +109,12 @@ extension AbstractExpressionismRenderer {
     argumentTable.setTexture(output.gpuResourceID, index: 2)
     argumentTable.setTexture(dryColor.gpuResourceID, index: 3)
     argumentTable.setTexture(substrate.gpuResourceID, index: 4)
+    if let lut = mixboxLUT {
+      argumentTable.setTexture(lut.gpuResourceID, index: 5)
+    }
+    if let cracks = crackTexture {
+      argumentTable.setTexture(cracks.gpuResourceID, index: 6)
+    }
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     dispatch(encoder: encoder, pipeline: composePipeline,
@@ -155,7 +161,8 @@ extension AbstractExpressionismRenderer {
   private func buildFrameParams(smoothed: SIMD3<Float>, strokeCount: Int) -> AbExParams {
     let energy = (smoothed.x + smoothed.y + smoothed.z) / 3.0
     let baseDryRate: Float = isPlaying ? 0.0006 : 0.0008
-    let dryRate: Float = baseDryRate + energy * 0.0002
+    let dryRate: Float = (baseDryRate + energy * 0.0002) * dt * 60
+                       * paintTestDryMultiplier
     let bumpStrength: Float = 22.0
 
     let camPanX: Float = sin(cameraPhase * 0.13) * 0.015
@@ -170,8 +177,8 @@ extension AbstractExpressionismRenderer {
       audio: SIMD4(time, smoothed.x, smoothed.y, smoothed.z),
       canvas: SIMD4(cc.x, cc.y, cc.z, dryRate),
       config: SIMD4(dt, isFirstFrame ? 1.0 : 0.0, Float(strokeCount), bumpStrength),
-      camera: SIMD4(camPanX, camPanY, camZoom, 0),
-      atmosphere: SIMD4(atmosphereIntensity, songSeed, atmosphereHue, 0))
+      camera: SIMD4(camPanX, camPanY, camZoom, Float(Self.paintTestDebugMode)),
+      atmosphere: SIMD4(0, songSeed, 0, 0))
   }
 
   private struct SplitStrokes {

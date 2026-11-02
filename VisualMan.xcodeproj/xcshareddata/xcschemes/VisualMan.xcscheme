@@ -53,6 +53,20 @@
             ReferencedContainer = "container:VisualMan.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+         <CommandLineArgument
+            argument = "-AbExPaintTest YES"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-AbExPaintTest cracks"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-AbExPaintTestDebug black"
+            isEnabled = "NO">
+         </CommandLineArgument>
+      </CommandLineArguments>
       <MetalShaderValidationSettings
          isEnabled = "Yes">
       </MetalShaderValidationSettings>

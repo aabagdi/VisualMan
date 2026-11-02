@@ -84,6 +84,10 @@ struct MusicPlayerView: View {
     }
     .task {
       await rendererCache.preWarm()
+      seedPaletteForCurrentSong()
+    }
+    .onChange(of: playlistManager.currentIndex) { _, _ in
+      seedPaletteForCurrentSong()
     }
     .onDisappear {
       viewModel.cleanup()
@@ -177,6 +181,20 @@ struct MusicPlayerView: View {
       }
     }
   }
+
+  #if !targetEnvironment(simulator)
+  /// Gives the AbEx canvas a palette seeded by the current song.
+  private func seedPaletteForCurrentSong() {
+    guard let renderer = rendererCache.renderer(AbstractExpressionismRenderer.self),
+          let source = playlistManager.currentAudioSource else { return }
+    let key = [source.title, source.artist, source.getPlaybackURL()?.lastPathComponent]
+      .compactMap { $0 }
+      .joined(separator: "|")
+    renderer.beginSong(key: key)
+  }
+  #else
+  private func seedPaletteForCurrentSong() {}
+  #endif
 }
 
 private struct AudioReactiveVisualizerLayer: View {

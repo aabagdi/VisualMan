@@ -51,12 +51,6 @@ extension AbstractExpressionismRenderer {
 
     hueOffset += dt * 0.02
 
-    let atmTarget = min(1.0, ((slowEnvelope.x + slowEnvelope.y + slowEnvelope.z) / 3.0) * 1.6)
-    let atmRate = 1 - exp(-dt / (atmTarget > atmosphereIntensity ? 1.5 : 3.0))
-    atmosphereIntensity += (atmTarget - atmosphereIntensity) * atmRate
-
-    atmosphereHue = (atmosphereHue + dt * 0.0033).truncatingRemainder(dividingBy: 1.0)
-
     if resumeFadeIn < 1 {
       resumeFadeIn = min(1, resumeFadeIn + dt / Self.resumeFadeDuration)
     }

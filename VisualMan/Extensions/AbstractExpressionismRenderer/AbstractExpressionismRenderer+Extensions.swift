@@ -54,6 +54,9 @@ extension AbstractExpressionismRenderer {
     if let lut = mixboxLUT {
       residencySet.addAllocation(lut)
     }
+    if let cracks = crackTexture {
+      residencySet.addAllocation(cracks)
+    }
     residencySet.commit()
     commandQueue.addResidencySet(residencySet)
   }
