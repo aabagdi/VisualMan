@@ -36,8 +36,6 @@ struct AbstractExpressionismVisualizerView: View {
       }
   }
 
-  // Polls the renderer's current test step; the renderer is not observable,
-  // so a periodic timeline keeps the caption in sync with the script.
   private var paintTestCaption: some View {
     TimelineView(.periodic(from: .now, by: 0.25)) { _ in
       Text(cache.renderer(AbstractExpressionismRenderer.self)?.paintTestStatus
