@@ -13,8 +13,6 @@ import QuartzCore
 struct GameOfLifeParams {
   var bass: Float
   var mid: Float
-  var high: Float
-  var time: Float
   var simWidth: UInt32
   var simHeight: UInt32
   var frameCount: UInt32
@@ -44,9 +42,7 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   var lastDrawableHeight: Int = 0
   private(set) var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
-  var time: Float = 0
   var dt: Float = 1.0 / 60.0
-  var renderFrameCount: UInt32 = 0
 
   var smoothedBass: Float = 0
   var smoothedMid: Float = 0

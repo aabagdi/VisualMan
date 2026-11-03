@@ -49,8 +49,6 @@ extension AbstractExpressionismRenderer {
     let bassA = 1 - exp(-dt / (bass > smoothedBass ? 0.06 : 0.25))
     smoothedBass += (bass - smoothedBass) * bassA
 
-    hueOffset += dt * 0.02
-
     if resumeFadeIn < 1 {
       resumeFadeIn = min(1, resumeFadeIn + dt / Self.resumeFadeDuration)
     }

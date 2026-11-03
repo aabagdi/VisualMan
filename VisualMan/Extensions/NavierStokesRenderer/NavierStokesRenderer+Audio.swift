@@ -76,9 +76,6 @@ extension NavierStokesRenderer {
       collectHighJets(high: high)
       flushSplats(encoder: encoder)
     }
-
-    prevBass = bass
-    prevMid = mid
   }
 
   private func flushSplats(encoder: any MTL4ComputeCommandEncoder) {

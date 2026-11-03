@@ -37,10 +37,8 @@ extension AbstractExpressionismRenderer {
     lastScumbleTime = -10
     pollockEventCounter = 0
 
-    hueOffset = 0
     strokeSeed = 0
     songSeed = Float.random(in: 0..<1000)
-    warmBias = Float.random(in: 0.2..<0.8)
 
     resumeSuppressionRemaining = 0
     resumeFadeIn = 1.0

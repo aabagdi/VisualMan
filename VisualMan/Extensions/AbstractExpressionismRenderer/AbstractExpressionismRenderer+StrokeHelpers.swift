@@ -19,8 +19,13 @@ extension AbstractExpressionismRenderer {
   
   func nextSeed() -> Float {
     strokeSeed &+= 1
-    let x = strokeSeed &* 2654435769
-    return Float(x) / Float(UInt32.max)
+    var x = strokeSeed &* 2654435769
+    x ^= x >> 16
+    x &*= 0x85EBCA6B
+    x ^= x >> 13
+    x &*= 0xC2B2AE35
+    x ^= x >> 16
+    return Float(x >> 8) * (1.0 / 16_777_216.0)
   }
   
   private static let permanentDurabilityBase: Float = 0.80
@@ -73,10 +78,6 @@ extension AbstractExpressionismRenderer {
     let jitterY = cos(t * 4.1 + songSeed * 2.3) * 0.04
     
     return lerped + SIMD2(jitterX, jitterY)
-  }
-  
-  func dominantAngle() -> Float {
-    return time * 0.045 + songSeed * 1.2
   }
   
   func sampleGesturedStroke(suggestedPos: SIMD2<Float>,
@@ -221,10 +222,6 @@ extension AbstractExpressionismRenderer {
     return densityGrid[densityIndex(at: p)]
   }
   
-  func isInAttentionZone(_ p: SIMD2<Float>) -> Bool {
-    return attentionStrength(at: p) > 0.5
-  }
-  
   func attentionStrength(at p: SIMD2<Float>) -> Float {
     let t = wallClock * 0.012
     let p1 = SIMD2(p.x * 1.5 + t, p.y * 1.5 + t * 0.7)
@@ -277,30 +274,6 @@ extension AbstractExpressionismRenderer {
     let biasStrength = min(Self.densityMaxBias,
                            (dHere - 0.4) / 2.0)
     return suggested + (best - suggested) * biasStrength
-  }
-  
-  func applyDensitySeek(at suggested: SIMD2<Float>,
-                        dispersion: Float = 0.40) -> SIMD2<Float> {
-    var best = suggested
-    var bestD = sampleDensity(at: suggested)
-    for _ in 0..<6 {
-      let dx = (nextSeed() * 2 - 1) * dispersion
-      let dy = (nextSeed() * 2 - 1) * dispersion
-      let candidate = SIMD2(
-        max(-0.50, min(0.50, suggested.x + dx)),
-        max(-0.55, min(0.55, suggested.y + dy)))
-      let d = sampleDensity(at: candidate)
-      if d > bestD {
-        best = candidate
-        bestD = d
-      }
-    }
-    
-    if bestD < 0.50 { return suggested }
-    
-    let pullStrength: Float = min(0.75, bestD * 0.5)
-    
-    return suggested + (best - suggested) * pullStrength
   }
   
   func findStrongestTarget(minDensity: Float = 0.50)

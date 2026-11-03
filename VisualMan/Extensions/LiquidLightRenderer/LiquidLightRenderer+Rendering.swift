@@ -160,8 +160,6 @@ extension LiquidLightRenderer {
       innerRadius: 0.45 + audio.y * 0.05,
       outerRadius: 1.15,
       maxBlurRadius: 8.0 + audio.y * 2.0,
-      texWidth: Float(input.width),
-      texHeight: Float(input.height),
       bass: audio.x,
       mid: audio.y
     )

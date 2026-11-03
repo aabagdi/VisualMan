@@ -9,6 +9,7 @@
 import Foundation
 import simd
 
+#if DEBUG
 extension AbstractExpressionismRenderer {
   enum PaintTestScenario {
     case mixing, cracks
@@ -345,5 +346,13 @@ extension AbstractExpressionismRenderer {
     pendingClearFrames = Int(Self.maxFramesInFlight) + 1
   }
 }
+#else
+extension AbstractExpressionismRenderer {
+  static let paintTestEnabled = false
+  static let paintTestDebugMode = 0
+
+  func generatePaintTestStrokes() -> [AbExStroke] { [] }
+}
+#endif
 
 #endif

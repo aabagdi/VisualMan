@@ -68,12 +68,6 @@ final class VisualizerRendererCache {
     _ = await (ns, ll, gol, abex)
   }
   
-  func resetAll() {
-    for renderer in renderers.values {
-      renderer.reset()
-    }
-  }
-
   func purge() {
     let fenceInfo: [(event: MTLSharedEvent, target: UInt64)] = renderers.values.compactMap { renderer in
       let target = renderer.frameNumber
@@ -91,18 +85,6 @@ final class VisualizerRendererCache {
       }
     }
   }
-
-  func purge<R: MetalVisualizerRenderer>(_ type: R.Type) {
-    let key = ObjectIdentifier(type)
-    guard let renderer = renderers.removeValue(forKey: key) else { return }
-    renderer.commandQueue.removeResidencySet(renderer.residencySet)
-    let target = renderer.frameNumber
-    guard target > 0 else { return }
-    let event = renderer.sharedEvent
-    Task.detached {
-      drainGPU(event: event, target: target)
-    }
-  }
 }
 #else
 
@@ -110,7 +92,6 @@ final class VisualizerRendererCache {
 @Observable
 final class VisualizerRendererCache {
   func preWarm() async {}
-  func resetAll() {}
   func purge() {}
 }
 #endif

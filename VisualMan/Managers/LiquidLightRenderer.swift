@@ -45,8 +45,6 @@ struct BlurParams {
   var innerRadius: Float
   var outerRadius: Float
   var maxBlurRadius: Float
-  var texWidth: Float
-  var texHeight: Float
   var bass: Float
   var mid: Float
 }

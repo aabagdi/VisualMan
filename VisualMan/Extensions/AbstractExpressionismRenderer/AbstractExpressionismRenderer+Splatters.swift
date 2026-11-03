@@ -113,7 +113,8 @@ extension AbstractExpressionismRenderer {
     for _ in 0..<count where strokes.count < Self.maxStrokesPerFrame {
       let focus = splatterFocus()
       let burstShapeRoll = nextSeed()
-      let burstTypeRoll  = nextSeed()
+      splatCounter &+= 1
+      let burstTypeRoll = trailHash(splatCounter, UInt32(bitPattern: Int32(songSeed * 1000)))
       let mainStroke = makeSplatterStroke(high: high, focus: focus,
                                             burstShapeRoll: burstShapeRoll,
                                             burstTypeRoll: burstTypeRoll)
@@ -132,7 +133,8 @@ extension AbstractExpressionismRenderer {
           let satY = landed.y + sin(satAngle) * satDist
           let satRadius = 0.0010 + nextSeed() * 0.0025
           let bristleSeed = nextSeed() * 100
-          let satTypeRoll = nextSeed()
+          splatCounter &+= 1
+          let satTypeRoll = trailHash(splatCounter, 0x2545F491)
           let color = mainStroke.color
           strokes.append(AbExStroke(
             posAngle: SIMD4(satX, satY, 0, satRadius),

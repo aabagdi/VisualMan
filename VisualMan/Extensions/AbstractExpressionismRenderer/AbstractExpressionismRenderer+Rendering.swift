@@ -122,7 +122,7 @@ extension AbstractExpressionismRenderer {
              width: output.width, height: output.height)
   }
 
-  private struct PingPongTextures {
+  struct PingPongTextures {
     let colorIn: MTLTexture, colorOut: MTLTexture
     let hwIn: MTLTexture, hwOut: MTLTexture
     let colorMid: MTLTexture, hwMid: MTLTexture
@@ -148,7 +148,7 @@ extension AbstractExpressionismRenderer {
           let hwMid = heightWetMid,
           let dcMid = dryColorMid,
           displayTextures.count == 2 else { return nil }
-    let disp = displayTextures[readA ? 0 : 1]
+    let disp = displayTextures[displayIsA ? 0 : 1]
     return PingPongTextures(colorIn: cIn, colorOut: cOut,
                             hwIn: hwIn, hwOut: hwOut,
                             colorMid: cMid, hwMid: hwMid,
@@ -159,10 +159,10 @@ extension AbstractExpressionismRenderer {
                             display: disp)
   }
 
-  private func buildFrameParams(smoothed: SIMD3<Float>, strokeCount: Int) -> AbExParams {
+  func buildFrameParams(smoothed: SIMD3<Float>, strokeCount: Int) -> AbExParams {
     let energy = (smoothed.x + smoothed.y + smoothed.z) / 3.0
     let baseDryRate: Float = isPlaying ? 0.0006 : 0.0008
-    let dryRate: Float = (baseDryRate + energy * 0.0002) * dt * 60
+    let dryRate: Float = (baseDryRate + energy * 0.0002) * paintDt * 60
                        * paintTestDryMultiplier
     let bumpStrength: Float = 22.0
 
@@ -175,16 +175,16 @@ extension AbstractExpressionismRenderer {
 
     let cc = Self.canvasColor
     return AbExParams(
-      audio: SIMD4(time, smoothed.x, smoothed.y, smoothed.z),
       canvas: SIMD4(cc.x, cc.y, cc.z, dryRate),
-      config: SIMD4(dt, isFirstFrame ? 1.0 : 0.0, Float(strokeCount), bumpStrength),
+      config: SIMD4(paintDt, isFirstFrame ? 1.0 : 0.0, Float(strokeCount), bumpStrength),
       camera: SIMD4(camPanX, camPanY, camZoom, Float(Self.paintTestDebugMode)),
       atmosphere: SIMD4(0, songSeed, 0, 0))
   }
 
-  private struct SplitStrokes {
+  struct SplitStrokes {
     let deposit: [AbExStroke]
     let smear: [AbExStroke]
+    var isEmpty: Bool { deposit.isEmpty && smear.isEmpty }
   }
 
   private func splitStrokesByPhase(_ all: [AbExStroke]) -> SplitStrokes {
@@ -216,7 +216,8 @@ extension AbstractExpressionismRenderer {
                                 Float(smearStrokes.count),
                                 pass2Params.config.w)
     
-    if runSmearPass {
+    if runSmearPass, let smearRegion = smearPassRegion(within: region) {
+      copyForSmearPass(encoder: encoder, tex: tex, region: smearRegion)
       renderPaint(encoder: encoder,
                   colorIn: tex.colorMid, colorOut: tex.colorOut,
                   hwIn: tex.hwMid, hwOut: tex.hwOut,
@@ -225,7 +226,7 @@ extension AbstractExpressionismRenderer {
                   substrateIn: tex.substrateOut, substrateOut: tex.substrateOut,
                   params: pass2Params, strokes: smearStrokes,
                   tileMap: smearTileMap,
-                  region: region)
+                  region: smearRegion)
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
 
@@ -257,10 +258,11 @@ extension AbstractExpressionismRenderer {
     }
     let velocityFieldQuiet = framesSinceSmear > 12
     let runSmearPass = !strokes.smear.isEmpty || !velocityFieldQuiet
+    recordSmearBounds(strokes.smear)
 
-    let pass1Color   = runSmearPass ? tex.colorMid    : tex.colorOut
-    let pass1HW      = runSmearPass ? tex.hwMid       : tex.hwOut
-    let pass1DryCol  = runSmearPass ? tex.dryColorMid : tex.dryColorOut
+    let pass1Color   = tex.colorOut
+    let pass1HW      = tex.hwOut
+    let pass1DryCol  = tex.dryColorOut
 
     let pass1Params = buildFrameParams(smoothed: smoothed,
                                         strokeCount: strokes.deposit.count)
@@ -305,25 +307,7 @@ extension AbstractExpressionismRenderer {
           let tex = currentPingPongTextures(),
           let encoder = beginFrame() else { return nil }
 
-    if pendingResample,
-       let cSrc = resampleColorSrc, let hwSrc = resampleHeightWetSrc,
-       let dSrc = resampleDryColorSrc, let sSrc = resampleSubstrateSrc {
-      renderResample(encoder: encoder,
-                     colorSrc: cSrc, colorDst: tex.colorIn,
-                     hwSrc: hwSrc, hwDst: tex.hwIn,
-                     drySrc: dSrc, dryDst: tex.dryColorIn,
-                     subSrc: sSrc, subDst: tex.substrateIn,
-                     velDst: tex.velocityIn)
-      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-      for t in [cSrc, hwSrc, dSrc, sSrc] {
-        pendingTextureReleases.append((frame: frameNumber, texture: t))
-      }
-      resampleColorSrc = nil; resampleHeightWetSrc = nil
-      resampleDryColorSrc = nil; resampleSubstrateSrc = nil
-      pendingResample = false
-      fullCanvasFramesRemaining = 2
-    }
+    runPendingResample(encoder: encoder, tex: tex)
 
     let isClearing = pendingClearFrames > 0
     if isClearing {
@@ -346,14 +330,25 @@ extension AbstractExpressionismRenderer {
       cameraPhase += dt * 0.30
     }
 
-    executePaintPipeline(encoder: encoder, tex: tex, smoothed: smoothed,
-                         strokes: split, region: region)
+    let skipPaint = shouldSkipPaint(split: split, fullCanvas: paintFullCanvas,
+                                    isClearing: isClearing)
+    if skipPaint {
+      encodeComposeOnly(encoder: encoder, tex: tex,
+                        params: buildFrameParams(smoothed: smoothed, strokeCount: 0))
+    } else {
+      paintDt = dt + skippedPaintDt
+      skippedPaintDt = 0
+      executePaintPipeline(encoder: encoder, tex: tex, smoothed: smoothed,
+                           strokes: split, region: region)
+    }
+    lastFrameSkippedPaint = skipPaint
 
     encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
     encoder.endEncoding()
 
     isFirstFrame = false
-    currentIsA.toggle()
+    if !skipPaint { currentIsA.toggle() }
+    displayIsA.toggle()
     return tex.display
   }
 

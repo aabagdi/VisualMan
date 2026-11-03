@@ -112,9 +112,6 @@ extension AbstractExpressionismRenderer {
   }
 
   func emitAnimatedStrokes(into base: [AbExStroke]) -> [AbExStroke] {
-    // Animating strokes go first: their animation advances every frame
-    // whether or not they are drawn, so dropping one for a frame leaves a gap
-    // in its colour. One-shot strokes fill whatever room is left.
     var out = [AbExStroke]()
     for anim in animatingStrokes where anim.currentFrame < anim.totalFrames
                                     && out.count < Self.maxStrokesPerFrame {

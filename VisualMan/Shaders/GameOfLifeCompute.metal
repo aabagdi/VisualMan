@@ -11,8 +11,6 @@ using namespace metal;
 struct GameOfLifeParams {
   float bass;
   float mid;
-  float high;
-  float time;
   uint simWidth;
   uint simHeight;
   uint frameCount;
@@ -100,11 +98,6 @@ kernel void gameOfLifeStep(texture2d<half, access::read>  input   [[texture(0)]]
   float newAge = newAlive ? min(age + (1.0 / 32.0), 1.0) : 0.0;
 
   output.write(half4(half(newAlive ? 1.0 : 0.0), half(newAge), 0.0h, 1.0h), gid);
-}
-
-inline float roundedBoxSDF(float2 p, float2 halfSize, float radius) {
-  float2 d = abs(p) - halfSize + float2(radius);
-  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - radius;
 }
 
 kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)]],

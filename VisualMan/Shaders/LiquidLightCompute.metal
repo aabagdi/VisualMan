@@ -23,8 +23,6 @@ struct BlurParams {
   float innerRadius;
   float outerRadius;
   float maxBlurRadius;
-  float texWidth;
-  float texHeight;
   float bass;
   float mid;
 };
@@ -45,11 +43,6 @@ inline float vnoise(float2 p) {
   float d = shaderHash21(i + float2(1.0, 1.0));
   float n = mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
   return n * 2.0 - 1.0;
-}
-
-inline float2x2 rot2(float a) {
-  float c = fast::cos(a), s = fast::sin(a);
-  return float2x2(c, s, -s, c);
 }
 
 constant float2x2 ROT1 = float2x2( 0.7974,  0.6034, -0.6034,  0.7974);

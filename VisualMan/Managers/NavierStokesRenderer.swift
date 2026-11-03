@@ -97,8 +97,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   private var lastFrameTime: CFTimeInterval = 0
   private var smoothedBass: Float = 0
   private var smoothedMid: Float = 0
-  var prevBass: Float = 0
-  var prevMid: Float = 0
   var bassEnvelope: Float = 0
   var midEnvelope: Float = 0
   var highEnvelope: Float = 0

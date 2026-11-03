@@ -25,10 +25,7 @@ extension GameOfLifeRenderer {
       return nil
     }
 
-    renderFrameCount += 1
-    time += dt
-
-    let (shouldStep, params) = updateAudioAndParams(bass: bass, mid: mid, high: high)
+    let (shouldStep, params) = updateAudioAndParams(bass: bass, mid: mid)
 
     guard let encoder = beginFrame() else { return nil }
 
@@ -74,7 +71,7 @@ extension GameOfLifeRenderer {
     }
   }
 
-  func updateAudioAndParams(bass: Float, mid: Float, high: Float) ->
+  func updateAudioAndParams(bass: Float, mid: Float) ->
   (shouldStep: Bool, params: GameOfLifeParams) {
     if needsAudioReseed {
       smoothedBass = bass
@@ -96,8 +93,6 @@ extension GameOfLifeRenderer {
     let params = GameOfLifeParams(
       bass: bass,
       mid: mid,
-      high: high,
-      time: time,
       simWidth: UInt32(simWidth),
       simHeight: UInt32(simHeight),
       frameCount: simFrameCount,
@@ -107,8 +102,6 @@ extension GameOfLifeRenderer {
   }
 
   func reset() {
-    time = 0
-    renderFrameCount = 0
     simFrameCount = 0
     stepAccumulator = 0
     smoothedBass = 0

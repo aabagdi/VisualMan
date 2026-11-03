@@ -5,7 +5,7 @@
 //  Created on 11/2/26.
 //
 
-#if !targetEnvironment(simulator)
+#if DEBUG && !targetEnvironment(simulator)
 import Foundation
 import simd
 

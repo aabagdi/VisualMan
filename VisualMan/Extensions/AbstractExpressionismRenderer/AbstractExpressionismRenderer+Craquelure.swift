@@ -69,7 +69,6 @@ extension AbstractExpressionismRenderer {
             let cx = ((ix + dx) % cells + cells) % cells
             let cy = ((iy + dy) % cells + cells) % cells
             var fp = points[cy * cells + cx]
-            // Unwrap the neighbour across the tile seam so distances are right.
             if ix + dx < 0 { fp.x -= Float(cells) } else if ix + dx >= cells { fp.x += Float(cells) }
             if iy + dy < 0 { fp.y -= Float(cells) } else if iy + dy >= cells { fp.y += Float(cells) }
             let d = simd_length(fp - p)

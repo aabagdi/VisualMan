@@ -39,7 +39,7 @@ extension AbstractExpressionismRenderer {
     }) {
       pigmentDirtyHistory.append(frameBounds)
     } else {
-      pigmentDirtyHistory.append(SIMD4(1, 0, 1, 0))   // empty
+      pigmentDirtyHistory.append(SIMD4(1, 0, 1, 0))
     }
     if pigmentDirtyHistory.count > Self.pigmentDirtyFrames {
       pigmentDirtyHistory.removeFirst(pigmentDirtyHistory.count - Self.pigmentDirtyFrames)

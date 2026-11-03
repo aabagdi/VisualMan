@@ -69,14 +69,14 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
           .frame(height: height)
           
           HStack {
-            Text(displayTime.asTimeString(style: .positional))
+            Text(displayTime.asTimeString())
               .font(.caption)
               .monospacedDigit()
               .foregroundStyle(isDragging ? fillColor : emptyColor)
             
             Spacer(minLength: 0)
             
-            Text("-" + remainingTime.asTimeString(style: .positional))
+            Text("-" + remainingTime.asTimeString())
               .font(.caption)
               .monospacedDigit()
               .foregroundStyle(isDragging ? fillColor : emptyColor)
@@ -113,7 +113,7 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("Playback position")
     .accessibilityValue(
-      "\(displayTime.asTimeString(style: .positional)) of \((inRange.upperBound).asTimeString(style: .positional))"
+      "\(displayTime.asTimeString()) of \((inRange.upperBound).asTimeString())"
     )
     .accessibilityAdjustableAction { direction in
       let range = inRange.upperBound - inRange.lowerBound

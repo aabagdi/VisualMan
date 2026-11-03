@@ -79,7 +79,7 @@ extension GameOfLifeRenderer {
 
   func encodeWarmUpPasses(encoder: some MTL4ComputeCommandEncoder, textures: WarmUpTextures) {
     let params = GameOfLifeParams(
-      bass: 0, mid: 0, high: 0, time: 0,
+      bass: 0, mid: 0,
       simWidth: 64, simHeight: 64,
       frameCount: 0, spawnRate: 0
     )

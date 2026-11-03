@@ -21,16 +21,7 @@ struct MusicPlayerView: View {
   
   private let _audioSources: [any AudioSource]
   private let _startingIndex: Int
-  private let sliderColor: Color = .white
-  
-  private var normalFillColor: Color {
-    sliderColor.opacity(0.5)
-  }
-  
-  private var emptyColor: Color {
-    sliderColor.opacity(0.3)
-  }
-  
+
   private var currentAudioSource: (any AudioSource)? {
     playlistManager.currentAudioSource
   }
@@ -183,7 +174,6 @@ struct MusicPlayerView: View {
   }
 
   #if !targetEnvironment(simulator)
-  /// Gives the AbEx canvas a palette seeded by the current song.
   private func seedPaletteForCurrentSong() {
     guard let renderer = rendererCache.renderer(AbstractExpressionismRenderer.self),
           let source = playlistManager.currentAudioSource else { return }

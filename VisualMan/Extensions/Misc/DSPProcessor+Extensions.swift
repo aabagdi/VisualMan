@@ -32,7 +32,6 @@ extension DSPProcessor {
     static let tanhScale: Float = 1.5
     static let lowFrequencyBoostFactor: Float = 0.5
     static let presenceBoostFactor: Float = 0.4
-    static let gainSmoothingFactor: Float = 0.95
     static let gainHistoryRebuildInterval = 1024
     static let gainTau: Float = 0.3
     static let logMinFreq: Float = log10(minFrequency)

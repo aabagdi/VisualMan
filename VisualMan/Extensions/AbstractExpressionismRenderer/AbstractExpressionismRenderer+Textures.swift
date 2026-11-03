@@ -262,7 +262,6 @@ extension AbstractExpressionismRenderer {
 
     let cc = Self.canvasColor
     let params = AbExParams(
-      audio: .zero,
       canvas: SIMD4(cc.x, cc.y, cc.z, 0),
       config: SIMD4(0, 1, 0, 10),
       camera: SIMD4(0, 0, 1, 0),

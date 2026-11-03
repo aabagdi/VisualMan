@@ -17,25 +17,13 @@ struct MetalViewConfig {
   var maxFramesPerSecond: Int = 120
 }
 
-enum MetalHostingBackend {
-  case mtkView
-  case caMetalLayer
-
-  static var current: MetalHostingBackend = .caMetalLayer
-}
-
 struct AudioMetalView<R: MetalVisualizerRenderer>: View {
   let renderer: R
   let audioLevels: [1024 of Float]
   var config: MetalViewConfig = MetalViewConfig()
 
   var body: some View {
-    switch MetalHostingBackend.current {
-    case .mtkView:
-      AudioMTKMetalView(renderer: renderer, audioLevels: audioLevels, config: config)
-    case .caMetalLayer:
-      AudioCAMetalLayerView(renderer: renderer, audioLevels: audioLevels, config: config)
-    }
+    AudioCAMetalLayerView(renderer: renderer, audioLevels: audioLevels, config: config)
   }
 }
 

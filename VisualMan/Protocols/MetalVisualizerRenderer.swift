@@ -103,15 +103,6 @@ extension MetalVisualizerRenderer {
     sharedEvent.signaledValue = target
   }
 
-  func canRenderThisFrame() -> Bool {
-    let nextFrame = frameNumber + 1
-    if nextFrame > Self.maxFramesInFlight {
-      let waitValue = nextFrame - Self.maxFramesInFlight
-      return sharedEvent.signaledValue >= waitValue
-    }
-    return true
-  }
-  
   func writeUniform<T>(_ value: T) -> MTLGPUAddress {
     let aligned = (uniformOffset + 15) & ~15
     let stride = MemoryLayout<T>.stride

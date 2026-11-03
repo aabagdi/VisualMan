@@ -83,7 +83,6 @@ inline half bristleLaneShare(float lane, float along, float seed) {
 }
 
 struct AbExParams {
-  float4 audio;
   float4 canvas;
   float4 config;
   float4 camera;
@@ -1866,21 +1865,21 @@ kernel void abexCompose(
       }
     }
 
-    half hairGate = smoothstep(0.45h, 0.90h, permH)
-                  * (1.0h - smoothstep(0.10h, 0.45h, wetTotal))
-                  * smoothstep(0.50h, 0.90h, skin);
-    if (hairGate > 0.01h) {
-      constexpr sampler crackSampler(coord::normalized, address::repeat,
-                                     filter::linear);
-      float repeats = float(color.get_width()) / 512.0;
-      float2 cuv = uvAll * float2(1.0, 0.72) * repeats;
-      half2 edges = crackTex.sample(crackSampler, cuv).rg * 0.5h;
-      half crackP = 1.0h - smoothstep(0.0h, 0.045h, edges.r);
-      half crackS = 1.0h - smoothstep(0.0h, 0.070h, edges.g);
-      half cured  = smoothstep(0.70h, 0.95h, skin);
-      half network = max(crackP * 0.28h, crackS * 0.13h * cured);
-      result *= (1.0h - network * hairGate);
-    }
+  }
+
+  half hairGate = smoothstep(0.45h, 0.90h, permH)
+                * smoothstep(0.50h, 0.90h, skin);
+  if (hairGate > 0.01h) {
+    constexpr sampler crackSampler(coord::normalized, address::repeat,
+                                   filter::linear);
+    float repeats = float(color.get_width()) / 512.0;
+    float2 cuv = uvAll * float2(1.0, 0.72) * repeats;
+    half2 edges = crackTex.sample(crackSampler, cuv).rg * 0.5h;
+    half crackP = 1.0h - smoothstep(0.0h, 0.045h, edges.r);
+    half crackS = 1.0h - smoothstep(0.0h, 0.070h, edges.g);
+    half cured  = smoothstep(0.70h, 0.95h, skin);
+    half network = max(crackP * 0.28h, crackS * 0.13h * cured);
+    result *= (1.0h - network * hairGate);
   }
 #endif
 
@@ -1936,13 +1935,15 @@ kernel void abexCompose(
   const half3 Ldir = normalize(half3(-0.45h, 0.60h, 0.65h));
 
   half ndl = max(0.0h, dot(N, Ldir));
-  half hl  = 0.90h + 0.10h * ndl;
+  half thickRelief = smoothstep(0.35h, 1.20h, half(hC));
+  half reliefRange = mix(0.10h, 0.32h, thickRelief);
+  half hl  = (1.0h - reliefRange) + reliefRange * ndl;
 
   const half3 warmLight  = half3(1.00h, 0.95h, 0.82h);
   const half3 coolShadow = half3(0.82h, 0.86h, 0.96h);
   half3 lightTint  = mix(coolShadow, warmLight, hl);
 
-  half hl0 = 0.90h + 0.10h * Ldir.z;
+  half hl0 = (1.0h - reliefRange) + reliefRange * Ldir.z;
   half3 flatResponse = mix(coolShadow, warmLight, hl0) * hl0;
   half3 rgb = result * (lightTint * hl) / flatResponse;
 
@@ -1983,13 +1984,14 @@ kernel void abexCompose(
               * surfaceTexture * specGate * skinMatte;
 
     half3 specColor = mix(warmLight, result, 0.40h);
-    rgb += spec * specColor * 0.55h * ABEX_HIGHLIGHT_SCALE;
+    half hlScale = ABEX_HIGHLIGHT_SCALE * mix(1.0h, 2.4h, thickRelief);
+    rgb += spec * specColor * 0.55h * hlScale;
 
     half F0 = mix(0.025h, 0.14h, wetTotal);
     half F  = (1.0h - F0) * fresnel;
     half grazingSheen = F * wetTotal * 0.35h * paintMask * surfaceTexture * specGate
                       * skinMatte;
-    rgb += grazingSheen * warmLight * ABEX_HIGHLIGHT_SCALE;
+    rgb += grazingSheen * warmLight * hlScale;
   }
 #endif
 

@@ -12,7 +12,6 @@ import os
 import QuartzCore
 
 struct AbExParams {
-  var audio: SIMD4<Float>
   var canvas: SIMD4<Float>
   var config: SIMD4<Float>
   var camera: SIMD4<Float>
@@ -58,8 +57,6 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var lastKnifeTime: Float = -10
   var lastPollockTime: Float = -10
   var lastScumbleTime: Float = -10
-  var lastLineTime: Float = -10
-  var lastDebugTrailTime: Float = -10
 
   var paintTestClock: Float = 0
   var paintTestEventIndex: Int = 0
@@ -67,14 +64,13 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var paintTestDryMultiplier: Float = 1
   var framesSinceSmear: Int = 999
   var pollockEventCounter: Int = 0
-  var hueOffset: Float = 0
+  var splatCounter: UInt32 = 0
   var strokeSeed: UInt32 = 0
   var isFirstFrame: Bool = true
 
   var songSeed: Float = Float.random(in: 0..<1000)
   var pigmentWeights: [Float] = []
   var pigmentWeightsSeed: Float = -1
-  var warmBias: Float = Float.random(in: 0.2..<0.8)
 
   var cameraPhase: Float = 0
 
@@ -168,6 +164,11 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var lastDisplayHeight: Int = 0
 
   var currentIsA: Bool = true
+  var displayIsA: Bool = true
+  var paintDt: Float = 1.0 / 60.0
+  var skippedPaintDt: Float = 0
+  var lastFrameSkippedPaint = false
+  var smearDirtyHistory: [SIMD4<Float>] = []
 
   var resumeSuppressionRemaining: Float = 0
   var resumeFadeIn: Float = 1.0
@@ -254,7 +255,6 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     slowEnvelope = .zero
     smoothedBass = 0
     songSeed = Float.random(in: 0..<1000)
-    warmBias = Float.random(in: 0.2..<0.8)
     cameraPhase = 0
   }
 }

@@ -35,7 +35,6 @@ final class AudioEngineManager {
   var playbackState: PlaybackState = .idle
   var currentTime: TimeInterval = 0
   var duration: TimeInterval = 0
-  var isInitialized = false
   var failedToInitialize = false
   var initializationError: VMError?
   var currentAudioSourceURL: URL?
@@ -75,10 +74,8 @@ final class AudioEngineManager {
     playbackContinuation = continuation
     do {
       try setupAudioEngine()
-      isInitialized = true
     } catch {
       initializationError = VMError.unableToInitialize(underlying: error)
-      isInitialized = false
       failedToInitialize = true
     }
     observeAudioSessionInterruptions()
