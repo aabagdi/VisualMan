@@ -39,14 +39,13 @@ half3 getSeedColor(int index,
                    float bassLevel,
                    float midLevel,
                    float trebleLevel,
-                   float time,
-                   int numSeeds) {
-  float band = float(index) / float(numSeeds);
-  
+                   float time) {
+  int band = index % 3;
+
   half3 color;
-  if (band < 0.33) {
+  if (band == 0) {
     color = half3(1.0, 0.3, 0.1) * (0.5 + bassLevel * 0.5);
-  } else if (band < 0.66) {
+  } else if (band == 1) {
     color = half3(0.2, 1.0, 0.5) * (0.5 + midLevel * 0.5);
   } else {
     color = half3(0.3, 0.5, 1.0) * (0.5 + trebleLevel * 0.5);
@@ -70,46 +69,68 @@ half3 getSeedColor(int index,
                                float bassLevel,
                                float midLevel,
                                float trebleLevel,
+                               float3 bandTime,
                                float2 viewSize) {
   float2 uv = normalizedUV(position, viewSize);
 
   float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
-  int numSeeds = int(mix(8.0, float(MAX_SEEDS), energy));
-  
-  float minDist = 1000.0;
-  float secondMinDist = 1000.0;
+
+  const int baseSeeds = 8;
+  const float extraSeeds = float(MAX_SEEDS - baseSeeds);
+  const float parkedRadius = 3.0;
+
+  float3 powers = float3(1e9);
+  float2 pos1 = float2(0.0), pos2 = float2(0.0), pos3 = float2(0.0);
   int closestSeed = 0;
-  
-  for (int i = 0; i < numSeeds; i++) {
+
+  for (int i = 0; i < MAX_SEEDS; i++) {
     float2 seedPos = getSeedPosition(i, time, bassLevel, midLevel, trebleLevel);
-    float dist = length(uv - seedPos);
-    
-    if (dist < minDist) {
-      secondMinDist = minDist;
-      minDist = dist;
+    if (i >= baseSeeds) {
+      float threshold = 0.12 + (float(i - baseSeeds) / extraSeeds) * 0.6;
+      float activation = smoothstep(threshold - 0.1, threshold + 0.1, energy);
+      if (activation <= 0.0) continue;
+      float2 outward = length(seedPos) > 1e-4 ? normalize(seedPos) : float2(1.0, 0.0);
+      seedPos = mix(outward * parkedRadius, seedPos, activation);
+    }
+    float2 d = uv - seedPos;
+    float power = dot(d, d);
+
+    if (power < powers.x) {
+      powers = float3(power, powers.x, powers.y);
+      pos3 = pos2; pos2 = pos1; pos1 = seedPos;
       closestSeed = i;
-    } else if (dist < secondMinDist) {
-      secondMinDist = dist;
+    } else if (power < powers.y) {
+      powers.yz = float2(power, powers.y);
+      pos3 = pos2; pos2 = seedPos;
+    } else if (power < powers.z) {
+      powers.z = power;
+      pos3 = seedPos;
     }
   }
-  
-  float edgeFactor = smoothstep(0.0, 0.05, secondMinDist - minDist);
-  
-  half3 cellColor = getSeedColor(closestSeed, bassLevel, midLevel, trebleLevel, time, numSeeds);
-  
+
+  float gap2 = max(length(pos2 - pos1), 1e-4);
+  float gap3 = max(length(pos3 - pos1), 1e-4);
+  float edgeDist = min((powers.y - powers.x) / (2.0 * gap2),
+                       (powers.z - powers.x) / (2.0 * gap3));
+
+  half3 cellColor = getSeedColor(closestSeed, bassLevel, midLevel, trebleLevel, time);
+  cellColor *= 0.82 + 0.28 * fract(float(closestSeed) * GOLD);
+
+  float minDist = length(uv - pos1);
   float gradient = 1.0 - smoothstep(0.0, 0.5, minDist);
   cellColor *= 0.7 + gradient * 0.3;
-  
-  float edgeGlow = 1.0 - edgeFactor;
-  edgeGlow = pow(edgeGlow, 3.0);
-  
-  half3 edgeColor = half3(1.0, 1.0, 1.0) * edgeGlow * energy;
 
-  half3 finalColor = cellColor + edgeColor * 0.5;
+  float px = 1.0 / min(viewSize.x, viewSize.y);
+  float wall = 1.0 - smoothstep(1.5 * px, 3.0 * px, edgeDist);
+  float edgeGlow = pow(1.0 - smoothstep(0.0, 0.025, edgeDist), 3.0);
 
-  finalColor += half3(0.05, 0.05, 0.1) * (1.0 - minDist);
+  half3 wallColor = half3(0.92, 0.94, 1.0) * (0.55 + energy * 0.45);
+  half3 finalColor = cellColor + half3(1.0) * edgeGlow * energy * 0.5;
+  finalColor = mix(finalColor, wallColor, wall * 0.9);
+
+  finalColor += half3(0.05, 0.05, 0.1) * max(1.0 - minDist, 0.0);
 
   finalColor *= 0.8 + energy * 0.4;
-  
+
   return half4(finalColor, 1.0);
 }

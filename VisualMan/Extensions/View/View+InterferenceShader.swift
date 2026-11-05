@@ -8,14 +8,7 @@
 import SwiftUI
 
 extension View {
-  func interferenceShader(time: Float,
-                          smoothedBass: Float,
-                          smoothedMid: Float,
-                          smoothedHigh: Float) -> some View {
-    audioColorEffect(ShaderLibrary.interference,
-                     time: time,
-                     smoothedBass: smoothedBass,
-                     smoothedMid: smoothedMid,
-                     smoothedHigh: smoothedHigh)
+  func interferenceShader(audio: SmoothedAudio) -> some View {
+    audioColorEffect(ShaderLibrary.interference, audio: audio)
   }
 }

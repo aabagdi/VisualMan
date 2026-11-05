@@ -13,10 +13,7 @@ struct InterferenceVisualizerView: View {
   var body: some View {
     ShaderVisualizerView(audioLevels: audioLevels) { audio in
       Rectangle()
-        .interferenceShader(time: audio.time,
-                            smoothedBass: audio.bass,
-                            smoothedMid: audio.mid,
-                            smoothedHigh: audio.high)
+        .interferenceShader(audio: audio)
     }
   }
 }

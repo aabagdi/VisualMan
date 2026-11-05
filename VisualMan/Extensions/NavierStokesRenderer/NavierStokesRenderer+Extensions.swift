@@ -262,10 +262,12 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
   }
 
   func makeFrameUniforms(bass: Float, mid: Float, high: Float, audioEnergy: Float) -> FrameUniforms {
-    FrameUniforms(
+    let blendPerFrame60 = max(0.55, taaBlendFactor - audioEnergy * 0.30)
+    let blend = dt > 0 ? pow(blendPerFrame60, dt * 60.0) : blendPerFrame60
+    return FrameUniforms(
       bass: bass, mid: mid, high: high,
       time: time, dt: dt,
-      taaBlend: max(0.55, taaBlendFactor - audioEnergy * 0.30),
+      taaBlend: blend,
       historyValid: taaHistoryValid ? 1 : 0,
       shading: Self.renderShading,
       detail: Self.renderDetail,

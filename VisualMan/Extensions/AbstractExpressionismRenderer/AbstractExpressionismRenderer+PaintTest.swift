@@ -335,7 +335,7 @@ extension AbstractExpressionismRenderer {
         }
       }
     }
-    enqueueAnimatingStrokes(animated)
+    instant.append(contentsOf: enqueueAnimatingStrokes(animated))
 
     if paintTestClock >= Self.paintTestLoopDuration {
       restartPaintTest()

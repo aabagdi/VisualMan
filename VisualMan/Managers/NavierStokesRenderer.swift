@@ -108,6 +108,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var highBurst: Float = 0
   var dynamicsWarm: Bool = false
   var lastExcitement: Float = 0
+  var wobblePhase: Float = 0
 
   var resumeSuppressionRemaining: Float = 0
   let jacobiIterations: Int = 16
@@ -247,7 +248,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     resumeSuppressionRemaining = max(0, resumeSuppressionRemaining - dt)
 
-    time += dt * (1.0 + smoothedBass * 0.5 + smoothedMid * 0.3)
+    let timeStep = dt * (1.0 + smoothedBass * 0.5 + smoothedMid * 0.3)
+    time += timeStep
+    wobblePhase += timeStep * (1.0 + Self.excitementWobbleGain * lastExcitement)
 
     guard let encoder = beginFrame(),
           let historyA = taaHistoryA,

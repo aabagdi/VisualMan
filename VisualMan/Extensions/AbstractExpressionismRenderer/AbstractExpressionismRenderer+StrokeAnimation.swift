@@ -10,25 +10,35 @@ import Metal
 
 extension AbstractExpressionismRenderer {
   func advanceAnimatingStrokes() {
-    animatingStrokes.removeAll { $0.currentFrame >= $0.totalFrames }
+    animatingStrokes.removeAll { $0.previousElapsed >= $0.duration }
     for i in animatingStrokes.indices {
-      animatingStrokes[i].currentFrame += 1
+      animatingStrokes[i].previousElapsed = animatingStrokes[i].elapsed
+      animatingStrokes[i].elapsed = min(animatingStrokes[i].elapsed + dt,
+                                        animatingStrokes[i].duration)
     }
   }
 
-  func enqueueAnimatingStrokes(_ fresh: [AbExStroke]) {
-    for s in fresh where animatingStrokes.count < Self.maxAnimatingStrokes {
-      let typeRaw = Int(s.sizeOpacity.w)
-      let totalFrames: Int
-      switch typeRaw {
-      case 4:  totalFrames = Self.knifeAnimationFrames
-      case 1:  totalFrames = Self.washAnimationFrames
-      case 5:  totalFrames = Self.scumbleAnimationFrames
-      default: totalFrames = Self.gesturalAnimationFrames
+  func enqueueAnimatingStrokes(_ fresh: [AbExStroke]) -> [AbExStroke] {
+    var overflow = [AbExStroke]()
+    for s in fresh {
+      guard animatingStrokes.count < Self.maxAnimatingStrokes else {
+        overflow.append(s)
+        continue
       }
+      let typeRaw = Int(s.sizeOpacity.w)
+      let duration: Float
+      
+      switch typeRaw {
+      case 4:  duration = Self.knifeAnimationSeconds
+      case 1:  duration = Self.washAnimationSeconds
+      case 5:  duration = Self.scumbleAnimationSeconds
+      default: duration = Self.gesturalAnimationSeconds
+      }
+      
       animatingStrokes.append(AnimatingStroke(
-        stroke: s, currentFrame: 0, totalFrames: totalFrames))
+        stroke: s, previousElapsed: 0, elapsed: min(dt, duration), duration: duration))
     }
+    return overflow
   }
 
   private func generateGesturalCandidates(energy: Float,
@@ -38,13 +48,13 @@ extension AbstractExpressionismRenderer {
     if energy > 0.05
         && (wallClock - lastGesturalTime) > 1.8
         && candidates.count < Self.maxStrokesPerFrame
-        && nextSeed() < 0.16 {
+        && nextSeed() < perFrameChance(0.16) {
       appendGesturalStroke(to: &candidates, energy: energy, focus: focus, spread: spread)
     }
     if energy > 0.25
         && (wallClock - lastGesturalTime) > 1.1
         && candidates.count < Self.maxStrokesPerFrame
-        && nextSeed() < 0.035 {
+        && nextSeed() < perFrameChance(0.035) {
       appendGesturalStroke(to: &candidates, energy: energy, focus: focus, spread: spread)
     }
     return candidates
@@ -98,12 +108,13 @@ extension AbstractExpressionismRenderer {
 
     appendPollockTrails(to: &strokes, energy: energy, focus: focus)
 
-    for i in strokes.indices where !Set([2, 5]).contains(Int(strokes[i].sizeOpacity.w)) {
+    let noPearl: Set<Int> = [2, 5]
+    for i in strokes.indices where !noPearl.contains(Int(strokes[i].sizeOpacity.w)) {
       rollPearlescent(&strokes[i])
     }
     for i in freshSmearStrokes.indices { rollPearlescent(&freshSmearStrokes[i]) }
 
-    enqueueAnimatingStrokes(freshSmearStrokes)
+    strokes.append(contentsOf: enqueueAnimatingStrokes(freshSmearStrokes))
 
     return emitAnimatedStrokes(into: strokes)
   }
@@ -116,33 +127,33 @@ extension AbstractExpressionismRenderer {
     fresh.append(contentsOf: scratch[base.count...])
   }
 
+  private func strokeProgress(at t: Float,
+                              drawDuration: Float,
+                              extension ext: Float,
+                              isWash: Bool) -> Float {
+    if t < drawDuration {
+      let u = t / drawDuration
+      return isWash ? sqrt(u) : u
+    }
+    guard ext > 0 else { return 1.0 }
+    return 1.0 + min((t - drawDuration) / ext, 1.0) * 0.35
+  }
+
   func emitAnimatedStrokes(into base: [AbExStroke]) -> [AbExStroke] {
     var out = [AbExStroke]()
-    for anim in animatingStrokes where anim.currentFrame < anim.totalFrames
-                                    && out.count < Self.maxStrokesPerFrame {
+    for anim in animatingStrokes where out.count < Self.maxStrokesPerFrame {
+      guard anim.elapsed > anim.previousElapsed else { continue }
       let typeRaw = Int(anim.stroke.sizeOpacity.w)
       let isWash = (typeRaw == 1)
-      let extensionFrames = isWash ? 0 : 8
-      let drawFrames = anim.totalFrames - extensionFrames
-      let cf = anim.currentFrame
-      let progressMin: Float
-      let progressMax: Float
-      if cf < drawFrames {
-        let tMin = Float(cf) / Float(drawFrames)
-        let tMax = Float(cf + 1) / Float(drawFrames)
+      let ext = isWash ? 0 : Self.animationExtensionSeconds
+      let drawDuration = anim.duration - ext
 
-        if isWash {
-          progressMin = sqrt(tMin)
-          progressMax = sqrt(tMax)
-        } else {
-          progressMin = tMin
-          progressMax = tMax
-        }
-      } else {
-        let extProg = Float(cf - drawFrames + 1) / Float(extensionFrames)
-        progressMin = 1.0
-        progressMax = 1.0 + extProg * 0.35
-      }
+      let progressMin = anim.previousElapsed >= drawDuration
+        ? 1.0
+        : strokeProgress(at: anim.previousElapsed, drawDuration: drawDuration,
+                         extension: ext, isWash: isWash)
+      let progressMax = strokeProgress(at: anim.elapsed, drawDuration: drawDuration,
+                                       extension: ext, isWash: isWash)
       var s = anim.stroke
       s.animation = SIMD4(progressMin, progressMax, 1, anim.stroke.animation.w)
       out.append(s)

@@ -161,7 +161,6 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var pigmentRegionsThisFrame: [CanvasRegion] = []
   var recentSplats: [SIMD2<Float>] = []
 
-  // Per-pass GPU timing (see +GPUTiming.swift); nil unless -AbExGPUTiming YES.
   var gpuTiming: GPUTiming?
 
   var canvasSize: Int = 0
@@ -185,14 +184,16 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
   struct AnimatingStroke {
     var stroke: AbExStroke
-    var currentFrame: Int
-    var totalFrames: Int
+    var previousElapsed: Float
+    var elapsed: Float
+    var duration: Float
   }
   var animatingStrokes: [AnimatingStroke] = []
-  static let knifeAnimationFrames: Int = 14
-  static let gesturalAnimationFrames: Int = 12
-  static let scumbleAnimationFrames: Int = 20
-  static let washAnimationFrames: Int = 40
+  static let knifeAnimationSeconds: Float = 14.0 / 60.0
+  static let gesturalAnimationSeconds: Float = 12.0 / 60.0
+  static let scumbleAnimationSeconds: Float = 20.0 / 60.0
+  static let washAnimationSeconds: Float = 40.0 / 60.0
+  static let animationExtensionSeconds: Float = 8.0 / 60.0
   static let maxAnimatingStrokes: Int = 5
 
   var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []

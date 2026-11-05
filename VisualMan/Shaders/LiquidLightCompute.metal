@@ -14,6 +14,10 @@ struct LiquidLightParams {
   float bass;
   float mid;
   float high;
+  float flowPhase;
+  float pad0;
+  float pad1;
+  float pad2;
   float4 drops[4];
   float4 dropPrecomp[4];
   float4 dropColors[4];
@@ -25,6 +29,13 @@ struct BlurParams {
   float maxBlurRadius;
   float bass;
   float mid;
+};
+
+struct FeedbackParams {
+  float dt;
+  float time;
+  float bass;
+  uint historyValid;
 };
 
 struct VoronoiResult {
@@ -144,14 +155,14 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   float high = params.high;
 
   float warpIntensity = 0.55 + bass * 0.35;
-  float flowSpeed     = time * (0.05 + mid * 0.02);
+  float flowSpeed     = params.flowPhase;
   float colorShift    = time * 0.015 + mid * 0.08;
   float edgeSharpness = 10.0 + high * 6.0;
 
   float2 coords = p * 1.8;
 
   float breath = 1.0 + 0.08 * fast::sin(time * 0.35) + bass * 0.1;
-  float2 drift = float2(fast::cos(time * 0.07), fast::sin(time * 0.09)) * time * 0.015;
+  float2 drift = float2(fast::cos(time * 0.07), fast::sin(time * 0.09)) * 1.2;
   coords = coords * breath + drift;
 
   half3 dropTint = half3(0.0h);
@@ -268,6 +279,46 @@ kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0
   result.b = result.b * (1.0h + 0.05h * (1.0h - result.b));
 
   output.write(float4(float3(result), 1.0), gid);
+}
+
+inline float2 liquidCurl(float2 p) {
+  const float e = 0.02;
+  float dx = shaderSimplex2D(p + float2(e, 0.0)) - shaderSimplex2D(p - float2(e, 0.0));
+  float dy = shaderSimplex2D(p + float2(0.0, e)) - shaderSimplex2D(p - float2(0.0, e));
+  return float2(dy, -dx) / (2.0 * e);
+}
+
+kernel void liquidLightFeedback(texture2d<float, access::read>   render     [[texture(0)]],
+                                texture2d<float, access::sample> historyIn  [[texture(1)]],
+                                texture2d<float, access::write>  historyOut [[texture(2)]],
+                                constant FeedbackParams &params            [[buffer(0)]],
+                                uint2 gid [[thread_position_in_grid]]) {
+  uint w = historyOut.get_width();
+  uint h = historyOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+
+  float4 current = render.read(gid);
+  if (params.historyValid == 0u) {
+    historyOut.write(current, gid);
+    return;
+  }
+
+  constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
+  float2 uv = (float2(gid) + 0.5) / float2(w, h);
+  float aspect = float(w) / float(h);
+  float2 p = (uv - 0.5) * float2(aspect, 1.0);
+
+  float2 flow = liquidCurl(p * 1.3 + params.time * 0.04) * 0.0008;
+  flow += p * params.bass * 0.002;
+  float2 srcUV = uv - flow * (params.dt * 60.0) / float2(aspect, 1.0);
+  float2 size = float2(w, h);
+  float3 previous = max(sampleCatmullRom(historyIn, bilinear, srcUV, size).rgb, 0.0);
+
+  float retention60 = 0.70 - params.bass * 0.20;
+  float retention = pow(saturate(retention60), params.dt * 60.0);
+
+  float3 blended = mix(current.rgb, previous, retention);
+  historyOut.write(float4(blended, 1.0), gid);
 }
 
 constant float4 BLUR_SAMPLES[16] = {

@@ -8,14 +8,7 @@
 import SwiftUI
 
 extension View {
-  func voronoiShader(time: Float,
-                     smoothedBass: Float,
-                     smoothedMid: Float,
-                     smoothedHigh: Float) -> some View {
-    audioColorEffect(ShaderLibrary.voronoi,
-                     time: time,
-                     smoothedBass: smoothedBass,
-                     smoothedMid: smoothedMid,
-                     smoothedHigh: smoothedHigh)
+  func voronoiShader(audio: SmoothedAudio) -> some View {
+    audioColorEffect(ShaderLibrary.voronoi, audio: audio)
   }
 }

@@ -48,6 +48,7 @@ half3 inkPalette(float t, float bass, float treble) {
                             float bassLevel,
                             float midLevel,
                             float trebleLevel,
+                            float3 bandTime,
                             float2 viewSize) {
   float2 uv = normalizedUV(position, viewSize);
 
@@ -55,7 +56,8 @@ half3 inkPalette(float t, float bass, float treble) {
 
   float warpStrength = 1.5 + bassLevel * 1.5;
 
-  float2 warped = inkWarp(uv * 2.0, time * (0.8 + midLevel * 0.4), warpStrength);
+  float flowTime = time * 0.8 + bandTime.y * 0.4;
+  float2 warped = inkWarp(uv * 2.0, flowTime, warpStrength);
 
   float pattern = inkFBM(warped, 5);
 
@@ -67,7 +69,7 @@ half3 inkPalette(float t, float bass, float treble) {
   float2 toCenter = uv;
   float dist = length(toCenter);
   float angle = atan2(toCenter.y, toCenter.x);
-  float vortex = sin(angle * 3.0 + dist * 5.0 - time * (1.0 + bassLevel) * 1.5) * 0.5 + 0.5;
+  float vortex = sin(angle * 3.0 + dist * 5.0 - (time + bandTime.x) * 1.5) * 0.5 + 0.5;
   combined = mix(combined, vortex, 0.2 * energy);
 
   half3 color = inkPalette(combined, bassLevel, trebleLevel);

@@ -31,6 +31,7 @@ extension ThreeDBarsVisualizerView {
     private var verticalAngle: Float = 0
     private var cameraDistance: Float = 20.0
     private var pinchStartDistance: Float?
+    private var orbitStartAngles: SIMD2<Float>?
 
     func makeScene(barCount: Int) async -> Entity {
       let root = Entity()
@@ -118,11 +119,18 @@ extension ThreeDBarsVisualizerView {
     }
 
     func orbit(translation: CGSize) {
-      let sensitivity: Float = 0.0003
-      rotationAngle += Float(translation.width) * sensitivity
-      verticalAngle -= Float(translation.height) * sensitivity
+      let start = orbitStartAngles ?? SIMD2(rotationAngle, verticalAngle)
+      orbitStartAngles = start
+
+      let sensitivity: Float = 0.008
+      rotationAngle = start.x + Float(translation.width) * sensitivity
+      verticalAngle = start.y - Float(translation.height) * sensitivity
       verticalAngle = max(-1.2, min(1.2, verticalAngle))
       updateCameraPosition()
+    }
+
+    func endOrbit() {
+      orbitStartAngles = nil
     }
 
     func zoom(magnification: CGFloat) {

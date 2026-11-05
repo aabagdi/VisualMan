@@ -13,10 +13,7 @@ struct AuroraBorealisVisualizerView: View {
   var body: some View {
     ShaderVisualizerView(audioLevels: audioLevels) { audio in
       Rectangle()
-        .auroraBorealisShader(time: audio.time,
-                              smoothedBass: audio.bass,
-                              smoothedMid: audio.mid,
-                              smoothedHigh: audio.high)
+        .auroraBorealisShader(audio: audio)
     }
   }
 }

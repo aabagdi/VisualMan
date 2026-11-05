@@ -11,8 +11,10 @@ import Metal
 extension LiquidLightRenderer {
   func reset() {
     time = 0
+    flowPhase = 0
     wallClock = 0
     lastFrameTime = 0
+    historyValid = false
     smoothedBass = 0
     smoothedSpeed = 0.25
     lastDropWallTime = -10

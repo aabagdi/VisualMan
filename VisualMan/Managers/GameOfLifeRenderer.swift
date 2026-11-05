@@ -17,6 +17,12 @@ struct GameOfLifeParams {
   var simHeight: UInt32
   var frameCount: UInt32
   var spawnRate: Float
+  /// Non-zero when this step should stamp a glider at (gliderX, gliderY).
+  var gliderSpawn: UInt32 = 0
+  var gliderX: UInt32 = 0
+  var gliderY: UInt32 = 0
+  /// 0...3 — horizontal/vertical flips, which pick the glider's travel direction.
+  var gliderVariant: UInt32 = 0
 }
 
 nonisolated let gameOfLifeLogger = Logger(subsystem: "com.VisualMan", category: "GameOfLifeRenderer")
@@ -43,14 +49,19 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   private(set) var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
   var dt: Float = 1.0 / 60.0
+  var lastFrameTime: CFTimeInterval = 0
 
   var smoothedBass: Float = 0
   var smoothedMid: Float = 0
   var needsAudioReseed: Bool = true
   var pendingShouldStep: Bool = false
 
-  static let baseStepInterval: Int = 10
-  var stepAccumulator: Int = 0
+  // Step cadence in seconds so the simulation runs at the same speed on 60 Hz
+  // and 120 Hz displays (and when thermally throttled).
+  static let baseStepSeconds: Float = 10.0 / 60.0
+  static let minStepSeconds: Float = 3.0 / 60.0
+  static let bassStepSpeedup: Float = 6.0 / 60.0
+  var stepAccumulator: Float = 0
   var simFrameCount: UInt32 = 0
 
   static let maxFramesInFlight: UInt64 = 3

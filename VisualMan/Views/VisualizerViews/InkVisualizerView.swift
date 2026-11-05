@@ -13,10 +13,7 @@ struct InkVisualizerView: View {
   var body: some View {
     ShaderVisualizerView(audioLevels: audioLevels) { audio in
       Rectangle()
-        .inkShader(time: audio.time,
-                   smoothedBass: audio.bass,
-                   smoothedMid: audio.mid,
-                   smoothedHigh: audio.high)
+        .inkShader(audio: audio)
     }
   }
 }

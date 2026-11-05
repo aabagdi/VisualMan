@@ -8,14 +8,7 @@
 import SwiftUI
 
 extension View {
-  func metaballShader(time: Float,
-                      smoothedBass: Float,
-                      smoothedMid: Float,
-                      smoothedHigh: Float) -> some View {
-    audioColorEffect(ShaderLibrary.metaball,
-                     time: time,
-                     smoothedBass: smoothedBass,
-                     smoothedMid: smoothedMid,
-                     smoothedHigh: smoothedHigh)
+  func metaballShader(audio: SmoothedAudio) -> some View {
+    audioColorEffect(ShaderLibrary.metaball, audio: audio)
   }
 }

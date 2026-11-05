@@ -13,10 +13,7 @@ struct SphereMeshVisualizerView: View {
   var body: some View {
     ShaderVisualizerView(audioLevels: audioLevels) { audio in
       Rectangle()
-        .sphereMeshShader(time: audio.time,
-                          smoothedBass: audio.bass,
-                          smoothedMid: audio.mid,
-                          smoothedHigh: audio.high)
+        .sphereMeshShader(audio: audio)
     }
   }
 }

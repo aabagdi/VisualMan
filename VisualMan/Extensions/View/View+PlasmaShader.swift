@@ -8,14 +8,7 @@
 import SwiftUI
 
 extension View {
-  func plasmaShader(time: Float,
-                    smoothedBass: Float,
-                    smoothedMid: Float,
-                    smoothedHigh: Float) -> some View {
-    audioColorEffect(ShaderLibrary.plasma,
-                     time: time,
-                     smoothedBass: smoothedBass,
-                     smoothedMid: smoothedMid,
-                     smoothedHigh: smoothedHigh)
+  func plasmaShader(audio: SmoothedAudio) -> some View {
+    audioColorEffect(ShaderLibrary.plasma, audio: audio)
   }
 }

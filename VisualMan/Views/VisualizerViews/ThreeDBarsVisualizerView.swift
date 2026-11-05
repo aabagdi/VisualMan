@@ -39,6 +39,9 @@ struct ThreeDBarsVisualizerView: View {
       .onChanged { value in
         model.orbit(translation: value.translation)
       }
+      .onEnded { _ in
+        model.endOrbit()
+      }
   }
 
   private var zoomGesture: some Gesture {

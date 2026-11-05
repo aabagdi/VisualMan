@@ -13,10 +13,7 @@ struct VoronoiVisualizerView: View {
   var body: some View {
     ShaderVisualizerView(audioLevels: audioLevels) { audio in
       Rectangle()
-        .voronoiShader(time: audio.time,
-                       smoothedBass: audio.bass,
-                       smoothedMid: audio.mid,
-                       smoothedHigh: audio.high)
+        .voronoiShader(audio: audio)
     }
   }
 }

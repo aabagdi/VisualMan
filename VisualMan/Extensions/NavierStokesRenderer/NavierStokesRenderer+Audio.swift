@@ -182,8 +182,8 @@ extension NavierStokesRenderer {
                        color: SIMD3<Float>,
                        density: Float) {
     let flap = 1.0 + Self.excitementWobbleGain * lastExcitement
-    let angle = (sin(time * 0.9 * flap + nozzle.phase)
-                 + 0.4 * lastExcitement * sin(time * 3.1 * flap + nozzle.phase * 2.3)) * wobble * flap
+    let angle = (sin(wobblePhase * 0.9 + nozzle.phase)
+                 + 0.4 * lastExcitement * sin(wobblePhase * 3.1 + nozzle.phase * 2.3)) * wobble * flap
     let dir = rotate(nozzle.direction, by: angle)
     let slide = nozzle.slide * sin(time * 0.37 + nozzle.phase * 1.7) * slideAmount
     let pos = (nozzle.anchor + slide) * SIMD2<Float>(Float(gridWidth), Float(gridHeight))

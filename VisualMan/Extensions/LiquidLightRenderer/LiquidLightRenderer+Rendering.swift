@@ -76,7 +76,9 @@ extension LiquidLightRenderer {
     let targetSpeed = 0.25 + audioEnergy * 0.6
     let speedA = 1 - exp(-dt / (targetSpeed > smoothedSpeed ? 0.18 : 0.25))
     smoothedSpeed += (targetSpeed - smoothedSpeed) * speedA
-    time += dt * smoothedSpeed
+    let timeStep = dt * smoothedSpeed
+    time += timeStep
+    flowPhase += timeStep * (0.05 + envelope.y * 0.02)
 
     detectAndEmitDrop(bass: bass, inResumeGrace: inResumeGrace)
 
@@ -115,6 +117,7 @@ extension LiquidLightRenderer {
 
     let params = LiquidLightParams(
       time: time, bass: audio.x, mid: audio.y, high: audio.z,
+      flowPhase: flowPhase,
       drops: LiquidLightDrops(d0: drops[0], d1: drops[1], d2: drops[2], d3: drops[3]),
       dropPrecomp: LiquidLightDropPrecomp(p0: r0.precomp, p1: r1.precomp,
                                           p2: r2.precomp, p3: r3.precomp),
@@ -145,6 +148,27 @@ extension LiquidLightRenderer {
     } else {
       return mix(SIMD3(0.7, 0.35, 0.0), SIMD3(0.6, 0.0, 0.02), (h - 0.84) / 0.16)
     }
+  }
+
+  func renderFeedback(encoder: any MTL4ComputeCommandEncoder,
+                      render: MTLTexture,
+                      historyIn: MTLTexture,
+                      historyOut: MTLTexture,
+                      audio: SIMD3<Float>,
+                      historyValid: Bool) {
+    encoder.setComputePipelineState(feedbackPipeline)
+
+    argumentTable.setTexture(render.gpuResourceID, index: 0)
+    argumentTable.setTexture(historyIn.gpuResourceID, index: 1)
+    argumentTable.setTexture(historyOut.gpuResourceID, index: 2)
+
+    let params = FeedbackParams(dt: dt, time: time, bass: audio.x,
+                                historyValid: historyValid ? 1 : 0)
+    argumentTable.setAddress(writeUniform(params), index: 0)
+
+    let tg = MTLSize(width: 16, height: 16, depth: 1)
+    let grid = MTLSize(width: historyOut.width, height: historyOut.height, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
   }
 
   func renderBlur(encoder: any MTL4ComputeCommandEncoder,

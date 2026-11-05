@@ -19,17 +19,14 @@ using namespace metal;
   float2 centered = uv * 2.0 - 1.0;
 
   float r2 = dot(centered, centered);
-  float2 distorted = centered * (1.0 + curvature * r2);
-
-  float cornerDistortion = 1.0 + curvature * 2.0;
-  distorted /= cornerDistortion;
+  float2 distorted = centered * (1.0 + curvature * r2) / (1.0 + curvature * 2.0);
 
   float2 screenUV = (distorted + 1.0) * 0.5;
   float2 samplePos = screenUV * viewSize;
 
   half4 color = layer.sample(samplePos);
 
-  float scanline = 0.5 + 0.5 * cos(fract(position.y / 6.0) * 6.28318530);
+  float scanline = 0.5 + 0.5 * cos(fract(samplePos.y / 6.0) * 6.28318530);
   scanline = mix(1.0, scanline, scanlineIntensity);
   color.rgb *= half(scanline);
 

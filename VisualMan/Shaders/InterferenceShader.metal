@@ -44,14 +44,9 @@ static float calculateWave(float2 position,
   float phase = distance * modulatedFrequency - time * waveSpeed;
   
   float wave = modulatedAmplitude * sin(phase);
-  
+
   wave = sign(wave) * pow(abs(wave), 0.7);
-  
-  float reflection = modulatedAmplitude * 0.3 * sin(phase + PI);
-  wave += reflection;
-  
-  wave = sign(wave) * pow(abs(wave), 0.8);
-  
+
   return wave;
 }
 
@@ -102,6 +97,7 @@ static float calculateParallaxLayer(float2 uv,
                                        float bassLevel,
                                        float midLevel,
                                        float trebleLevel,
+                                       float3 bandTime,
                                        float2 viewSize) {
   float2 uv = normalizedUV(position, viewSize);
 

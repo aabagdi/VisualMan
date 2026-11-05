@@ -11,6 +11,7 @@ import Metal
 extension NavierStokesRenderer {
   func reset() {
     time = 0
+    wobblePhase = 0
     dynamicsWarm = false
     lastExcitement = 0
 

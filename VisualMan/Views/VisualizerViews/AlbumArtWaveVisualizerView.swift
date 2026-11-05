@@ -33,5 +33,6 @@ struct AlbumArtWaveVisualizerView: View {
           .ignoresSafeArea()
       }
     }
+    .accessibilityHidden(true)
   }
 }

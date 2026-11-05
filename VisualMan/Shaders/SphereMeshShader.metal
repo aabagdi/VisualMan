@@ -26,15 +26,12 @@ static float sphereMap(float3 p, float time, float bass, float mid, float treble
 }
 
 static float3 sphereNormal(float3 p, float time, float bass, float mid, float treble) {
-  float eps = 0.002;
-  float3 n = float3(
-    sphereMap(p + float3(eps, 0, 0), time, bass, mid, treble) -
-    sphereMap(p - float3(eps, 0, 0), time, bass, mid, treble),
-    sphereMap(p + float3(0, eps, 0), time, bass, mid, treble) -
-    sphereMap(p - float3(0, eps, 0), time, bass, mid, treble),
-    sphereMap(p + float3(0, 0, eps), time, bass, mid, treble) -
-    sphereMap(p - float3(0, 0, eps), time, bass, mid, treble)
-  );
+  const float eps = 0.002;
+  const float2 k = float2(1.0, -1.0);
+  float3 n = k.xyy * sphereMap(p + k.xyy * eps, time, bass, mid, treble)
+           + k.yyx * sphereMap(p + k.yyx * eps, time, bass, mid, treble)
+           + k.yxy * sphereMap(p + k.yxy * eps, time, bass, mid, treble)
+           + k.xxx * sphereMap(p + k.xxx * eps, time, bass, mid, treble);
   float len = length(n);
   return len > 1e-6 ? n / len : float3(0.0, 1.0, 0.0);
 }
@@ -45,6 +42,7 @@ static float3 sphereNormal(float3 p, float time, float bass, float mid, float tr
                                    float bassLevel,
                                    float midLevel,
                                    float trebleLevel,
+                                   float3 bandTime,
                                    float2 viewSize) {
   float2 uv = normalizedUV(position, viewSize);
   uv.y = -uv.y;
@@ -62,7 +60,8 @@ static float3 sphereNormal(float3 p, float time, float bass, float mid, float tr
   float3 p = ro;
   bool hit = false;
   
-  for (int i = 0; i < 48; i++) {
+  const float stepScale = 0.6;
+  for (int i = 0; i < 72; i++) {
     p = ro + rd * totalDist;
     float d = sphereMap(p, time, bassLevel, midLevel, trebleLevel);
     if (d < 0.001) {
@@ -70,7 +69,7 @@ static float3 sphereNormal(float3 p, float time, float bass, float mid, float tr
       break;
     }
     if (totalDist > 8.0) break;
-    totalDist += d;
+    totalDist += d * stepScale;
   }
   
   half3 color;

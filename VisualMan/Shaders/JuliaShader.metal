@@ -15,14 +15,16 @@ using namespace metal;
                              float bassLevel,
                              float midLevel,
                              float trebleLevel,
+                             float3 bandTime,
                              float2 viewSize) {
   half3 finalColor = half3(0.0);
   const int aa = 2;
+  const float colorIterations = 60.0;
 
   float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
   float cReal = -0.4 + bassLevel * 0.3 * sin(time * 0.5);
   float cImag = 0.6 + trebleLevel * 0.2 * cos(time * 0.7);
-  float rotation = midLevel * time * 0.2;
+  float rotation = bandTime.y * 0.2;
   float cosR = fast::cos(rotation);
   float sinR = fast::sin(rotation);
 
@@ -70,7 +72,7 @@ using namespace metal;
         float smoothIter = float(iterations) - log2(max(log2(max(dist, 1.0)), 1e-6));
         smoothIter = max(0.0, smoothIter);
         
-        float t = smoothIter / float(maxIterations);
+        float t = smoothIter / colorIterations;
         
         float phase1 = t * 6.28318 + time * 0.1;
         float phase2 = t * 4.0 + time * 0.05;
@@ -105,8 +107,8 @@ using namespace metal;
   }
   
   finalColor /= float(aa * aa);
-  
-  finalColor = pow(finalColor, half3(0.9));
+
+  finalColor = pow(max(finalColor, half3(0.0)), half3(0.9));
   
   return half4(finalColor, 1.0);
 }

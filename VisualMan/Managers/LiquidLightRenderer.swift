@@ -36,6 +36,10 @@ struct LiquidLightParams {
   var bass: Float
   var mid: Float
   var high: Float
+  var flowPhase: Float
+  var pad0: Float = 0
+  var pad1: Float = 0
+  var pad2: Float = 0
   var drops: LiquidLightDrops
   var dropPrecomp: LiquidLightDropPrecomp
   var dropColors: LiquidLightDropColors
@@ -49,12 +53,20 @@ struct BlurParams {
   var mid: Float
 }
 
+struct FeedbackParams {
+  var dt: Float
+  var time: Float
+  var bass: Float
+  var historyValid: UInt32
+}
+
 @MainActor
 final class LiquidLightRenderer: MetalVisualizerRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
 
   var renderPipeline: MTLComputePipelineState
+  var feedbackPipeline: MTLComputePipelineState
   var blurPipeline: MTLComputePipelineState
 
   var time: Float = 0
@@ -62,6 +74,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   var lastFrameTime: CFTimeInterval = 0
   var wallClock: Float = 0
   var smoothedSpeed: Float = 0.25
+  var flowPhase: Float = 0
 
   var envelope: SIMD3<Float> = .zero
   var slowEnvelope: SIMD3<Float> = .zero
@@ -89,9 +102,11 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   static let renderScale: Float = 0.75
 
   private var intermediateTexture: MTLTexture?
+  private var historyTextures: [MTLTexture] = []
   private var finalTextures: [MTLTexture] = []
   private var lastDrawableWidth: Int = 0
   private var lastDrawableHeight: Int = 0
+  var historyValid: Bool = false
 
   var resumeSuppressionRemaining: Float = 0
 
@@ -145,6 +160,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     self.currentUniformBuffer = firstUniformBuffer
     self.argumentTables = argumentTables
     self.renderPipeline = pipelines.render
+    self.feedbackPipeline = pipelines.feedback
     self.blurPipeline = pipelines.blur
     self.residencySet = residencySet
 
@@ -161,10 +177,14 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
 
+    let historyDesc = Self.historyTextureDescriptor(width: 256, height: 256)
+
     guard let dummyA = device.makeTexture(descriptor: desc),
-          let dummyB = device.makeTexture(descriptor: desc) else { return }
+          let dummyB = device.makeTexture(descriptor: desc),
+          let dummyHistory = device.makeTexture(descriptor: historyDesc) else { return }
     residencySet.addAllocation(dummyA)
     residencySet.addAllocation(dummyB)
+    residencySet.addAllocation(dummyHistory)
     residencySet.commit()
 
     let warmupFrame: UInt64 = 1
@@ -181,7 +201,10 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
 
     renderLiquidLight(encoder: encoder, output: dummyA, audio: .zero)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    renderBlur(encoder: encoder, input: dummyA, output: dummyB, audio: .zero)
+    renderFeedback(encoder: encoder, render: dummyA, historyIn: dummyHistory,
+                   historyOut: dummyHistory, audio: .zero, historyValid: false)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    renderBlur(encoder: encoder, input: dummyHistory, output: dummyB, audio: .zero)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -192,6 +215,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 1000)
     residencySet.removeAllocation(dummyA)
     residencySet.removeAllocation(dummyB)
+    residencySet.removeAllocation(dummyHistory)
     residencySet.commit()
   }
 
@@ -199,11 +223,24 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     lastFrameTime = 0
     resumeSuppressionRemaining = Self.resumeFadeDuration
     resumeFadeIn = 0
+    historyValid = false
 
     envelope = .zero
     slowEnvelope = .zero
     smoothedBass = 0
     smoothedSpeed = 0.25
+  }
+
+  static func historyTextureDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .rgba16Float,
+      width: width,
+      height: height,
+      mipmapped: false
+    )
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+    return desc
   }
 
   private func drainPendingTextureReleases() {
@@ -214,6 +251,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     if width == lastDrawableWidth
         && height == lastDrawableHeight
         && intermediateTexture != nil
+        && historyTextures.count == 2
         && finalTextures.count == 2 {
       return true
     }
@@ -221,7 +259,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     if let old = intermediateTexture {
       pendingTextureReleases.append((frame: frameNumber, texture: old))
     }
-    for old in finalTextures {
+    for old in historyTextures + finalTextures {
       pendingTextureReleases.append((frame: frameNumber, texture: old))
     }
 
@@ -233,24 +271,30 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     )
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
+    let historyDesc = Self.historyTextureDescriptor(width: width, height: height)
 
     guard let interTex = device.makeTexture(descriptor: desc),
+          let historyA = device.makeTexture(descriptor: historyDesc),
+          let historyB = device.makeTexture(descriptor: historyDesc),
           let finalTexA = device.makeTexture(descriptor: desc),
           let finalTexB = device.makeTexture(descriptor: desc) else {
       intermediateTexture = nil
+      historyTextures = []
       finalTextures = []
       lastDrawableWidth = 0
       lastDrawableHeight = 0
       return false
     }
 
-    residencySet.addAllocation(interTex)
-    residencySet.addAllocation(finalTexA)
-    residencySet.addAllocation(finalTexB)
+    for tex in [interTex, historyA, historyB, finalTexA, finalTexB] {
+      residencySet.addAllocation(tex)
+    }
     residencySet.commit()
 
     intermediateTexture = interTex
+    historyTextures = [historyA, historyB]
     finalTextures = [finalTexA, finalTexB]
+    historyValid = false
     lastDrawableWidth = width
     lastDrawableHeight = height
     return true
@@ -273,12 +317,21 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     }
 
     guard let encoder = beginFrame() else { return nil }
-    let finalTex = finalTextures[Int(frameNumber & 1)]
+    let parity = Int(frameNumber & 1)
+    let finalTex = finalTextures[parity]
+    let historyIn = historyTextures[1 - parity]
+    let historyOut = historyTextures[parity]
 
     renderLiquidLight(encoder: encoder, output: intermediateTex, audio: smoothed)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    renderBlur(encoder: encoder, input: intermediateTex, output: finalTex, audio: smoothed)
+    renderFeedback(encoder: encoder, render: intermediateTex,
+                   historyIn: historyIn, historyOut: historyOut,
+                   audio: smoothed, historyValid: historyValid)
+    historyValid = true
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    renderBlur(encoder: encoder, input: historyOut, output: finalTex, audio: smoothed)
 
     encoder.barrier(afterStages: .dispatch, beforeQueueStages: .fragment)
     encoder.endEncoding()

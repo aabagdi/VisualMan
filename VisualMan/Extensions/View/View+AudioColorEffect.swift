@@ -9,20 +9,18 @@ import SwiftUI
 
 struct AudioColorEffectShader: ViewModifier {
   let shaderFunction: ShaderFunction
-  var time: Float
-  var smoothedBass: Float
-  var smoothedMid: Float
-  var smoothedHigh: Float
+  var audio: SmoothedAudio
 
   func body(content: Content) -> some View {
     content.visualEffect { content, proxy in
       content
         .colorEffect(
           Shader(function: shaderFunction, arguments: [
-            .float(time),
-            .float(smoothedBass),
-            .float(smoothedMid),
-            .float(smoothedHigh),
+            .float(audio.time),
+            .float(audio.bass),
+            .float(audio.mid),
+            .float(audio.high),
+            .float3(audio.bandTime.x, audio.bandTime.y, audio.bandTime.z),
             .float2(proxy.size)
           ])
         )
@@ -31,16 +29,7 @@ struct AudioColorEffectShader: ViewModifier {
 }
 
 extension View {
-  func audioColorEffect(_ function: ShaderFunction,
-                        time: Float,
-                        smoothedBass: Float,
-                        smoothedMid: Float,
-                        smoothedHigh: Float) -> some View {
-    modifier(AudioColorEffectShader(
-      shaderFunction: function,
-      time: time,
-      smoothedBass: smoothedBass,
-      smoothedMid: smoothedMid,
-      smoothedHigh: smoothedHigh))
+  func audioColorEffect(_ function: ShaderFunction, audio: SmoothedAudio) -> some View {
+    modifier(AudioColorEffectShader(shaderFunction: function, audio: audio))
   }
 }

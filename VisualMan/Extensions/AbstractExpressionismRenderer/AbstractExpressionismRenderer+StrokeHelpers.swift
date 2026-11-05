@@ -138,10 +138,17 @@ extension AbstractExpressionismRenderer {
       }
     }
   }
-  
+
+  var frameScale: Float { dt * 60 }
+
+  func perFrameChance(_ chanceAt60Hz: Float) -> Float {
+    1 - pow(1 - chanceAt60Hz, frameScale)
+  }
+
   func decayFlow() {
+    let decay = pow(Self.flowDecayPerFrame, frameScale)
     for i in 0..<flowField.count {
-      flowField[i] *= Self.flowDecayPerFrame
+      flowField[i] *= decay
     }
   }
   
@@ -213,8 +220,9 @@ extension AbstractExpressionismRenderer {
   }
   
   func decayDensity() {
+    let decay = pow(Self.densityDecayPerFrame, frameScale)
     for i in 0..<densityGrid.count {
-      densityGrid[i] *= Self.densityDecayPerFrame
+      densityGrid[i] *= decay
     }
   }
   

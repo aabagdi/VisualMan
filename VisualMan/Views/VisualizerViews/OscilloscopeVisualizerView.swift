@@ -11,7 +11,7 @@ struct OscilloscopeVisualizerView: View {
   private enum Constants {
     static let attackSmoothing: Float = 0.55
     static let releaseSmoothing: Float = 0.75
-    static let spatialSmoothingPasses = 3
+    static let spatialSmoothingPasses = 1
     static let decayFactor: Float = 0.96
     static let decayThreshold: Float = 0.0005
     static let silenceThreshold: Float = 0.0001
@@ -20,6 +20,7 @@ struct OscilloscopeVisualizerView: View {
     static let centerLineOpacity: Double = 0.3
     static let maxAmplitudeFraction: CGFloat = 0.4
     static let displayPointCount = 256
+    static let windowSamples = 512
     static let crtCurvature: Float = 0.15
     static let crtScanlineIntensity: Float = 0.3
     static let crtVignetteStrength: Float = 0.4
@@ -34,13 +35,27 @@ struct OscilloscopeVisualizerView: View {
   let audioLevels: [1024 of Float]
   let waveform: [1024 of Float]
 
+  private func triggerIndex() -> Int {
+    let searchLimit = 1024 - Constants.windowSamples
+    var prev = waveform[0]
+    for i in 1..<searchLimit {
+      let current = waveform[i]
+      if prev <= 0 && current > 0 {
+        return i
+      }
+      prev = current
+    }
+    return 0
+  }
+
   private func downsampleWaveform(into buffer: inout [Float]) {
     let n = Constants.displayPointCount
-    let samplesPerPoint = 1024 / n
+    let samplesPerPoint = Constants.windowSamples / n
+    let start = triggerIndex()
     for i in 0..<n {
-      let start = i * samplesPerPoint
+      let base = start + i * samplesPerPoint
       var sum: Float = 0
-      for j in start..<(start + samplesPerPoint) {
+      for j in base..<(base + samplesPerPoint) {
         sum += waveform[j]
       }
       buffer[i] = sum / Float(samplesPerPoint)
@@ -98,33 +113,24 @@ struct OscilloscopeVisualizerView: View {
         let centerX = size.width / 2
         let centerY = size.height / 2
 
+        var grid = Path()
         for x in stride(from: centerX, through: size.width, by: gridSpacing) {
-          var line = Path()
-          line.move(to: CGPoint(x: x, y: 0))
-          line.addLine(to: CGPoint(x: x, y: size.height))
-          context.stroke(line, with: .color(.green.opacity(gridOpacity)), lineWidth: 0.5)
+          grid.move(to: CGPoint(x: x, y: 0))
+          grid.addLine(to: CGPoint(x: x, y: size.height))
         }
-
         for x in stride(from: centerX - gridSpacing, through: 0, by: -gridSpacing) {
-          var line = Path()
-          line.move(to: CGPoint(x: x, y: 0))
-          line.addLine(to: CGPoint(x: x, y: size.height))
-          context.stroke(line, with: .color(.green.opacity(gridOpacity)), lineWidth: 0.5)
+          grid.move(to: CGPoint(x: x, y: 0))
+          grid.addLine(to: CGPoint(x: x, y: size.height))
         }
-
         for y in stride(from: centerY, through: size.height, by: gridSpacing) {
-          var line = Path()
-          line.move(to: CGPoint(x: 0, y: y))
-          line.addLine(to: CGPoint(x: size.width, y: y))
-          context.stroke(line, with: .color(.green.opacity(gridOpacity)), lineWidth: 0.5)
+          grid.move(to: CGPoint(x: 0, y: y))
+          grid.addLine(to: CGPoint(x: size.width, y: y))
         }
-
         for y in stride(from: centerY - gridSpacing, through: 0, by: -gridSpacing) {
-          var line = Path()
-          line.move(to: CGPoint(x: 0, y: y))
-          line.addLine(to: CGPoint(x: size.width, y: y))
-          context.stroke(line, with: .color(.green.opacity(gridOpacity)), lineWidth: 0.5)
+          grid.move(to: CGPoint(x: 0, y: y))
+          grid.addLine(to: CGPoint(x: size.width, y: y))
         }
+        context.stroke(grid, with: .color(.green.opacity(gridOpacity)), lineWidth: 0.5)
 
         var hCenter = Path()
         hCenter.move(to: CGPoint(x: 0, y: centerY))

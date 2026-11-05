@@ -73,6 +73,14 @@ extension GameOfLifeRenderer {
 
   func updateAudioAndParams(bass: Float, mid: Float) ->
   (shouldStep: Bool, params: GameOfLifeParams) {
+    let now = CACurrentMediaTime()
+    if lastFrameTime == 0 {
+      dt = 1.0 / 60.0
+    } else {
+      dt = Float(min(max(now - lastFrameTime, 1.0 / 240.0), 1.0 / 30.0))
+    }
+    lastFrameTime = now
+
     if needsAudioReseed {
       smoothedBass = bass
       smoothedMid = mid
@@ -84,13 +92,14 @@ extension GameOfLifeRenderer {
       smoothedMid += (mid - smoothedMid) * (1 - exp(-dt / midTau))
     }
 
-    let stepInterval = max(3, Self.baseStepInterval - Int(smoothedBass * 6.0))
-    stepAccumulator += 1
+    let stepInterval = max(Self.minStepSeconds,
+                           Self.baseStepSeconds - smoothedBass * Self.bassStepSpeedup)
+    stepAccumulator += dt
     let shouldStep = stepAccumulator >= stepInterval
 
-    let spawnRate: Float = 0.0008 + smoothedBass * 0.006
+    let spawnRate: Float = 0.0004 + smoothedBass * 0.002
 
-    let params = GameOfLifeParams(
+    var params = GameOfLifeParams(
       bass: bass,
       mid: mid,
       simWidth: UInt32(simWidth),
@@ -98,12 +107,23 @@ extension GameOfLifeRenderer {
       frameCount: simFrameCount,
       spawnRate: spawnRate
     )
+
+    if shouldStep && simWidth > 3 && simHeight > 3 {
+      let gliderChance = min(0.5, max(0, (bass - 0.15) * 0.6))
+      if Float.random(in: 0..<1) < gliderChance {
+        params.gliderSpawn = 1
+        params.gliderX = UInt32.random(in: 0..<UInt32(simWidth))
+        params.gliderY = UInt32.random(in: 0..<UInt32(simHeight))
+        params.gliderVariant = UInt32.random(in: 0..<4)
+      }
+    }
     return (shouldStep, params)
   }
 
   func reset() {
     simFrameCount = 0
     stepAccumulator = 0
+    lastFrameTime = 0
     smoothedBass = 0
     smoothedMid = 0
     seedInitialState()

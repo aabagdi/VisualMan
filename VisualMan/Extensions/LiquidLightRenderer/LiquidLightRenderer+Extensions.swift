@@ -12,6 +12,7 @@ import os
 extension LiquidLightRenderer {
   struct Pipelines {
     let render: MTLComputePipelineState
+    let feedback: MTLComputePipelineState
     let blur: MTLComputePipelineState
   }
 
@@ -26,16 +27,17 @@ extension LiquidLightRenderer {
     }
 
     guard let renderPipeline = makePipeline("liquidLightRender"),
+          let feedbackPipeline = makePipeline("liquidLightFeedback"),
           let blurPipeline = makePipeline("liquidGlassBlur") else {
       return nil
     }
 
-    return Pipelines(render: renderPipeline, blur: blurPipeline)
+    return Pipelines(render: renderPipeline, feedback: feedbackPipeline, blur: blurPipeline)
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
     let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 2
+    desc.maxTextureBindCount = 3
     desc.maxBufferBindCount = 1
     var tables = [any MTL4ArgumentTable]()
     for _ in 0..<maxFramesInFlight {

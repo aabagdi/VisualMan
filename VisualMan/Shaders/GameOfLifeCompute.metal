@@ -15,7 +15,14 @@ struct GameOfLifeParams {
   uint simHeight;
   uint frameCount;
   float spawnRate;
+  uint gliderSpawn;
+  uint gliderX;
+  uint gliderY;
+  uint gliderVariant;
 };
+
+constant float LCD_CHARGE_PER_STEP = 1.0 / 32.0;
+constant float LCD_DECAY_PER_STEP = 0.55;
 
 inline float hash(uint2 p, uint seed) {
   uint h = p.x * 374761393u + p.y * 668265263u + seed * 1013904223u;
@@ -26,6 +33,19 @@ inline float hash(uint2 p, uint seed) {
 inline float lcdDarkness(float age) {
   float t = saturate(age * 6.0);
   return mix(0.55, 0.92, t);
+}
+
+inline bool gliderCell(uint2 gid, constant GameOfLifeParams &params) {
+  if (params.gliderSpawn == 0u) return false;
+  uint w = params.simWidth, h = params.simHeight;
+  uint lx = (gid.x + w - params.gliderX) % w;
+  uint ly = (gid.y + h - params.gliderY) % h;
+  if (lx > 2u || ly > 2u) return false;
+  if (params.gliderVariant & 1u) lx = 2u - lx;
+  if (params.gliderVariant & 2u) ly = 2u - ly;
+  uint bit = ly * 3u + lx;
+  const uint pattern = (1u << 1) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 8);
+  return (pattern & (1u << bit)) != 0u;
 }
 
 kernel void gameOfLifeStep(texture2d<half, access::read>  input   [[texture(0)]],
@@ -65,7 +85,7 @@ kernel void gameOfLifeStep(texture2d<half, access::read>  input   [[texture(0)]]
 
   half2 cell = tile[myIdx];
   bool alive = cell.x > 0.5h;
-  float age = float(cell.y);
+  float charge = float(cell.y);
 
   int neighbors = 0;
   for (int dy = -1; dy <= 1; dy++) {
@@ -95,9 +115,14 @@ kernel void gameOfLifeStep(texture2d<half, access::read>  input   [[texture(0)]]
     }
   }
 
-  float newAge = newAlive ? min(age + (1.0 / 32.0), 1.0) : 0.0;
+  if (gliderCell(gid, params)) {
+    newAlive = true;
+  }
 
-  output.write(half4(half(newAlive ? 1.0 : 0.0), half(newAge), 0.0h, 1.0h), gid);
+  float newCharge = newAlive ? min(charge + LCD_CHARGE_PER_STEP, 1.0) : charge * LCD_DECAY_PER_STEP;
+  if (newCharge < 1.0 / 255.0) newCharge = 0.0;
+
+  output.write(half4(half(newAlive ? 1.0 : 0.0), half(newCharge), 0.0h, 1.0h), gid);
 }
 
 kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)]],
@@ -151,7 +176,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
 
   half4 cell = sim.read(uint2(sx, sy));
   bool alive = cell.r > 0.5h;
-  float age = float(cell.g);
+  float charge = float(cell.g);
 
   if (onGridLine) {
     output.write(float4(gridLine * vignette, 1.0), gid);
@@ -161,7 +186,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
   float3 color;
 
   if (alive) {
-    float darkness = lcdDarkness(age);
+    float darkness = lcdDarkness(charge);
     darkness = min(darkness + params.bass * 0.08, 0.95);
     float3 segColor = mix(backlight, pixelDark, darkness);
 
@@ -219,6 +244,12 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
 
     float3 baseColor = backlight * (1.0 - 0.025) * vignette;
     color = mix(baseColor, shadowTint * vignette, shadowStrength);
+
+    float ghost = saturate(charge * 6.0);
+    if (ghost > 0.0) {
+      float3 ghostColor = mix(backlight, pixelDark, 0.92) * vignette;
+      color = mix(color, ghostColor, ghost * 0.85);
+    }
   }
 
   float rowLine = 1.0 - 0.012 * float(gid.y % 2u);

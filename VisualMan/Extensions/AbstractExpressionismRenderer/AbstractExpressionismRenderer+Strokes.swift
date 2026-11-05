@@ -61,7 +61,7 @@ extension AbstractExpressionismRenderer {
   }
 
   func appendRogueStroke(to strokes: inout [AbExStroke], energy: Float) {
-    guard strokes.count < Self.maxStrokesPerFrame, nextSeed() < 0.0012 else { return }
+    guard strokes.count < Self.maxStrokesPerFrame, nextSeed() < perFrameChance(0.0012) else { return }
     let x = (nextSeed() - 0.5) * 1.05
     let y = (nextSeed() - 0.5) * 1.10
     let angle = nextSeed() * .pi * 2
@@ -176,7 +176,7 @@ extension AbstractExpressionismRenderer {
   func appendAmbientWash(to strokes: inout [AbExStroke],
                          energy: Float,
                          focus: SIMD2<Float>) {
-    guard energy > 0.01, strokes.count < Self.maxStrokesPerFrame, nextSeed() < 0.0012 else { return }
+    guard energy > 0.01, strokes.count < Self.maxStrokesPerFrame, nextSeed() < perFrameChance(0.0012) else { return }
     let suggested = SIMD2(focus.x + (nextSeed() - 0.5) * 0.95,
                           focus.y + (nextSeed() - 0.5) * 1.00)
     let pos = applyDensityBias(at: suggested, dispersion: 0.40)

@@ -38,16 +38,21 @@ half3 auroraColor(float t, float time, float bass, float treble) {
                                        float bassLevel,
                                        float midLevel,
                                        float trebleLevel,
+                                       float3 bandTime,
                                        float2 viewSize) {
   float2 uv = position / viewSize;
   uv.y = 1.0 - uv.y;
-  
+
+  float aspect = viewSize.x / viewSize.y;
+  float ux = uv.x * aspect;
+
   half3 skyTop = half3(0.0, 0.02, 0.08);
   half3 skyBottom = half3(0.0, 0.0, 0.02);
   half3 skyColor = mix(skyBottom, skyTop, uv.y);
-  
-  float starNoise = shaderHash(floor(uv * 300.0));
-  float starBrightness = step(0.995, starNoise) * (0.3 + 0.7 * fract(starNoise * 100.0));
+
+  float starNoise = shaderHash(floor(float2(ux, uv.y) * 300.0));
+  float twinkle = 0.6 + 0.4 * sin(time * 3.0 + starNoise * 200.0);
+  float starBrightness = step(0.995, starNoise) * (0.3 + 0.7 * fract(starNoise * 100.0)) * twinkle;
   skyColor += half3(starBrightness * 0.4);
   
   float audioIntensity = audioEnergy(bassLevel, midLevel, trebleLevel);
@@ -58,9 +63,9 @@ half3 auroraColor(float t, float time, float bass, float treble) {
     float layerF = float(layer);
     float layerOffset = layerF * 0.7;
     
-    float speed = (0.3 + layerF * 0.12) * (1.0 + bassLevel * 0.4);
-    
-    float waveX = uv.x * (1.5 + layerF * 0.8) + time * speed + layerOffset;
+    float layerTime = (0.3 + layerF * 0.12) * (time + bandTime.x * 0.4);
+
+    float waveX = ux * (1.5 + layerF * 0.8) + layerTime + layerOffset;
     float noiseVal = auroraFBM(float2(waveX, time * 0.08 + layerOffset));
     
     float baseCurtainY = 0.55 + layerF * 0.08;
@@ -72,10 +77,10 @@ half3 auroraColor(float t, float time, float bass, float treble) {
     float curtainStrength = exp(-(dy * dy) / (2.0 * curtainWidth * curtainWidth));
     
     float streakFreq = 15.0 + layerF * 8.0;
-    float streak = 0.7 + 0.3 * sin(uv.x * streakFreq + time * 0.5 + layerF * 1.5);
+    float streak = 0.7 + 0.3 * sin(ux * streakFreq + time * 0.5 + layerF * 1.5);
     curtainStrength *= streak;
-    
-    float ripple = sin(uv.x * 40.0 + time * 4.0 + layerF * 2.0) * trebleLevel * 0.2;
+
+    float ripple = sin(ux * 40.0 + time * 4.0 + layerF * 2.0) * trebleLevel * 0.2;
     curtainStrength *= (1.0 + ripple);
     
     float downFade = smoothstep(curtainCenter - curtainWidth * 3.0, curtainCenter, uv.y);

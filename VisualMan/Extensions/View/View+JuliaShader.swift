@@ -8,14 +8,7 @@
 import SwiftUI
 
 extension View {
-  func juliaShader(time: Float,
-                   smoothedBass: Float,
-                   smoothedMid: Float,
-                   smoothedHigh: Float) -> some View {
-    audioColorEffect(ShaderLibrary.julia,
-                     time: time,
-                     smoothedBass: smoothedBass,
-                     smoothedMid: smoothedMid,
-                     smoothedHigh: smoothedHigh)
+  func juliaShader(audio: SmoothedAudio) -> some View {
+    audioColorEffect(ShaderLibrary.julia, audio: audio)
   }
 }

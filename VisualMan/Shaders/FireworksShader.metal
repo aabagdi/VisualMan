@@ -155,10 +155,11 @@ static inline void addLaunchTrail(thread float3 &col, float2 uv,
 
   uint numSlots = 10;
 
-  col = float3(0.03, 0.015, 0.06) * (1.0 - uv.y * 0.3);
+  float3 sky = float3(0.03, 0.015, 0.06) * (1.0 - uv.y * 0.3);
 
-  if (peakLevel < 0.03) {
-    return half4(half3(col), 1.0h);
+  float showLevel = smoothstep(0.01, 0.06, peakLevel);
+  if (showLevel <= 0.0) {
+    return half4(half3(sky), 1.0h);
   }
 
   float minDim = min(viewSize.x, viewSize.y);
@@ -204,9 +205,9 @@ static inline void addLaunchTrail(thread float3 &col, float2 uv,
       bandLevel = trebleLevel;
     }
 
-    uint numParticles = uint(clamp(floor(bandLevel * 16.0 + 6.0), 6.0, 18.0));
+    uint numParticles = 6u + uint(r0.z * 12.0);
     float intensity = 0.6 + bandLevel * 2.0;
-    float spread = 0.25 + bandLevel * 0.15;
+    float spread = 0.25 + r0.x * 0.15;
 
     uint palette = uint(cycle) % 3;
 
@@ -223,7 +224,7 @@ static inline void addLaunchTrail(thread float3 &col, float2 uv,
                  band, palette, intensity, float(i) * 963.31 + cycle * 127.7);
   }
 
-  col = float3(tanh(col));
+  col = sky + float3(tanh(col)) * showLevel;
 
   return half4(half3(col), 1.0h);
 }

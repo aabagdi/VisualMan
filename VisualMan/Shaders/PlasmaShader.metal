@@ -15,20 +15,22 @@ using namespace metal;
                                float bassLevel,
                                float midLevel,
                                float trebleLevel,
+                               float3 bandTime,
                                float2 viewSize) {
   float2 uv = normalizedUV(position, viewSize);
 
   float energy = audioEnergy(bassLevel, midLevel, trebleLevel);
+  float energyTime = (bandTime.x + bandTime.y + bandTime.z) * (1.0 / 3.0);
 
-  float v1 = sin(uv.x * 6.0 + time * 1.2 + bassLevel * 8.0);
+  float v1 = sin(uv.x * 6.0 + time * 1.2 + bandTime.x * 4.0);
 
-  float v2 = sin((uv.x * 4.0 + uv.y * 4.0) + time * 0.8 + midLevel * 6.0);
+  float v2 = sin((uv.x * 4.0 + uv.y * 4.0) + time * 0.8 + bandTime.y * 3.0);
 
   float dist = length(uv);
-  float v3 = sin(dist * 10.0 - time * 2.0 + trebleLevel * 10.0);
+  float v3 = sin(dist * 10.0 - time * 2.0 - bandTime.z * 5.0);
 
   float angle = atan2(uv.y, uv.x);
-  float v4 = sin(angle * 3.0 + dist * 5.0 + time * 0.6 + energy * 5.0);
+  float v4 = sin(angle * 3.0 + dist * 5.0 + time * 0.6 + energyTime * 2.5);
 
   float plasma = (v1 + v2 + v3 + v4) * 0.25;
 
