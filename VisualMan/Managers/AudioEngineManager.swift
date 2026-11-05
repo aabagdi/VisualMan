@@ -142,7 +142,11 @@ final class AudioEngineManager {
     }
 
     let isSecurityScoped = (source as? FileAudioSource)?.isSecurityScoped ?? false
-    try await play(from: url, isSecurityScoped: isSecurityScoped)
+    do {
+      try await play(from: url, isSecurityScoped: isSecurityScoped)
+    } catch is CancellationError {
+      return
+    }
     currentAudioSourceURL = source.getPlaybackURL()
   }
 
@@ -164,16 +168,27 @@ final class AudioEngineManager {
     
     let playbackID = uuid()
     currentPlaybackID = playbackID
-    
+
+    let opened: OpenedAudioFile
     do {
-      audioFile = try AVAudioFile(forReading: url)
-      
+      opened = try await Self.openAudioFile(at: url)
+    } catch {
+      guard currentPlaybackID == playbackID else { throw CancellationError() }
+      playbackState = .idle
+      throw VMError.failedToPlay(underlying: error)
+    }
+    
+    guard currentPlaybackID == playbackID else { throw CancellationError() }
+
+    do {
+      audioFile = opened.file
+
       guard let audioFile else {
         throw VMError.failedToCreateFile
       }
-      
-      duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
-      
+
+      duration = opened.duration
+
       try await activateAudioSession()
 
       engine.prepare()
@@ -197,6 +212,18 @@ final class AudioEngineManager {
     player.play()
   }
   
+  nonisolated struct OpenedAudioFile {
+    let file: AVAudioFile
+    let duration: TimeInterval
+  }
+
+  @concurrent
+  nonisolated private static func openAudioFile(at url: URL) async throws -> sending OpenedAudioFile {
+    let file = try AVAudioFile(forReading: url)
+    let duration = Double(file.length) / file.fileFormat.sampleRate
+    return OpenedAudioFile(file: file, duration: duration)
+  }
+
   private func schedule(_ audioFile: AVAudioFile, on player: AVAudioPlayerNode, playbackID: UUID) {
     player.scheduleFile(audioFile, at: nil) { [weak self] in
       Task { @MainActor in

@@ -12,14 +12,17 @@ import os
 import UIKit
 
 extension AbstractExpressionismRenderer {
-  static func makeMixboxLUT(device: MTLDevice) -> MTLTexture? {
+  nonisolated static func makeMixboxLUTPixels() -> [UInt8]? {
     guard let png = NSDataAsset(name: "mixbox_lut")?.data else {
       logger.error("mixbox_lut data asset is missing from the asset catalog")
       return nil
     }
     guard var pixels = decodeMixboxPNG(png) else { return nil }
     orientMixboxLUT(&pixels)
+    return pixels
+  }
 
+  static func makeMixboxLUT(device: MTLDevice, pixels: [UInt8]) -> MTLTexture? {
     let size = lutSize
     let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .rgba8Unorm, width: size, height: size, mipmapped: false)
@@ -38,12 +41,12 @@ extension AbstractExpressionismRenderer {
     return texture
   }
 
-  private static let lutSize = 512
-  private static let chunkIHDR: [UInt8] = Array("IHDR".utf8)
-  private static let chunkIDAT: [UInt8] = Array("IDAT".utf8)
-  private static let chunkIEND: [UInt8] = Array("IEND".utf8)
+  nonisolated private static let lutSize = 512
+  nonisolated private static let chunkIHDR: [UInt8] = Array("IHDR".utf8)
+  nonisolated private static let chunkIDAT: [UInt8] = Array("IDAT".utf8)
+  nonisolated private static let chunkIEND: [UInt8] = Array("IEND".utf8)
 
-  private static func decodeMixboxPNG(_ png: Data) -> [UInt8]? {
+  nonisolated private static func decodeMixboxPNG(_ png: Data) -> [UInt8]? {
     let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
     guard png.count > 8, Array(png.prefix(8)) == signature else {
       logger.error("Mixbox LUT is not a PNG")
@@ -92,11 +95,11 @@ extension AbstractExpressionismRenderer {
     return unfilterPNGRows(raw)
   }
 
-  private static func readUInt32(_ d: Data, _ at: Int) -> UInt32 {
+  nonisolated private static func readUInt32(_ d: Data, _ at: Int) -> UInt32 {
     (UInt32(d[at]) << 24) | (UInt32(d[at + 1]) << 16) | (UInt32(d[at + 2]) << 8) | UInt32(d[at + 3])
   }
 
-  private static func unfilterPNGRows(_ raw: Data) -> [UInt8]? {
+  nonisolated private static func unfilterPNGRows(_ raw: Data) -> [UInt8]? {
     let size = lutSize
     let stride = size * 4
     guard raw.count >= (stride + 1) * size else {
@@ -133,7 +136,7 @@ extension AbstractExpressionismRenderer {
     return out
   }
   
-  private static func orientMixboxLUT(_ pixels: inout [UInt8]) {
+  nonisolated private static func orientMixboxLUT(_ pixels: inout [UInt8]) {
     let size = lutSize
     let bytesPerRow = size * 4
     let bottomLeftBlue = pixels[(size - 1) * bytesPerRow + 2]

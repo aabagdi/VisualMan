@@ -11,11 +11,11 @@ import os
 import simd
 
 extension AbstractExpressionismRenderer {
-  static let crackTileSize = 512
-  static let crackPrimaryCells = 17
-  static let crackSecondaryCells = 40
+  nonisolated static let crackTileSize = 512
+  nonisolated static let crackPrimaryCells = 17
+  nonisolated static let crackSecondaryCells = 40
 
-  static func makeCrackTexture(device: MTLDevice) -> MTLTexture? {
+  nonisolated static func makeCrackPixels() -> [UInt8] {
     let size = crackTileSize
     var pixels = [UInt8](repeating: 0, count: size * size * 2)
     let primary = periodicWorleyEdges(size: size, cells: crackPrimaryCells, seed: 17)
@@ -24,7 +24,11 @@ extension AbstractExpressionismRenderer {
       pixels[i * 2]     = UInt8(min(255, Int(primary[i] * 2 * 255)))
       pixels[i * 2 + 1] = UInt8(min(255, Int(secondary[i] * 2 * 255)))
     }
+    return pixels
+  }
 
+  static func makeCrackTexture(device: MTLDevice, pixels: [UInt8]) -> MTLTexture? {
+    let size = crackTileSize
     let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .rg8Unorm, width: size, height: size, mipmapped: false)
     desc.usage = .shaderRead
@@ -42,7 +46,7 @@ extension AbstractExpressionismRenderer {
     return texture
   }
 
-  private static func periodicWorleyEdges(size: Int, cells: Int, seed: Float) -> [Float] {
+  nonisolated private static func periodicWorleyEdges(size: Int, cells: Int, seed: Float) -> [Float] {
     func hash(_ x: Int, _ y: Int) -> SIMD2<Float> {
       var h = sin(Float(x) * 127.1 + Float(y) * 311.7 + seed) * 43758.5453
       let a = h - h.rounded(.down)

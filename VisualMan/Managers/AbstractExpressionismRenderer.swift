@@ -198,9 +198,19 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
   var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
+  struct CPUTextureData: Sendable {
+    let mixboxLUT: [UInt8]
+    let crack: [UInt8]
+  }
+
   static func create(device: MTLDevice) async -> AbstractExpressionismRenderer? {
-    guard let pipelines = await compilePipelines(device: device) else { return nil }
-    guard let renderer = AbstractExpressionismRenderer(device: device, pipelines: pipelines) else {
+    async let pipelines = compilePipelines(device: device)
+    async let textureData = makeCPUTextureData()
+    guard let pipelines = await pipelines,
+          let textureData = await textureData else { return nil }
+    guard let renderer = AbstractExpressionismRenderer(
+      device: device, pipelines: pipelines, textureData: textureData
+    ) else {
       return nil
     }
     renderer.warmUpGPU()
@@ -215,7 +225,14 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     return createPipelines(device: device, compiler: compiler)
   }
 
-  private init?(device: MTLDevice, pipelines: Pipelines) {
+  @concurrent
+  nonisolated private static func makeCPUTextureData() async -> CPUTextureData? {
+    async let crack = makeCrackPixels()
+    guard let lut = makeMixboxLUTPixels() else { return nil }
+    return CPUTextureData(mixboxLUT: lut, crack: await crack)
+  }
+
+  private init?(device: MTLDevice, pipelines: Pipelines, textureData: CPUTextureData) {
     guard let commandQueue = device.makeMTL4CommandQueue(),
           let commandBuffer = device.makeCommandBuffer(),
           let sharedEvent = device.makeSharedEvent() else { return nil }
@@ -247,9 +264,9 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     self.mixboxSelfTestPipeline = pipelines.mixboxSelfTest
     self.residencySet = residencySet
 
-    guard let lut = Self.makeMixboxLUT(device: device) else { return nil }
+    guard let lut = Self.makeMixboxLUT(device: device, pixels: textureData.mixboxLUT) else { return nil }
     self.mixboxLUT = lut
-    self.crackTexture = Self.makeCrackTexture(device: device)
+    self.crackTexture = Self.makeCrackTexture(device: device, pixels: textureData.crack)
     self.gpuTiming = GPUTiming.makeIfRequested(device: device)
 
     configureResidencySet()

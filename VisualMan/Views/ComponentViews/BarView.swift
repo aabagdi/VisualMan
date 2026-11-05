@@ -42,7 +42,6 @@ struct BarView: View {
     RoundedRectangle(cornerRadius: cornerRadius)
       .fill(barColor)
       .frame(height: barHeight)
-      .animation(.interpolatingSpring(duration: 0.15, bounce: 0), value: barHeight)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }

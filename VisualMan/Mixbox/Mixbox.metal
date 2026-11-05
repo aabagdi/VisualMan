@@ -1,24 +1,24 @@
 // ==========================================================
-//  MIXBOX 2.0 (c) 2022 Secret Weapons. All rights reserved. 
-//  License: Creative Commons Attribution-NonCommercial 4.0  
-//  Authors: Sarka Sochorova and Ondrej Jamriska             
+//  MIXBOX 2.0 (c) 2022 Secret Weapons. All rights reserved.
+//  License: Creative Commons Attribution-NonCommercial 4.0
+//  Authors: Sarka Sochorova and Ondrej Jamriska
 // ==========================================================
 //
 //   BASIC USAGE
 //
 //      float3 rgb = mixbox_lerp(lut, rgb1, rgb2, t);
-// 
+//
 //   MULTI-COLOR MIXING
 //
 //      mixbox_latent z1 = mixbox_rgb_to_latent(lut, rgb1);
 //      mixbox_latent z2 = mixbox_rgb_to_latent(lut, rgb2);
 //      mixbox_latent z3 = mixbox_rgb_to_latent(lut, rgb3);
-// 
+//
 //      // mix 30% of rgb1, 60% of rgb2, and 10% of rgb3
 //      mixbox_latent z_mix = 0.3*z1 + 0.6*z2 + 0.1*z3;
-// 
+//
 //      float3 rgb_mix = mixbox_latent_to_rgb(z_mix);
-// 
+//
 //   PIGMENT COLORS
 //
 //      Cadmium Yellow              0.996, 0.925, 0.000
@@ -34,12 +34,12 @@
 //      Permanent Green             0.027, 0.427, 0.086
 //      Sap Green                   0.420, 0.580, 0.016
 //      Burnt Sienna                0.482, 0.282, 0.000
-// 
+//
 //   LICENSING
 //
 //      If you want to obtain commercial license, please
 //      contact us at: mixbox@scrtwpns.com
-// 
+//
 
 #ifndef MIXBOX_INCLUDED
 #define MIXBOX_INCLUDED
@@ -134,16 +134,11 @@ inline mixbox_latent mixbox_rgb_to_latent(metal::texture2d<float> mixbox_lut, fl
 
   constexpr metal::sampler lut_sampler(metal::mag_filter::linear, metal::min_filter::linear, metal::mip_filter::none);
 
-  // Orientation probe: an extra dependent LUT fetch on every call. Callers
-  // that load the LUT with a known top-left origin define
-  // MIXBOX_LUT_TOP_LEFT_ORIGIN to skip it.
-#ifndef MIXBOX_LUT_TOP_LEFT_ORIGIN
   if (mixbox_lut.sample(lut_sampler, float2(0.5, 0.5) / 512.0).b < 0.1)
   {
     uv0.y = 1.0 - uv0.y;
     uv1.y = 1.0 - uv1.y;
   }
-#endif
 
   float3 c = metal::mix(mixbox_lut.sample(lut_sampler, uv0).rgb, mixbox_lut.sample(lut_sampler, uv1).rgb, z - iz);
 
