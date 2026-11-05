@@ -116,6 +116,7 @@ extension AbstractExpressionismRenderer {
       argumentTable.setTexture(cracks.gpuResourceID, index: 6)
     }
     argumentTable.setTexture((pigmentTexture ?? color).gpuResourceID, index: 7)
+    argumentTable.setTexture((materialTexture ?? color).gpuResourceID, index: 8)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     dispatch(encoder: encoder, pipeline: composePipeline,
@@ -178,7 +179,7 @@ extension AbstractExpressionismRenderer {
       canvas: SIMD4(cc.x, cc.y, cc.z, dryRate),
       config: SIMD4(paintDt, isFirstFrame ? 1.0 : 0.0, Float(strokeCount), bumpStrength),
       camera: SIMD4(camPanX, camPanY, camZoom, Float(Self.paintTestDebugMode)),
-      atmosphere: SIMD4(0, songSeed, 0, 0))
+      atmosphere: SIMD4(time, songSeed, 0, 0))
   }
 
   struct SplitStrokes {
@@ -229,16 +230,20 @@ extension AbstractExpressionismRenderer {
                   region: smearRegion)
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
+    gpuMark(encoder, .afterSmear)
 
     renderPigment(encoder: encoder, wet: tex.colorOut, dry: tex.dryColorOut,
+                  heightWet: tex.hwOut, substrate: tex.substrateOut,
                   params: pass2Params, regions: pigmentRegionsThisFrame)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    gpuMark(encoder, .afterPigment)
 
     renderCompose(encoder: encoder,
                   color: tex.colorOut, heightWet: tex.hwOut,
                   dryColor: tex.dryColorOut,
                   substrate: tex.substrateOut,
                   output: tex.display, params: pass2Params)
+    gpuMark(encoder, .afterCompose)
   }
 
   private func executePaintPipeline(encoder: any MTL4ComputeCommandEncoder,
@@ -266,6 +271,7 @@ extension AbstractExpressionismRenderer {
 
     let pass1Params = buildFrameParams(smoothed: smoothed,
                                         strokeCount: strokes.deposit.count)
+    gpuMark(encoder, .frameStart)
     renderPaint(encoder: encoder,
                 colorIn: tex.colorIn, colorOut: pass1Color,
                 hwIn: tex.hwIn, hwOut: pass1HW,
@@ -276,6 +282,7 @@ extension AbstractExpressionismRenderer {
                 tileMap: depositTileMap,
                 region: region)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    gpuMark(encoder, .afterPaint)
 
     let velocityParams = buildFrameParams(smoothed: smoothed,
                                            strokeCount: strokes.smear.count)
@@ -288,6 +295,7 @@ extension AbstractExpressionismRenderer {
                           tileMap: smearTileMap,
                           region: region)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    gpuMark(encoder, .afterVelocity)
 
     executeSmearAndCompose(encoder: encoder, tex: tex, smoothed: smoothed,
                             smearStrokes: strokes.smear,
@@ -306,6 +314,7 @@ extension AbstractExpressionismRenderer {
     guard ensureCanvasTextures(displayWidth: drawableWidth, displayHeight: drawableHeight),
           let tex = currentPingPongTextures(),
           let encoder = beginFrame() else { return nil }
+    gpuTiming?.beginFrame(frameNumber: frameNumber, skippedPaint: false)
 
     runPendingResample(encoder: encoder, tex: tex)
 

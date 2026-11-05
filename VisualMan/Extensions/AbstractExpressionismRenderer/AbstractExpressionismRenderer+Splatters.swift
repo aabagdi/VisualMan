@@ -88,6 +88,14 @@ extension AbstractExpressionismRenderer {
   }
 
   static let splatterInterval: Float = 0.3
+  static let pearlescentChance: Float = 1 / 8192.0
+
+  func rollPearlescent(_ stroke: inout AbExStroke) {
+    splatCounter &+= 1
+    if trailHash(splatCounter, 0x51ED270B) < Self.pearlescentChance {
+      stroke.color.w += 4
+    }
+  }
 
   private static func splatDensityWeight(typeRoll: Float) -> Float {
     switch typeRoll {
@@ -115,9 +123,10 @@ extension AbstractExpressionismRenderer {
       let burstShapeRoll = nextSeed()
       splatCounter &+= 1
       let burstTypeRoll = trailHash(splatCounter, UInt32(bitPattern: Int32(songSeed * 1000)))
-      let mainStroke = makeSplatterStroke(high: high, focus: focus,
+      var mainStroke = makeSplatterStroke(high: high, focus: focus,
                                             burstShapeRoll: burstShapeRoll,
                                             burstTypeRoll: burstTypeRoll)
+      rollPearlescent(&mainStroke)
       let mainRadius = mainStroke.posAngle.w
       strokes.append(mainStroke)
       

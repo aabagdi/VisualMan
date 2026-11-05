@@ -12,28 +12,36 @@ import simd
 #if DEBUG
 extension AbstractExpressionismRenderer {
   enum PaintTestScenario {
-    case mixing, cracks
+    case mixing, cracks, smear
   }
 
   static let paintTestScenario: PaintTestScenario? = {
     guard let raw = UserDefaults.standard.string(forKey: "AbExPaintTest")?
             .trimmingCharacters(in: .whitespaces).lowercased(),
           !raw.isEmpty, raw != "no", raw != "0", raw != "false" else { return nil }
-    return raw == "cracks" ? .cracks : .mixing
+    switch raw {
+    case "cracks": return .cracks
+    case "smear":  return .smear
+    default:       return .mixing
+    }
   }()
 
   static let paintTestEnabled: Bool = paintTestScenario != nil
 
   static var paintTestLoopDuration: Float {
-    paintTestScenario == .cracks ? 45 : 20
+    paintTestScenario == .mixing ? 20 : 45
   }
 
   static var paintTestScript: [PaintTestEvent] {
-    paintTestScenario == .cracks ? crackScript : mixingScript
+    switch paintTestScenario {
+    case .cracks: return crackScript
+    case .smear:  return smearScript
+    default:      return mixingScript
+    }
   }
 
   static var paintTestDryMultiplier: Float {
-    paintTestScenario == .cracks ? 3 : 1
+    paintTestScenario == .mixing ? 1 : 3
   }
 
   struct PaintTestEvent {

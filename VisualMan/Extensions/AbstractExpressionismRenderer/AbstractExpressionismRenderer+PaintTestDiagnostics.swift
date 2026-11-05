@@ -15,6 +15,7 @@ extension AbstractExpressionismRenderer {
     switch raw {
     case "black", "1": return 1
     case "alpha", "2": return 2
+    case "split", "3": return 3
     default: return 0
     }
   }()

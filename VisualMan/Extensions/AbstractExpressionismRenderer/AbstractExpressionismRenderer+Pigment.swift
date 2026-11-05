@@ -11,7 +11,7 @@ import simd
 
 extension AbstractExpressionismRenderer {
   static let pigmentDirtyFrames = 24
-  static let pigmentBands = 8
+  static let pigmentBands = 16
   static let pigmentDirtyPad: Float = 0.05
 
   func pigmentRegions(paintRegion region: CanvasRegion,
@@ -66,14 +66,20 @@ extension AbstractExpressionismRenderer {
 
   func renderPigment(encoder: any MTL4ComputeCommandEncoder,
                      wet: MTLTexture, dry: MTLTexture,
+                     heightWet: MTLTexture, substrate: MTLTexture,
                      params: AbExParams, regions: [CanvasRegion]) {
-    guard let pig = pigmentTexture, let lut = mixboxLUT, !regions.isEmpty else { return }
+    guard let pig = pigmentTexture, let mat = materialTexture, let lut = mixboxLUT,
+          let cracks = crackTexture, !regions.isEmpty else { return }
     encoder.barrier(afterQueueStages: .dispatch, beforeStages: .dispatch)
     encoder.setComputePipelineState(pigmentPipeline)
     argumentTable.setTexture(wet.gpuResourceID, index: 0)
     argumentTable.setTexture(dry.gpuResourceID, index: 1)
     argumentTable.setTexture(pig.gpuResourceID, index: 2)
     argumentTable.setTexture(lut.gpuResourceID, index: 3)
+    argumentTable.setTexture(heightWet.gpuResourceID, index: 4)
+    argumentTable.setTexture(substrate.gpuResourceID, index: 5)
+    argumentTable.setTexture(cracks.gpuResourceID, index: 6)
+    argumentTable.setTexture(mat.gpuResourceID, index: 7)
     argumentTable.setAddress(writeUniform(params), index: 0)
     for r in regions where r.width > 0 && r.height > 0 {
       argumentTable.setAddress(writeUniform(r.origin), index: 1)

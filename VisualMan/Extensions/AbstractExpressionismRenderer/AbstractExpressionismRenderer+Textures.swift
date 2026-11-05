@@ -57,7 +57,7 @@ extension AbstractExpressionismRenderer {
     for old in [colorA, colorB, heightWetA, heightWetB, colorMid, heightWetMid,
                 velocityA, velocityB,
                 dryColorA, dryColorB, dryColorMid,
-                substrateA, substrateB, pigmentTexture] {
+                substrateA, substrateB, pigmentTexture, materialTexture] {
       if let t = old, !excluding.contains(ObjectIdentifier(t as AnyObject)) {
         pendingTextureReleases.append((frame: frameNumber, texture: t))
       }
@@ -84,6 +84,7 @@ extension AbstractExpressionismRenderer {
     dryColorA = nil; dryColorB = nil; dryColorMid = nil
     substrateA = nil; substrateB = nil
     pigmentTexture = nil
+    materialTexture = nil
     canvasSize = 0
   }
 
@@ -127,14 +128,15 @@ extension AbstractExpressionismRenderer {
           let dcMid = device.makeTexture(descriptor: dryDesc),
           let sA = device.makeTexture(descriptor: subDesc),
           let sB = device.makeTexture(descriptor: subDesc),
-          let pig = device.makeTexture(descriptor: colDesc) else {
+          let pig = device.makeTexture(descriptor: colDesc),
+          let mat = device.makeTexture(descriptor: colDesc) else {
       clearResampleSources()
       clearCanvasTextures()
       return false
     }
 
     for t in [cA, cB, cMid, hwA, hwB, hwMid, vA, vB,
-              dcA, dcB, dcMid, sA, sB, pig] {
+              dcA, dcB, dcMid, sA, sB, pig, mat] {
       residencySet.addAllocation(t)
     }
 
@@ -144,6 +146,7 @@ extension AbstractExpressionismRenderer {
     dryColorA = dcA; dryColorB = dcB; dryColorMid = dcMid
     substrateA = sA; substrateB = sB
     pigmentTexture = pig
+    materialTexture = mat
     pigmentFullRefreshFrames = 3
     canvasSize = size
     isFirstFrame = !preserveContent
@@ -181,6 +184,7 @@ extension AbstractExpressionismRenderer {
         && velocityA != nil && velocityB != nil
         && dryColorA != nil && dryColorB != nil && dryColorMid != nil
         && substrateA != nil && substrateB != nil && pigmentTexture != nil
+        && materialTexture != nil
 
     let grow = requestedCanvasSize > canvasSize
     let shrink = requestedCanvasSize < canvasSize - max(2, canvasSize / 16)
@@ -241,25 +245,8 @@ extension AbstractExpressionismRenderer {
                           substrate: [sA, sB])
   }
 
-  func warmUpGPU() {
-    guard let tex = makeWarmUpTextures() else { return }
-    let dummies = tex.color + tex.heightWet + [tex.velocity, tex.display]
-                + tex.dryColor + tex.substrate
-    for t in dummies { residencySet.addAllocation(t) }
-    residencySet.commit()
-
-    let warmupFrame: UInt64 = 1
-    let idx = Int(warmupFrame % Self.maxFramesInFlight)
-    let allocator = commandAllocators[idx]
-    currentUniformBuffer = uniformBuffers[idx]
-    allocator.reset()
-    uniformOffset = 0
-
-    commandBuffer.beginCommandBuffer(allocator: allocator)
-    commandBuffer.useResidencySet(residencySet)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
-    encoder.setArgumentTable(argumentTable)
-
+  private func encodeWarmUpPasses(encoder: any MTL4ComputeCommandEncoder,
+                                  tex: WarmUpTextures, selfTestResults: MTLBuffer?) {
     let cc = Self.canvasColor
     let params = AbExParams(
       canvas: SIMD4(cc.x, cc.y, cc.z, 0),
@@ -282,6 +269,34 @@ extension AbstractExpressionismRenderer {
                   dryColor: tex.dryColor[1],
                   substrate: tex.substrate[1],
                   output: tex.display, params: params)
+    if let b = selfTestResults {
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+      encodeMixboxSelfTest(encoder: encoder, results: b)
+    }
+  }
+
+  func warmUpGPU() {
+    guard let tex = makeWarmUpTextures() else { return }
+    let dummies = tex.color + tex.heightWet + [tex.velocity, tex.display]
+                + tex.dryColor + tex.substrate
+    for t in dummies { residencySet.addAllocation(t) }
+    let selfTestResults = makeMixboxSelfTestBuffer()
+    if let b = selfTestResults { residencySet.addAllocation(b) }
+    residencySet.commit()
+
+    let warmupFrame: UInt64 = 1
+    let idx = Int(warmupFrame % Self.maxFramesInFlight)
+    let allocator = commandAllocators[idx]
+    currentUniformBuffer = uniformBuffers[idx]
+    allocator.reset()
+    uniformOffset = 0
+
+    commandBuffer.beginCommandBuffer(allocator: allocator)
+    commandBuffer.useResidencySet(residencySet)
+    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
+    encoder.setArgumentTable(argumentTable)
+
+    encodeWarmUpPasses(encoder: encoder, tex: tex, selfTestResults: selfTestResults)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -289,7 +304,11 @@ extension AbstractExpressionismRenderer {
     commandQueue.signalEvent(sharedEvent, value: warmupFrame)
     frameNumber = warmupFrame
 
-    sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 1000)
+    let completed = sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 1000)
+    if let b = selfTestResults {
+      if completed { reportMixboxSelfTest(results: b) }
+      residencySet.removeAllocation(b)
+    }
     for t in dummies { residencySet.removeAllocation(t) }
     residencySet.commit()
   }

@@ -41,7 +41,7 @@ extension AbstractExpressionismRenderer {
       halfAcross = max(s.sizeOpacity.x, 0.01) * 1.8
     case 2:
       let radius = max(s.posAngle.w, 0.002) * 1.6
-      let isElongated = Int(floor(s.color.w)) == 1
+      let isElongated = (Int(floor(s.color.w)) & 3) == 1
       halfAlong = isElongated ? radius / 0.22 : radius
       halfAcross = radius
     case 3:

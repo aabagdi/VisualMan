@@ -35,6 +35,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var velocityPipeline: MTLComputePipelineState
   var resamplePipeline: MTLComputePipelineState
   var pigmentPipeline: MTLComputePipelineState
+  var mixboxSelfTestPipeline: MTLComputePipelineState
 
   var pendingResample: Bool = false
   var resampleColorSrc: MTLTexture?
@@ -153,11 +154,15 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var crackTexture: MTLTexture?
 
   var pigmentTexture: MTLTexture?
+  var materialTexture: MTLTexture?
   var pigmentFullRefreshFrames: Int = 0
   var pigmentBandIndex: Int = 0
   var pigmentDirtyHistory: [SIMD4<Float>] = []
   var pigmentRegionsThisFrame: [CanvasRegion] = []
   var recentSplats: [SIMD2<Float>] = []
+
+  // Per-pass GPU timing (see +GPUTiming.swift); nil unless -AbExGPUTiming YES.
+  var gpuTiming: GPUTiming?
 
   var canvasSize: Int = 0
   var lastDisplayWidth: Int = 0
@@ -238,11 +243,13 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     self.velocityPipeline = pipelines.velocity
     self.resamplePipeline = pipelines.resample
     self.pigmentPipeline = pipelines.pigment
+    self.mixboxSelfTestPipeline = pipelines.mixboxSelfTest
     self.residencySet = residencySet
 
     guard let lut = Self.makeMixboxLUT(device: device) else { return nil }
     self.mixboxLUT = lut
     self.crackTexture = Self.makeCrackTexture(device: device)
+    self.gpuTiming = GPUTiming.makeIfRequested(device: device)
 
     configureResidencySet()
   }

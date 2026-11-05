@@ -46,10 +46,13 @@ extension AbstractExpressionismRenderer {
     skippedPaintDt += dt
     framesSinceSmear += 1
     recordSmearBounds([])
+    gpuTiming?.markSkippedPaint()
+    gpuMark(encoder, .frameStart)
     renderCompose(encoder: encoder,
                   color: tex.colorIn, heightWet: tex.hwIn,
                   dryColor: tex.dryColorIn, substrate: tex.substrateIn,
                   output: tex.display, params: params)
+    gpuMark(encoder, .afterCompose)
   }
 
   static let smearDirtyFrames = 14

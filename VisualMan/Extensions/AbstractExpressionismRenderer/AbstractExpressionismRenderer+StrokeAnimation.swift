@@ -98,6 +98,11 @@ extension AbstractExpressionismRenderer {
 
     appendPollockTrails(to: &strokes, energy: energy, focus: focus)
 
+    for i in strokes.indices where !Set([2, 5]).contains(Int(strokes[i].sizeOpacity.w)) {
+      rollPearlescent(&strokes[i])
+    }
+    for i in freshSmearStrokes.indices { rollPearlescent(&freshSmearStrokes[i]) }
+
     enqueueAnimatingStrokes(freshSmearStrokes)
 
     return emitAnimatedStrokes(into: strokes)

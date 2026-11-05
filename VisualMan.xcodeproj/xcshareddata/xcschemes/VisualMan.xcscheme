@@ -41,7 +41,6 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       enableGPUFrameCaptureMode = "1"
-      enableGPUShaderValidationMode = "2"
       allowLocationSimulation = "YES">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
@@ -63,13 +62,22 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "-AbExPaintTest smear"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "-AbExPaintTestDebug black"
             isEnabled = "NO">
          </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-AbExPaintTestDebug split"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-AbExGPUTiming YES"
+            isEnabled = "YES">
+         </CommandLineArgument>
       </CommandLineArguments>
-      <MetalShaderValidationSettings
-         isEnabled = "Yes">
-      </MetalShaderValidationSettings>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
