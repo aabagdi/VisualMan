@@ -352,7 +352,7 @@ inline float vnoise(float2 p) {
 }
 
 inline float3 agedFilm(float3 c) {
-  c *= float3(1.05, 0.97, 0.84);
+  c *= float3(1.05, 0.98, 0.80);
   c = c * (1.0 + c * (1.0 / 1.44)) / (1.0 + c);
   float l = dot(c, float3(0.299, 0.587, 0.114));
   c = mix(c, float3(l), 0.1);
@@ -389,9 +389,16 @@ kernel void liquidLightRender(texture2d<float, access::write>  output [[texture(
   float pixel = 1.4 / longSide;
   float time = params.time;
   
+  float R = params.apertureRadius;
+  float circ = fast::length(p);
+  float2 radial = circ > 1e-4 ? p / circ : float2(0.0);
+  const float groovePitch = 0.0045;
+  float grooves = sin(6.2831853 * fract(circ / groovePitch));
+  
   float2 shimmer = float2(vnoise(p * 6.0 + time * 1.5),
-                          vnoise(p * 6.0 + float2(3.1, 7.4) - time * 1.3)) * 0.0012;
-  float2 suv = uv + shimmer;
+                          vnoise(p * 6.0 + float2(3.1, 7.4) - time * 1.3)) * 0.0012
+                 + radial * grooves * 0.00035;
+  float2 suv = uv + shimmer * longSide / size;
   
   float2 simSize = params.simSize;
   float2 texel = 1.0 / simSize;
@@ -448,15 +455,17 @@ kernel void liquidLightRender(texture2d<float, access::write>  output [[texture(
   float4 water = params.plate[4];
   T *= mix(float3(1.0), water.rgb, water.w * gaps);
 
-  float R = params.apertureRadius;
-  float circ = fast::length(p);
   float beam = 1.0 - smoothstep(R - 0.010, R + 0.003, circ);
   float rimward = smoothstep(R * 0.45, R, circ);
   float3 lamp = params.plate[5].rgb;
-  lamp = mix(lamp, lamp * float3(1.0, 0.80, 0.55) * 0.8, rimward);
+  lamp = mix(lamp, lamp * float3(1.0, 0.78, 0.50) * 0.8, rimward);
   float hotspot = fast::exp(-circ * circ / (R * R) * 2.2);
   float flicker = 1.0 + 0.012 * fast::sin(time * 37.0) + 0.012 * vnoise(float2(time * 9.0, 0.5));
   lamp *= (1.0 + hotspot * 0.14 + params.bass * 0.10) * flicker;
+
+  float sheet2 = sin(6.2831853 * fract(length(p - float2(0.011, -0.007)) / (groovePitch * 1.012)));
+  float fresnel = 1.0 + grooves * (0.012 + 0.035 * rimward) + grooves * sheet2 * 0.02;
+  lamp *= fresnel;
 
   float lumaT = dot(T, float3(0.333));
   float3 scatter = covSum > 0.0 ? additive / max(covSum, 1.0) : float3(0.0);

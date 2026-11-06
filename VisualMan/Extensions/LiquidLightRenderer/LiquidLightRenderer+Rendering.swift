@@ -232,7 +232,7 @@ extension LiquidLightRenderer {
     dispatch(encoder, width: output.width, height: output.height)
   }
 
-  static let halogen = SIMD4<Float>(1.0, 0.94, 0.82, 0)
+  static let halogen = SIMD4<Float>(1.0, 0.91, 0.70, 0)
 
   static let plates: [LiquidLightPlate] = [
     LiquidLightPlate(dyeA: SIMD4(0.93, 0.07, 0.09, 0), dyeB: SIMD4(1.0, 0.84, 0.12, 0),
