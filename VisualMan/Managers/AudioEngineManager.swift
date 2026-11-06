@@ -27,6 +27,7 @@ final class AudioEngineManager {
   enum Constants {
     static let pauseDecayFactor: Float = 0.88
     static let pauseDecayThreshold: Float = 0.001
+    static let completionTolerance: TimeInterval = 1.0
   }
   
   var audioLevels: [1024 of Float] = .init(repeating: 0.0)
@@ -225,11 +226,9 @@ final class AudioEngineManager {
   }
 
   private func schedule(_ audioFile: AVAudioFile, on player: AVAudioPlayerNode, playbackID: UUID) {
-    player.scheduleFile(audioFile, at: nil) { [weak self] in
+    player.scheduleFile(audioFile, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
       Task { @MainActor in
-        guard let self,
-              self.currentPlaybackID == playbackID else { return }
-        self.handlePlaybackCompleted()
+        self?.handleScheduledAudioFinished(playbackID: playbackID)
       }
     }
   }

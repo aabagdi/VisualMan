@@ -116,28 +116,36 @@ extension AudioEngineManager {
   }
   
   private func updateTime() {
+    guard let newTime = renderedPlaybackPosition() else { return }
+
+    if newTime >= 0 && newTime <= duration {
+      currentTime = newTime
+    }
+
+    if currentTime >= duration - 0.05 && playbackState == .playing {
+      handlePlaybackCompleted()
+    }
+  }
+
+  func renderedPlaybackPosition() -> TimeInterval? {
     guard let player,
           let audioFile,
-          player.isPlaying else { return }
-    
-    if let nodeTime = player.lastRenderTime,
-       let playerTime = player.playerTime(forNodeTime: nodeTime) {
-      let sampleTime = playerTime.sampleTime
+          player.isPlaying,
+          let nodeTime = player.lastRenderTime,
+          let playerTime = player.playerTime(forNodeTime: nodeTime),
+          playerTime.sampleTime >= 0 else { return nil }
 
-      guard sampleTime >= 0 else { return }
-      
-      let playerSeconds = Double(sampleTime) / playerTime.sampleRate
-      let seekSeconds = Double(lastSeekFrame) / audioFile.fileFormat.sampleRate
-      let newTime = seekSeconds + playerSeconds
-      
-      if newTime >= 0 && newTime <= duration {
-        currentTime = newTime
-      }
-      
-      if currentTime >= duration - 0.05 && playbackState == .playing {
-        handlePlaybackCompleted()
-      }
-    }
+    let playerSeconds = Double(playerTime.sampleTime) / playerTime.sampleRate
+    let seekSeconds = Double(lastSeekFrame) / audioFile.fileFormat.sampleRate
+    return seekSeconds + playerSeconds
+  }
+
+  func handleScheduledAudioFinished(playbackID: UUID) {
+    guard currentPlaybackID == playbackID,
+          playbackState == .playing,
+          let position = renderedPlaybackPosition(),
+          position >= duration - Constants.completionTolerance else { return }
+    handlePlaybackCompleted()
   }
 }
 
@@ -340,12 +348,11 @@ extension AudioEngineManager {
         audioFile,
         startingFrame: clampedFrame,
         frameCount: AVAudioFrameCount(audioFile.length - clampedFrame),
-        at: nil
-      ) { [weak self] in
+        at: nil,
+        completionCallbackType: .dataPlayedBack
+      ) { [weak self] _ in
         Task { @MainActor in
-          guard let self,
-                self.currentPlaybackID == playbackID else { return }
-          self.handlePlaybackCompleted()
+          self?.handleScheduledAudioFinished(playbackID: playbackID)
         }
       }
       
