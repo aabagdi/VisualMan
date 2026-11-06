@@ -10,61 +10,16 @@ import Metal
 import os
 import QuartzCore
 
-struct LiquidLightDrops {
-  var d0: SIMD4<Float>
-  var d1: SIMD4<Float>
-  var d2: SIMD4<Float>
-  var d3: SIMD4<Float>
-}
-
-struct LiquidLightDropPrecomp {
-  var p0: SIMD4<Float>
-  var p1: SIMD4<Float>
-  var p2: SIMD4<Float>
-  var p3: SIMD4<Float>
-}
-
-struct LiquidLightDropColors {
-  var c0: SIMD4<Float>
-  var c1: SIMD4<Float>
-  var c2: SIMD4<Float>
-  var c3: SIMD4<Float>
-}
-
-struct LiquidLightParams {
-  var time: Float
-  var bass: Float
-  var mid: Float
-  var high: Float
-  var flowPhase: Float
-  var pad0: Float = 0
-  var pad1: Float = 0
-  var pad2: Float = 0
-  var drops: LiquidLightDrops
-  var dropPrecomp: LiquidLightDropPrecomp
-  var dropColors: LiquidLightDropColors
-}
-
-struct BlurParams {
-  var innerRadius: Float
-  var outerRadius: Float
-  var maxBlurRadius: Float
-  var bass: Float
-  var mid: Float
-}
-
-struct FeedbackParams {
-  var dt: Float
-  var time: Float
-  var bass: Float
-  var historyValid: UInt32
-}
-
 @MainActor
 final class LiquidLightRenderer: MetalVisualizerRenderer {
   let device: MTLDevice
   let commandQueue: any MTL4CommandQueue
 
+  var seedPipeline: MTLComputePipelineState
+  var advectPipeline: MTLComputePipelineState
+  var reduceTilesPipeline: MTLComputePipelineState
+  var reduceFinalPipeline: MTLComputePipelineState
+  var relaxPipeline: MTLComputePipelineState
   var renderPipeline: MTLComputePipelineState
   var feedbackPipeline: MTLComputePipelineState
   var blurPipeline: MTLComputePipelineState
@@ -74,16 +29,20 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   var lastFrameTime: CFTimeInterval = 0
   var wallClock: Float = 0
   var smoothedSpeed: Float = 0.25
-  var flowPhase: Float = 0
 
   var envelope: SIMD3<Float> = .zero
   var slowEnvelope: SIMD3<Float> = .zero
 
+  var tiltPhase: Float = 0
+  var tiltAxis: Float = 0.6
+  var lastPressBass: Float = 0
+
   var smoothedBass: Float = 0
   var lastDropWallTime: Float = -10
+  var nextDripWallTime: Float = 1.5
   var drops: [SIMD4<Float>] = Array(repeating: SIMD4<Float>(0, 0, -1, 0), count: 4)
+  var dropSizes: [Float] = Array(repeating: 0.05, count: 4)
   var nextDropSlot: Int = 0
-  var dropHueCounter: Float = 0
 
   static let maxFramesInFlight: UInt64 = 3
   var commandAllocators = [any MTL4CommandAllocator]()
@@ -100,20 +59,33 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   var currentUniformBuffer: MTLBuffer
 
   static let renderScale: Float = 0.75
+  static let apertureRadius: Float = 0.40
+  static let simScale: Float = 0.3
 
-  private var intermediateTexture: MTLTexture?
-  private var historyTextures: [MTLTexture] = []
-  private var finalTextures: [MTLTexture] = []
-  private var lastDrawableWidth: Int = 0
-  private var lastDrawableHeight: Int = 0
+  static let interfaceEps: Float = 0.775
+  static let mobility: Float = 1.0
+  static let acMobility: Float = 0.8
+  static let relaxStep: Float = 0.02
+
+  static let reduceTileSize = 16
+  static let maxReduceTiles = 4096
+  let reduceTilesBuffer: MTLBuffer
+  let lambdaBuffer: MTLBuffer
+
+  var frameTextures: FrameTextures?
+  var lastDrawableWidth: Int = 0
+  var lastDrawableHeight: Int = 0
   var historyValid: Bool = false
+  var simValid: Bool = false
+  var simWidth: Int = 0
+  var simHeight: Int = 0
 
   var resumeSuppressionRemaining: Float = 0
 
   var resumeFadeIn: Float = 1.0
   static let resumeFadeDuration: Float = 0.8
 
-  private var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
+  var pendingTextureReleases: [(frame: UInt64, texture: MTLTexture)] = []
 
   static func create(device: MTLDevice) async -> LiquidLightRenderer? {
     guard let pipelines = await compilePipelines(device: device) else { return nil }
@@ -146,10 +118,21 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     guard let argumentTables = Self.createArgumentTables(device: device) else { return nil }
 
     let setDesc = MTLResidencySetDescriptor()
-    setDesc.initialCapacity = 4
+    setDesc.initialCapacity = 10
     guard let residencySet = try? device.makeResidencySet(descriptor: setDesc) else {
       return nil
     }
+
+    let tilesLength = Self.maxReduceTiles * MemoryLayout<SIMD4<Float>>.stride
+    guard let reduceTilesBuffer = device.makeBuffer(length: tilesLength, options: .storageModePrivate),
+          let lambdaBuffer = device.makeBuffer(length: MemoryLayout<SIMD4<Float>>.stride,
+                                               options: .storageModePrivate) else {
+      return nil
+    }
+    reduceTilesBuffer.label = "LiquidLight.reduceTiles"
+    lambdaBuffer.label = "LiquidLight.lambda"
+    self.reduceTilesBuffer = reduceTilesBuffer
+    self.lambdaBuffer = lambdaBuffer
 
     self.device = device
     self.commandQueue = commandQueue
@@ -159,64 +142,17 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     self.uniformBuffers = uniformBuffers
     self.currentUniformBuffer = firstUniformBuffer
     self.argumentTables = argumentTables
+    self.seedPipeline = pipelines.seed
+    self.advectPipeline = pipelines.advect
+    self.reduceTilesPipeline = pipelines.reduceTiles
+    self.reduceFinalPipeline = pipelines.reduceFinal
+    self.relaxPipeline = pipelines.relax
     self.renderPipeline = pipelines.render
     self.feedbackPipeline = pipelines.feedback
     self.blurPipeline = pipelines.blur
     self.residencySet = residencySet
 
     configureResidencySet()
-  }
-
-  func warmUpGPU() {
-    let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm,
-      width: 256,
-      height: 256,
-      mipmapped: false
-    )
-    desc.usage = [.shaderRead, .shaderWrite]
-    desc.storageMode = .private
-
-    let historyDesc = Self.historyTextureDescriptor(width: 256, height: 256)
-
-    guard let dummyA = device.makeTexture(descriptor: desc),
-          let dummyB = device.makeTexture(descriptor: desc),
-          let dummyHistory = device.makeTexture(descriptor: historyDesc) else { return }
-    residencySet.addAllocation(dummyA)
-    residencySet.addAllocation(dummyB)
-    residencySet.addAllocation(dummyHistory)
-    residencySet.commit()
-
-    let warmupFrame: UInt64 = 1
-    let frameIndex = Int(warmupFrame % Self.maxFramesInFlight)
-    let allocator = commandAllocators[frameIndex]
-    currentUniformBuffer = uniformBuffers[frameIndex]
-    allocator.reset()
-    uniformOffset = 0
-
-    commandBuffer.beginCommandBuffer(allocator: allocator)
-    commandBuffer.useResidencySet(residencySet)
-    guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
-    encoder.setArgumentTable(argumentTable)
-
-    renderLiquidLight(encoder: encoder, output: dummyA, audio: .zero)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    renderFeedback(encoder: encoder, render: dummyA, historyIn: dummyHistory,
-                   historyOut: dummyHistory, audio: .zero, historyValid: false)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-    renderBlur(encoder: encoder, input: dummyHistory, output: dummyB, audio: .zero)
-
-    encoder.endEncoding()
-    commandBuffer.endCommandBuffer()
-    commandQueue.commit([commandBuffer])
-    commandQueue.signalEvent(sharedEvent, value: warmupFrame)
-    frameNumber = warmupFrame
-
-    sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 1000)
-    residencySet.removeAllocation(dummyA)
-    residencySet.removeAllocation(dummyB)
-    residencySet.removeAllocation(dummyHistory)
-    residencySet.commit()
   }
 
   func prepareForResume() {
@@ -228,76 +164,73 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     envelope = .zero
     slowEnvelope = .zero
     smoothedBass = 0
+    lastPressBass = 0
     smoothedSpeed = 0.25
   }
 
-  static func historyTextureDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
-    let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .rgba16Float,
-      width: width,
-      height: height,
-      mipmapped: false
-    )
-    desc.usage = [.shaderRead, .shaderWrite]
-    desc.storageMode = .private
-    return desc
-  }
-
-  private func drainPendingTextureReleases() {
-    drainPendingReleases(&pendingTextureReleases)
-  }
-
-  private func ensureIntermediateTextures(width: Int, height: Int) -> Bool {
-    if width == lastDrawableWidth
-        && height == lastDrawableHeight
-        && intermediateTexture != nil
-        && historyTextures.count == 2
-        && finalTextures.count == 2 {
-      return true
+  private func ensureFrameTextures(width: Int, height: Int) -> FrameTextures? {
+    if let existing = frameTextures, width == lastDrawableWidth, height == lastDrawableHeight {
+      return existing
     }
 
-    if let old = intermediateTexture {
-      pendingTextureReleases.append((frame: frameNumber, texture: old))
-    }
-    for old in historyTextures + finalTextures {
+    for old in frameTextures?.all ?? [] {
       pendingTextureReleases.append((frame: frameNumber, texture: old))
     }
 
-    let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm,
-      width: width,
-      height: height,
-      mipmapped: false
-    )
-    desc.usage = [.shaderRead, .shaderWrite]
-    desc.storageMode = .private
-    let historyDesc = Self.historyTextureDescriptor(width: width, height: height)
-
-    guard let interTex = device.makeTexture(descriptor: desc),
-          let historyA = device.makeTexture(descriptor: historyDesc),
-          let historyB = device.makeTexture(descriptor: historyDesc),
-          let finalTexA = device.makeTexture(descriptor: desc),
-          let finalTexB = device.makeTexture(descriptor: desc) else {
-      intermediateTexture = nil
-      historyTextures = []
-      finalTextures = []
+    let simW = max(32, Int((Float(width) * Self.simScale / Self.renderScale).rounded()))
+    let simH = max(32, Int((Float(height) * Self.simScale / Self.renderScale).rounded()))
+    guard let textures = makeFrameTextures(width: width, height: height,
+                                           simWidth: simW, simHeight: simH) else {
+      frameTextures = nil
       lastDrawableWidth = 0
       lastDrawableHeight = 0
-      return false
+      return nil
     }
 
-    for tex in [interTex, historyA, historyB, finalTexA, finalTexB] {
-      residencySet.addAllocation(tex)
-    }
+    for tex in textures.all { residencySet.addAllocation(tex) }
     residencySet.commit()
 
-    intermediateTexture = interTex
-    historyTextures = [historyA, historyB]
-    finalTextures = [finalTexA, finalTexB]
+    frameTextures = textures
     historyValid = false
+    simValid = false
+    simWidth = simW
+    simHeight = simH
     lastDrawableWidth = width
     lastDrawableHeight = height
-    return true
+    return textures
+  }
+
+  private func encodeSimulation(encoder: any MTL4ComputeCommandEncoder,
+                                textures: FrameTextures,
+                                audio: SIMD3<Float>) -> MTLTexture {
+    var src = textures.phase[0]
+    var dst = textures.phase[1]
+    if !simValid {
+      seedPhase(encoder: encoder, phaseOut: src)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+      simValid = true
+    }
+
+    advectPhase(encoder: encoder, phaseIn: src, phaseOut: dst, audio: audio)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    swap(&src, &dst)
+
+    reduceMassMultiplier(encoder: encoder, phase: src)
+
+    let relaxSteps = max(4, min(14, Int((dt * 60 * 7).rounded())))
+    for _ in 0..<relaxSteps {
+      relaxPhase(encoder: encoder, phaseIn: src, phaseOut: dst)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+      swap(&src, &dst)
+    }
+
+    if src !== textures.phase[0] {
+      frameTextures = FrameTextures(intermediate: textures.intermediate,
+                                    history: textures.history,
+                                    final: textures.final,
+                                    phase: [src, dst])
+    }
+    return src
   }
 
   func encodeFrame(bass: Float,
@@ -305,27 +238,28 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
                    high: Float,
                    drawableWidth: Int,
                    drawableHeight: Int) -> MTLTexture? {
-    drainPendingTextureReleases()
+    drainPendingReleases(&pendingTextureReleases)
 
     let smoothed = processAudio(bass: bass, mid: mid, high: high)
 
     let width = max(1, Int((Float(drawableWidth) * Self.renderScale).rounded()))
     let height = max(1, Int((Float(drawableHeight) * Self.renderScale).rounded()))
-    guard ensureIntermediateTextures(width: width, height: height),
-          let intermediateTex = intermediateTexture else {
+    guard let textures = ensureFrameTextures(width: width, height: height) else {
       return nil
     }
 
     guard let encoder = beginFrame() else { return nil }
     let parity = Int(frameNumber & 1)
-    let finalTex = finalTextures[parity]
-    let historyIn = historyTextures[1 - parity]
-    let historyOut = historyTextures[parity]
+    let finalTex = textures.final[parity]
+    let historyIn = textures.history[1 - parity]
+    let historyOut = textures.history[parity]
 
-    renderLiquidLight(encoder: encoder, output: intermediateTex, audio: smoothed)
+    let phase = encodeSimulation(encoder: encoder, textures: textures, audio: smoothed)
+
+    renderLiquidLight(encoder: encoder, output: textures.intermediate, phase: phase, audio: smoothed)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    renderFeedback(encoder: encoder, render: intermediateTex,
+    renderFeedback(encoder: encoder, render: textures.intermediate,
                    historyIn: historyIn, historyOut: historyOut,
                    audio: smoothed, historyValid: historyValid)
     historyValid = true

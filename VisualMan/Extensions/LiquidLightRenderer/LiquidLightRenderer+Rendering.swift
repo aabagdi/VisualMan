@@ -21,6 +21,7 @@ extension LiquidLightRenderer {
         envelope = .zero
         slowEnvelope = .zero
         smoothedBass = 0
+        lastPressBass = 0
         smoothedSpeed = 0.25
         if gap > 2.0 {
           resumeFadeIn = 0
@@ -39,16 +40,31 @@ extension LiquidLightRenderer {
     smoothedBass += (bass - smoothedBass) * bassA
 
     let transient = bass > smoothedBass * 1.6 && bass > bassBaseline
-    let cooldownOK = (wallClock - lastDropWallTime) > 0.35
+    let cooldownOK = (wallClock - lastDropWallTime) > 0.45
     if transient && cooldownOK && !inResumeGrace {
       lastDropWallTime = wallClock
-      dropHueCounter = (dropHueCounter + 0.37).truncatingRemainder(dividingBy: 1.0)
-      let seed = Float(frameNumber) * 0.6180339
-      let x = sin(seed * 12.9) * 0.4
-      let y = cos(seed * 7.3) * 0.35
-      drops[nextDropSlot] = SIMD4<Float>(x, y, time, dropHueCounter)
-      nextDropSlot = (nextDropSlot + 1) % 4
+      emitDrop(size: 0.045 + 0.025 * hashUnit(3.3))
+    } else if wallClock >= nextDripWallTime && !inResumeGrace {
+      let size = 0.010 + 0.018 * hashUnit(5.1)
+      emitDrop(size: hashUnit(9.9) < 0.35 ? -size : size)
+      nextDripWallTime = wallClock + 0.8 + 1.0 * hashUnit(7.7)
     }
+  }
+
+  private func hashUnit(_ salt: Float) -> Float {
+    let v = sin(Float(frameNumber) * 0.6180339 * salt * 12.9898) * 43758.5453
+    return v - v.rounded(.down)
+  }
+
+  private func emitDrop(size: Float) {
+    let longSide = Float(max(simWidth, simHeight, 1))
+    let halfExtent = SIMD2<Float>(Float(simWidth), Float(simHeight)) / longSide * 0.5
+    let x = (hashUnit(1.7) - 0.5) * 1.8 * halfExtent.x
+    let y = (hashUnit(2.9) - 0.5) * 1.7 * halfExtent.y
+    let layer = Float(Int(hashUnit(4.3) * 4) % 4)
+    drops[nextDropSlot] = SIMD4<Float>(x, y, wallClock, layer)
+    dropSizes[nextDropSlot] = size
+    nextDropSlot = (nextDropSlot + 1) % 4
   }
 
   func processAudio(bass: Float, mid: Float, high: Float) -> SIMD3<Float> {
@@ -73,12 +89,13 @@ extension LiquidLightRenderer {
     slowEnvelope += (input - slowEnvelope) * slowA
 
     let audioEnergy = slowEnvelope.sum() / 3.0
-    let targetSpeed = 0.25 + audioEnergy * 0.6
-    let speedA = 1 - exp(-dt / (targetSpeed > smoothedSpeed ? 0.18 : 0.25))
+    let targetSpeed = 0.14 + audioEnergy * 0.35
+    let speedA = 1 - exp(-dt / (targetSpeed > smoothedSpeed ? 0.3 : 0.5))
     smoothedSpeed += (targetSpeed - smoothedSpeed) * speedA
-    let timeStep = dt * smoothedSpeed
-    time += timeStep
-    flowPhase += timeStep * (0.05 + envelope.y * 0.02)
+    time += dt * smoothedSpeed
+
+    tiltPhase += dt * (0.14 + audioEnergy * 0.2)
+    tiltAxis += dt * 0.04
 
     detectAndEmitDrop(bass: bass, inResumeGrace: inResumeGrace)
 
@@ -90,64 +107,190 @@ extension LiquidLightRenderer {
     return envelope * fade
   }
 
-  func renderLiquidLight(encoder: any MTL4ComputeCommandEncoder,
-                         output: MTLTexture,
-                         audio: SIMD3<Float>) {
-    encoder.setComputePipelineState(renderPipeline)
-    argumentTable.setTexture(output.gpuResourceID, index: 0)
+  private var simSize: SIMD2<Float> {
+    SIMD2<Float>(Float(simWidth), Float(simHeight))
+  }
 
-    let colorShift = time * 0.015 + audio.y * 0.08
-
-    func computeDrop(_ d: SIMD4<Float>) -> (precomp: SIMD4<Float>, color: SIMD4<Float>) {
-      let age = time - d.z
-      let alive: Float = (d.z >= 0 && age >= 0 && age <= 4.0) ? 1.0 : 0.0
-      let ringRadius = age * 0.35
-      let tNorm = max(0, min(1, age * 0.25))
-      let smoothFade = max(0, 1.0 - tNorm * tNorm * (3.0 - 2.0 * tNorm))
-      let easeIn = max(0, min(1, age / 0.1))
-      let fade = smoothFade * easeIn * easeIn * (3.0 - 2.0 * easeIn)
-      let tint = Self.liquidColor(id: d.w, t: colorShift)
-      return (SIMD4<Float>(ringRadius, fade, alive, 0),
-              SIMD4<Float>(tint.x, tint.y, tint.z, 0))
-    }
-    let r0 = computeDrop(drops[0])
-    let r1 = computeDrop(drops[1])
-    let r2 = computeDrop(drops[2])
-    let r3 = computeDrop(drops[3])
-
-    let params = LiquidLightParams(
-      time: time, bass: audio.x, mid: audio.y, high: audio.z,
-      flowPhase: flowPhase,
-      drops: LiquidLightDrops(d0: drops[0], d1: drops[1], d2: drops[2], d3: drops[3]),
-      dropPrecomp: LiquidLightDropPrecomp(p0: r0.precomp, p1: r1.precomp,
-                                          p2: r2.precomp, p3: r3.precomp),
-      dropColors: LiquidLightDropColors(c0: r0.color, c1: r1.color,
-                                        c2: r2.color, c3: r3.color)
-    )
-    argumentTable.setAddress(writeUniform(params), index: 0)
-
+  private func dispatch(_ encoder: any MTL4ComputeCommandEncoder, width: Int, height: Int) {
     let tg = MTLSize(width: 16, height: 16, depth: 1)
-    let grid = MTLSize(width: output.width, height: output.height, depth: 1)
+    let grid = MTLSize(width: width, height: height, depth: 1)
     encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
   }
 
-  static func liquidColor(id: Float, t: Float) -> SIMD3<Float> {
-    var h = (id * 5.0 + t).truncatingRemainder(dividingBy: 1.0)
-    if h < 0 { h += 1 }
-    func mix(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ u: Float) -> SIMD3<Float> { a + (b - a) * u }
-    if h < 0.18 {
-      return mix(SIMD3(0.6, 0.0, 0.02), SIMD3(0.85, 0.02, 0.1), h / 0.18)
-    } else if h < 0.35 {
-      return mix(SIMD3(0.85, 0.02, 0.1), SIMD3(0.6, 0.0, 0.55), (h - 0.18) / 0.17)
-    } else if h < 0.52 {
-      return mix(SIMD3(0.6, 0.0, 0.55), SIMD3(0.02, 0.06, 0.7), (h - 0.35) / 0.17)
-    } else if h < 0.68 {
-      return mix(SIMD3(0.02, 0.06, 0.7), SIMD3(0.0, 0.5, 0.6), (h - 0.52) / 0.16)
-    } else if h < 0.84 {
-      return mix(SIMD3(0.0, 0.5, 0.6), SIMD3(0.7, 0.35, 0.0), (h - 0.68) / 0.16)
-    } else {
-      return mix(SIMD3(0.7, 0.35, 0.0), SIMD3(0.6, 0.0, 0.02), (h - 0.84) / 0.16)
+  func seedPhase(encoder: any MTL4ComputeCommandEncoder, phaseOut: MTLTexture) {
+    encoder.setComputePipelineState(seedPipeline)
+    argumentTable.setTexture(phaseOut.gpuResourceID, index: 0)
+    let params = LiquidSeedParams(simSize: simSize, eps: Self.interfaceEps, threshold: 0.5)
+    argumentTable.setAddress(writeUniform(params), index: 0)
+    dispatch(encoder, width: phaseOut.width, height: phaseOut.height)
+  }
+
+  func advectPhase(encoder: any MTL4ComputeCommandEncoder,
+                   phaseIn: MTLTexture,
+                   phaseOut: MTLTexture,
+                   audio: SIMD3<Float>) {
+    encoder.setComputePipelineState(advectPipeline)
+    argumentTable.setTexture(phaseIn.gpuResourceID, index: 0)
+    argumentTable.setTexture(phaseOut.gpuResourceID, index: 1)
+
+    let energy = slowEnvelope.sum() / 3.0
+    let axis = SIMD2<Float>(cos(tiltAxis), sin(tiltAxis))
+    let lean = SIMD2<Float>(cos(tiltAxis * 0.31 + 1.2), sin(tiltAxis * 0.31 + 1.2))
+    let rock = sin(tiltPhase)
+    let tilt = axis * rock * (0.26 + energy * 0.55) + lean * 0.06
+
+    let pressDelta = audio.x - lastPressBass
+    lastPressBass = audio.x
+    let press = max(-5, min(5, pressDelta * 14))
+
+    func dropState(_ i: Int) -> SIMD4<Float> {
+      let d = drops[i]
+      let age = wallClock - d.z
+      let alive: Float = (d.z >= 0 && age >= 0 && age <= 1.6) ? 1.0 : 0.0
+      let spread = min(1, age / 0.9)
+      let finalRadius = abs(dropSizes[i])
+      let longSide = Float(max(simWidth, simHeight))
+      let radius = (finalRadius * 0.2 + finalRadius * 0.8 * spread * (2 - spread)) * longSide
+      let sign: Float = dropSizes[i] < 0 ? -1 : 1
+      let inject: Float = age <= 1.0 ? sign : 0.0
+      let push = 0.9 * (finalRadius / 0.06) * exp(-age / 0.5)
+      return SIMD4<Float>(radius, inject, push, alive)
     }
+
+    let params = LiquidAdvectParams(
+      simSize: simSize,
+      tilt: tilt,
+      frames: dt * 60,
+      time: time,
+      swirl: 0.06 + audio.y * 0.18,
+      press: press,
+      eps: Self.interfaceEps,
+      drops: LiquidLightDrops(d0: drops[0], d1: drops[1], d2: drops[2], d3: drops[3]),
+      dropState: LiquidLightDropState(s0: dropState(0), s1: dropState(1),
+                                      s2: dropState(2), s3: dropState(3))
+    )
+    argumentTable.setAddress(writeUniform(params), index: 0)
+    dispatch(encoder, width: phaseOut.width, height: phaseOut.height)
+  }
+
+  func reduceMassMultiplier(encoder: any MTL4ComputeCommandEncoder, phase: MTLTexture) {
+    let tile = Self.reduceTileSize
+    let tilesX = (phase.width + tile - 1) / tile
+    let tilesY = (phase.height + tile - 1) / tile
+    let tileCount = tilesX * tilesY
+    guard tileCount <= Self.maxReduceTiles else {
+      assertionFailure("Liquid Light sim too large for the reduction scratch buffer")
+      return
+    }
+
+    encoder.setComputePipelineState(reduceTilesPipeline)
+    argumentTable.setTexture(phase.gpuResourceID, index: 0)
+    argumentTable.setAddress(reduceTilesBuffer.gpuAddress, index: 1)
+    encoder.dispatchThreadgroups(threadgroupsPerGrid: MTLSize(width: tilesX, height: tilesY, depth: 1),
+                                 threadsPerThreadgroup: MTLSize(width: tile, height: tile, depth: 1))
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    encoder.setComputePipelineState(reduceFinalPipeline)
+    let params = LiquidReduceParams(tileCount: UInt32(tileCount),
+                                    invCellCount: 1 / Float(phase.width * phase.height))
+    argumentTable.setAddress(writeUniform(params), index: 0)
+    argumentTable.setAddress(lambdaBuffer.gpuAddress, index: 2)
+    encoder.dispatchThreadgroups(threadgroupsPerGrid: MTLSize(width: 1, height: 1, depth: 1),
+                                 threadsPerThreadgroup: MTLSize(width: 256, height: 1, depth: 1))
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+  }
+
+  func relaxPhase(encoder: any MTL4ComputeCommandEncoder,
+                  phaseIn: MTLTexture,
+                  phaseOut: MTLTexture) {
+    encoder.setComputePipelineState(relaxPipeline)
+    argumentTable.setTexture(phaseIn.gpuResourceID, index: 0)
+    argumentTable.setTexture(phaseOut.gpuResourceID, index: 1)
+    let params = LiquidRelaxParams(dt: Self.relaxStep, mobility: Self.mobility,
+                                   eps2: Self.interfaceEps * Self.interfaceEps,
+                                   acMobility: Self.acMobility)
+    argumentTable.setAddress(writeUniform(params), index: 0)
+    argumentTable.setAddress(lambdaBuffer.gpuAddress, index: 1)
+    dispatch(encoder, width: phaseOut.width, height: phaseOut.height)
+  }
+
+  func renderLiquidLight(encoder: any MTL4ComputeCommandEncoder,
+                         output: MTLTexture,
+                         phase: MTLTexture,
+                         audio: SIMD3<Float>) {
+    encoder.setComputePipelineState(renderPipeline)
+    argumentTable.setTexture(output.gpuResourceID, index: 0)
+    argumentTable.setTexture(phase.gpuResourceID, index: 1)
+
+    let params = LiquidLightParams(
+      time: time, bass: audio.x, mid: audio.y, high: audio.z,
+      simSize: simSize, eps: Self.interfaceEps,
+      apertureRadius: Self.apertureRadius,
+      plate: currentPlate()
+    )
+    argumentTable.setAddress(writeUniform(params), index: 0)
+    dispatch(encoder, width: output.width, height: output.height)
+  }
+
+  static let halogen = SIMD4<Float>(1.0, 0.94, 0.82, 0)
+
+  static let plates: [LiquidLightPlate] = [
+    LiquidLightPlate(dyeA: SIMD4(0.93, 0.07, 0.09, 0), dyeB: SIMD4(1.0, 0.84, 0.12, 0),
+                     dyeC: SIMD4(0.12, 0.34, 0.95, 0), dyeD: SIMD4(0.92, 0.10, 0.55, 0),
+                     water: SIMD4(0.40, 0.72, 1.0, 0.9), lamp: halogen),
+    LiquidLightPlate(dyeA: SIMD4(0.92, 0.09, 0.55, 0), dyeB: SIMD4(1.0, 0.50, 0.08, 0),
+                     dyeC: SIMD4(0.52, 0.14, 0.93, 0), dyeD: SIMD4(0.10, 0.78, 0.93, 0),
+                     water: SIMD4(0.12, 0.18, 0.80, 0.9), lamp: halogen),
+    LiquidLightPlate(dyeA: SIMD4(1.0, 0.80, 0.10, 0), dyeB: SIMD4(0.14, 0.78, 0.18, 0),
+                     dyeC: SIMD4(0.93, 0.08, 0.08, 0), dyeD: SIMD4(1.0, 0.46, 0.08, 0),
+                     water: SIMD4(0.90, 0.14, 0.08, 0.92), lamp: halogen),
+    LiquidLightPlate(dyeA: SIMD4(0.10, 0.78, 0.93, 0), dyeB: SIMD4(0.95, 0.10, 0.50, 0),
+                     dyeC: SIMD4(1.0, 0.90, 0.12, 0), dyeD: SIMD4(0.20, 0.85, 0.25, 0),
+                     water: SIMD4(0.50, 0.28, 0.92, 0.9), lamp: halogen),
+    LiquidLightPlate(dyeA: SIMD4(0.93, 0.07, 0.10, 0), dyeB: SIMD4(0.55, 0.14, 0.90, 0),
+                     dyeC: SIMD4(1.0, 0.46, 0.08, 0), dyeD: SIMD4(0.10, 0.70, 0.64, 0),
+                     water: SIMD4(0.68, 0.48, 1.0, 0.9), lamp: halogen),
+    LiquidLightPlate(dyeA: SIMD4(1.0, 0.50, 0.08, 0), dyeB: SIMD4(0.96, 0.14, 0.45, 0),
+                     dyeC: SIMD4(0.10, 0.70, 0.64, 0), dyeD: SIMD4(1.0, 0.86, 0.15, 0),
+                     water: SIMD4(0.32, 0.08, 0.62, 0.9), lamp: halogen),
+  ]
+
+  static let plateDuration: Float = 60
+  static let plateCrossfade: Float = 10
+  static let hueDriftRate: Float = 0.05
+
+  func currentPlate() -> LiquidLightPlate {
+    let plates = Self.plates
+    let cycle = wallClock / Self.plateDuration
+    let index = Int(cycle.rounded(.down)) % plates.count
+    let next = (index + 1) % plates.count
+    let frac = cycle - cycle.rounded(.down)
+    let fadeStart = 1 - Self.plateCrossfade / Self.plateDuration
+    let u = max(0, min(1, (frac - fadeStart) / (1 - fadeStart)))
+    let blend = u * u * (3 - 2 * u)
+
+    let a = plates[index], b = plates[next]
+    let hue = wallClock * Self.hueDriftRate
+    func mix(_ x: SIMD4<Float>, _ y: SIMD4<Float>) -> SIMD4<Float> {
+      Self.rotateHue(x + (y - x) * blend, by: hue)
+    }
+    return LiquidLightPlate(dyeA: mix(a.dyeA, b.dyeA), dyeB: mix(a.dyeB, b.dyeB),
+                            dyeC: mix(a.dyeC, b.dyeC), dyeD: mix(a.dyeD, b.dyeD),
+                            water: mix(a.water, b.water),
+                            lamp: a.lamp + (b.lamp - a.lamp) * blend)
+  }
+
+  static func rotateHue(_ c: SIMD4<Float>, by angle: Float) -> SIMD4<Float> {
+    let y = 0.299 * c.x + 0.587 * c.y + 0.114 * c.z
+    let i = 0.596 * c.x - 0.274 * c.y - 0.322 * c.z
+    let q = 0.211 * c.x - 0.523 * c.y + 0.312 * c.z
+    let cs = cos(angle), sn = sin(angle)
+    let i2 = i * cs - q * sn
+    let q2 = i * sn + q * cs
+    let r = y + 0.956 * i2 + 0.621 * q2
+    let g = y - 0.272 * i2 - 0.647 * q2
+    let b = y - 1.106 * i2 + 1.703 * q2
+    return SIMD4<Float>(max(0.02, min(1, r)), max(0.02, min(1, g)), max(0.02, min(1, b)), c.w)
   }
 
   func renderFeedback(encoder: any MTL4ComputeCommandEncoder,
@@ -165,10 +308,7 @@ extension LiquidLightRenderer {
     let params = FeedbackParams(dt: dt, time: time, bass: audio.x,
                                 historyValid: historyValid ? 1 : 0)
     argumentTable.setAddress(writeUniform(params), index: 0)
-
-    let tg = MTLSize(width: 16, height: 16, depth: 1)
-    let grid = MTLSize(width: historyOut.width, height: historyOut.height, depth: 1)
-    encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
+    dispatch(encoder, width: historyOut.width, height: historyOut.height)
   }
 
   func renderBlur(encoder: any MTL4ComputeCommandEncoder,
@@ -181,17 +321,16 @@ extension LiquidLightRenderer {
     argumentTable.setTexture(output.gpuResourceID, index: 1)
 
     let blurParams = BlurParams(
-      innerRadius: 0.45 + audio.y * 0.05,
-      outerRadius: 1.15,
-      maxBlurRadius: 8.0 + audio.y * 2.0,
+      innerRadius: 0.55 + audio.y * 0.05,
+      outerRadius: 1.2,
+      maxBlurRadius: 6.0 + audio.y * 2.0,
       bass: audio.x,
-      mid: audio.y
+      mid: audio.y,
+      bloomRadius: 18.0,
+      bloomStrength: 0.28 + audio.x * 0.1
     )
     argumentTable.setAddress(writeUniform(blurParams), index: 0)
-
-    let tg = MTLSize(width: 16, height: 16, depth: 1)
-    let grid = MTLSize(width: output.width, height: output.height, depth: 1)
-    encoder.dispatchThreads(threadsPerGrid: grid, threadsPerThreadgroup: tg)
+    dispatch(encoder, width: output.width, height: output.height)
   }
 }
 

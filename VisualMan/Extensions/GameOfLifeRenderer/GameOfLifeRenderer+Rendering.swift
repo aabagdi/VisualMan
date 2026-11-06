@@ -45,17 +45,6 @@ extension GameOfLifeRenderer {
     return displayTex
   }
 
-  func commitFrame(drawable: CAMetalDrawable) {
-    commandBuffer.endCommandBuffer()
-    commandQueue.waitForDrawable(drawable)
-    commandQueue.commit([commandBuffer])
-    commandQueue.signalEvent(sharedEvent, value: frameNumber)
-    commandQueue.signalDrawable(drawable)
-    drawable.present()
-
-    advanceSimulationIfNeeded()
-  }
-
   func commitCompute() {
     commandBuffer.endCommandBuffer()
     commandQueue.commit([commandBuffer])

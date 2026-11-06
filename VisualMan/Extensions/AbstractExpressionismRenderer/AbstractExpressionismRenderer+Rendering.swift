@@ -129,7 +129,7 @@ extension AbstractExpressionismRenderer {
     let colorMid: MTLTexture, hwMid: MTLTexture
     let velocityIn: MTLTexture, velocityOut: MTLTexture
     let dryColorIn: MTLTexture, dryColorOut: MTLTexture, dryColorMid: MTLTexture
-    let substrateIn: MTLTexture, substrateOut: MTLTexture
+    let substrateIn: MTLTexture, substrateOut: MTLTexture, substrateMid: MTLTexture
     let display: MTLTexture
   }
 
@@ -148,6 +148,7 @@ extension AbstractExpressionismRenderer {
           let cMid  = colorMid,
           let hwMid = heightWetMid,
           let dcMid = dryColorMid,
+          let sMid  = substrateMid,
           displayTextures.count == 2 else { return nil }
     let disp = displayTextures[displayIsA ? 0 : 1]
     return PingPongTextures(colorIn: cIn, colorOut: cOut,
@@ -156,7 +157,7 @@ extension AbstractExpressionismRenderer {
                             velocityIn: vIn, velocityOut: vOut,
                             dryColorIn: dcIn, dryColorOut: dcOut,
                             dryColorMid: dcMid,
-                            substrateIn: sIn, substrateOut: sOut,
+                            substrateIn: sIn, substrateOut: sOut, substrateMid: sMid,
                             display: disp)
   }
 
@@ -224,7 +225,7 @@ extension AbstractExpressionismRenderer {
                   hwIn: tex.hwMid, hwOut: tex.hwOut,
                   velocityIn: tex.velocityOut,
                   dryColorIn: tex.dryColorMid, dryColorOut: tex.dryColorOut,
-                  substrateIn: tex.substrateOut, substrateOut: tex.substrateOut,
+                  substrateIn: tex.substrateMid, substrateOut: tex.substrateOut,
                   params: pass2Params, strokes: smearStrokes,
                   tileMap: smearTileMap,
                   region: smearRegion)

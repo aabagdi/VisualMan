@@ -56,7 +56,7 @@ extension AbstractExpressionismRenderer {
   private func queueCurrentCanvasForRelease(excluding: Set<ObjectIdentifier> = []) {
     for old in [colorA, colorB, heightWetA, heightWetB, colorMid, heightWetMid,
                 velocityA, velocityB,
-                dryColorA, dryColorB, dryColorMid,
+                dryColorA, dryColorB, dryColorMid, substrateMid,
                 substrateA, substrateB, pigmentTexture, materialTexture] {
       if let t = old, !excluding.contains(ObjectIdentifier(t as AnyObject)) {
         pendingTextureReleases.append((frame: frameNumber, texture: t))
@@ -82,6 +82,7 @@ extension AbstractExpressionismRenderer {
     colorMid = nil; heightWetMid = nil
     velocityA = nil; velocityB = nil
     dryColorA = nil; dryColorB = nil; dryColorMid = nil
+    substrateMid = nil
     substrateA = nil; substrateB = nil
     pigmentTexture = nil
     materialTexture = nil
@@ -128,6 +129,7 @@ extension AbstractExpressionismRenderer {
           let dcMid = device.makeTexture(descriptor: dryDesc),
           let sA = device.makeTexture(descriptor: subDesc),
           let sB = device.makeTexture(descriptor: subDesc),
+          let sMid = device.makeTexture(descriptor: subDesc),
           let pig = device.makeTexture(descriptor: colDesc),
           let mat = device.makeTexture(descriptor: colDesc) else {
       clearResampleSources()
@@ -136,7 +138,7 @@ extension AbstractExpressionismRenderer {
     }
 
     for t in [cA, cB, cMid, hwA, hwB, hwMid, vA, vB,
-              dcA, dcB, dcMid, sA, sB, pig, mat] {
+              dcA, dcB, dcMid, sA, sB, sMid, pig, mat] {
       residencySet.addAllocation(t)
     }
 
@@ -144,6 +146,7 @@ extension AbstractExpressionismRenderer {
     heightWetA = hwA; heightWetB = hwB; heightWetMid = hwMid
     velocityA = vA; velocityB = vB
     dryColorA = dcA; dryColorB = dcB; dryColorMid = dcMid
+    substrateMid = sMid
     substrateA = sA; substrateB = sB
     pigmentTexture = pig
     materialTexture = mat
@@ -183,6 +186,7 @@ extension AbstractExpressionismRenderer {
         && heightWetA != nil && heightWetB != nil && heightWetMid != nil
         && velocityA != nil && velocityB != nil
         && dryColorA != nil && dryColorB != nil && dryColorMid != nil
+        && substrateMid != nil
         && substrateA != nil && substrateB != nil && pigmentTexture != nil
         && materialTexture != nil
 
@@ -201,6 +205,8 @@ extension AbstractExpressionismRenderer {
 
     if displayNeedsRebuild {
       guard rebuildDisplayTexture(width: displayWidth, height: displayHeight) else { return false }
+
+      pigmentFullRefreshFrames = max(pigmentFullRefreshFrames, 2)
     }
 
     if canvasNeedsRebuild || displayNeedsRebuild {

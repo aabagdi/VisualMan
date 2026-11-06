@@ -11,41 +11,7 @@ import MetalKit
 import QuartzCore
 import os
 
-final class CAMetalHostView: UIView {
-  override static var layerClass: AnyClass { CAMetalLayer.self }
-  var metalLayer: CAMetalLayer {
-    guard let layer = layer as? CAMetalLayer else {
-      fatalError("CAMetalHostView.layerClass must be CAMetalLayer")
-    }
-    return layer
-  }
-
-  var onWindowAttach: (() -> Void)?
-
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    updateDrawableSize()
-  }
-
-  override func didMoveToWindow() {
-    super.didMoveToWindow()
-    if let window {
-      metalLayer.contentsScale = window.screen.nativeScale
-      updateDrawableSize()
-      onWindowAttach?()
-    }
-  }
-
-  private func updateDrawableSize() {
-    let scale = metalLayer.contentsScale
-    let size = CGSize(width: bounds.width * scale,
-                      height: bounds.height * scale)
-    guard size.width > 0, size.height > 0 else { return }
-    if metalLayer.drawableSize != size {
-      metalLayer.drawableSize = size
-    }
-  }
-}
+private nonisolated let blitLogger = Logger(subsystem: "com.VisualMan", category: "AudioMetalView")
 
 struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   let renderer: R
@@ -92,8 +58,12 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     var audioLevels: [1024 of Float] = .init(repeating: 0.0)
     var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
     private var lastFrameTime: CFTimeInterval = 0
-    private let presentQueue: (any MTLCommandQueue)?
     private let blitPipeline: (any MTLRenderPipelineState)?
+    private let blitArgumentTables: [any MTL4ArgumentTable]
+    private let presentCommandBuffer: (any MTL4CommandBuffer)?
+    private let presentAllocators: [any MTL4CommandAllocator]
+    private let presentEvent: MTLSharedEvent?
+    private var presentCount: UInt64 = 0
 
     nonisolated(unsafe) private var thermalObserver: (any NSObjectProtocol)?
     private var lifecycle: AppLifecycleObserver?
@@ -117,38 +87,13 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     init(renderer: R) {
       self.renderer = renderer
 
-      let blitLogger = Logger(subsystem: "com.VisualMan", category: "AudioMetalView")
-      var pipeline: (any MTLRenderPipelineState)?
-      var queue: (any MTLCommandQueue)?
-      do {
-        guard let library = renderer.device.makeDefaultLibrary() else {
-          blitLogger.error("Failed to create default Metal library for blit pipeline")
-          self.blitPipeline = nil
-          self.presentQueue = nil
-          super.init()
-          return
-        }
-        guard let vertexFn = library.makeFunction(name: "blitVertex"),
-              let fragmentFn = library.makeFunction(name: "blitFragment") else {
-          blitLogger.error("Failed to locate blit shader functions")
-          self.blitPipeline = nil
-          self.presentQueue = nil
-          super.init()
-          return
-        }
-
-        let pipelineDesc = MTLRenderPipelineDescriptor()
-        pipelineDesc.vertexFunction = vertexFn
-        pipelineDesc.fragmentFunction = fragmentFn
-        pipelineDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
-
-        pipeline = try renderer.device.makeRenderPipelineState(descriptor: pipelineDesc)
-        queue = renderer.device.makeCommandQueue()
-      } catch {
-        blitLogger.error("Failed to create blit pipeline: \(error.localizedDescription)")
-      }
-      self.blitPipeline = pipeline
-      self.presentQueue = queue
+      let device = renderer.device
+      let blit = Self.makeBlitResources(device: device)
+      self.blitPipeline = blit.pipeline
+      self.blitArgumentTables = blit.tables
+      self.presentAllocators = Self.makePresentAllocators(device: device)
+      self.presentCommandBuffer = device.makeCommandBuffer()
+      self.presentEvent = device.makeSharedEvent()
 
       super.init()
       currentThermalState = ProcessInfo.processInfo.thermalState
@@ -178,11 +123,13 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       displayLink?.isPaused = background
       if !background {
         renderer.recoverFromStalledGPU()
+        recoverFromStalledPresents()
       }
     }
 
     func attach(view: CAMetalHostView) {
       self.hostView = view
+      renderer.commandQueue.addResidencySet(view.metalLayer.residencySet)
       view.onWindowAttach = { [weak self] in
         self?.startDisplayLinkIfNeeded()
       }
@@ -193,6 +140,10 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
     func detach() {
       hostView?.onWindowAttach = nil
+      if let hostView {
+        presentEvent?.wait(untilSignaledValue: presentCount, timeoutMS: 100)
+        renderer.commandQueue.removeResidencySet(hostView.metalLayer.residencySet)
+      }
       displayLink?.invalidate()
       displayLink = nil
       hostView = nil
@@ -237,11 +188,16 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       let now = CACurrentMediaTime()
       if lastFrameTime > 0, now - lastFrameTime > 0.1 {
         renderer.recoverFromStalledGPU()
+        recoverFromStalledPresents()
         renderer.prepareForResume()
       }
       lastFrameTime = now
 
-      guard let blitPipeline, let presentQueue else { return }
+      guard let blitPipeline,
+            !blitArgumentTables.isEmpty,
+            !presentAllocators.isEmpty,
+            presentCommandBuffer != nil,
+            presentEvent != nil else { return }
 
       let intermediateTex = renderer.encodeFrame(
         bass: audioLevels.bassLevel,
@@ -251,78 +207,19 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         drawableHeight: scaledHeight
       )
 
-      let computeFrameValue: UInt64
       if intermediateTex != nil {
         renderer.commitCompute()
-        computeFrameValue = renderer.frameNumber
-      } else {
-        computeFrameValue = 0
       }
 
-      guard let drawable = view.metalLayer.nextDrawable() else { return }
-      let drawableTexture = drawable.texture
+      guard intermediateTex != nil || !hasEverPresented,
+            let drawable = view.metalLayer.nextDrawable() else { return }
 
-      if let intermediateTex {
-        presentFrame(presentQueue: presentQueue,
-                     pipeline: blitPipeline,
-                     intermediateTex: intermediateTex,
-                     drawable: drawable,
-                     drawableTexture: drawableTexture,
-                     waitValue: computeFrameValue)
-        hasEverPresented = true
-      } else if !hasEverPresented {
-        presentClearedDrawable(presentQueue: presentQueue,
-                               drawable: drawable,
-                               drawableTexture: drawableTexture)
-        hasEverPresented = true
-      }
+      presentFrame(pipeline: blitPipeline,
+                   intermediateTex: intermediateTex,
+                   drawable: drawable)
+      hasEverPresented = true
     }
 
-    private func presentFrame(presentQueue: any MTLCommandQueue,
-                              pipeline: any MTLRenderPipelineState,
-                              intermediateTex: MTLTexture,
-                              drawable: CAMetalDrawable,
-                              drawableTexture: MTLTexture,
-                              waitValue: UInt64) {
-      let renderPassDesc = MTLRenderPassDescriptor()
-      renderPassDesc.colorAttachments[0].texture = drawableTexture
-      renderPassDesc.colorAttachments[0].loadAction = .clear
-      renderPassDesc.colorAttachments[0].storeAction = .store
-      renderPassDesc.colorAttachments[0].clearColor = clearColor
-
-      guard let cmdBuf = presentQueue.makeCommandBuffer() else { return }
-      if waitValue > 0 {
-        cmdBuf.encodeWaitForEvent(renderer.sharedEvent, value: waitValue)
-      }
-      guard let encoder = cmdBuf.makeRenderCommandEncoder(descriptor: renderPassDesc) else {
-        cmdBuf.commit()
-        return
-      }
-      encoder.setRenderPipelineState(pipeline)
-      encoder.setFragmentTexture(intermediateTex, index: 0)
-      encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-      encoder.endEncoding()
-      cmdBuf.present(drawable)
-      cmdBuf.commit()
-    }
-
-    private func presentClearedDrawable(presentQueue: any MTLCommandQueue,
-                                        drawable: CAMetalDrawable,
-                                        drawableTexture: MTLTexture) {
-      let renderPassDesc = MTLRenderPassDescriptor()
-      renderPassDesc.colorAttachments[0].texture = drawableTexture
-      renderPassDesc.colorAttachments[0].loadAction = .clear
-      renderPassDesc.colorAttachments[0].storeAction = .store
-      renderPassDesc.colorAttachments[0].clearColor = clearColor
-
-      guard let cmdBuf = presentQueue.makeCommandBuffer(),
-            let encoder = cmdBuf.makeRenderCommandEncoder(descriptor: renderPassDesc) else {
-        return
-      }
-      encoder.endEncoding()
-      cmdBuf.present(drawable)
-      cmdBuf.commit()
-    }
   }
 }
 
@@ -353,6 +250,113 @@ extension AudioCAMetalLayerView.Coordinator {
       drawableScaleFactor = 1.0
     }
     displayLink?.preferredFrameRateRange = makeFrameRateRange()
+  }
+}
+
+// MARK: - Present pass
+
+extension AudioCAMetalLayerView.Coordinator {
+  private static func makeBlitResources(device: MTLDevice)
+  -> (pipeline: (any MTLRenderPipelineState)?, tables: [any MTL4ArgumentTable]) {
+    guard let library = device.makeDefaultLibrary() else {
+      blitLogger.error("Failed to create default Metal library for blit pipeline")
+      return (nil, [])
+    }
+    do {
+      let compiler = try device.makeCompiler(descriptor: MTL4CompilerDescriptor())
+
+      let vertexDesc = MTL4LibraryFunctionDescriptor()
+      vertexDesc.name = "blitVertex"
+      vertexDesc.library = library
+
+      let fragmentDesc = MTL4LibraryFunctionDescriptor()
+      fragmentDesc.name = "blitFragment"
+      fragmentDesc.library = library
+
+      let pipelineDesc = MTL4RenderPipelineDescriptor()
+      pipelineDesc.vertexFunctionDescriptor = vertexDesc
+      pipelineDesc.fragmentFunctionDescriptor = fragmentDesc
+      pipelineDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
+      let pipeline = try compiler.makeRenderPipelineState(descriptor: pipelineDesc)
+
+      let tableDesc = MTL4ArgumentTableDescriptor()
+      tableDesc.maxTextureBindCount = 1
+      var tables = [any MTL4ArgumentTable]()
+      for _ in 0..<R.maxFramesInFlight {
+        tables.append(try device.makeArgumentTable(descriptor: tableDesc))
+      }
+      return (pipeline, tables)
+    } catch {
+      blitLogger.error("Failed to create blit pipeline: \(error.localizedDescription)")
+      return (nil, [])
+    }
+  }
+
+  private static func makePresentAllocators(device: MTLDevice) -> [any MTL4CommandAllocator] {
+    var allocators = [any MTL4CommandAllocator]()
+    for _ in 0..<R.maxFramesInFlight {
+      guard let allocator = device.makeCommandAllocator() else {
+        blitLogger.error("Failed to create present command allocators")
+        return []
+      }
+      allocators.append(allocator)
+    }
+    return allocators
+  }
+
+  private func recoverFromStalledPresents() {
+    guard let presentEvent, presentEvent.signaledValue < presentCount else { return }
+    presentEvent.wait(untilSignaledValue: presentCount, timeoutMS: 250)
+    if presentEvent.signaledValue < presentCount {
+      presentEvent.signaledValue = presentCount
+    }
+  }
+
+  private func presentFrame(pipeline: any MTLRenderPipelineState,
+                            intermediateTex: MTLTexture?,
+                            drawable: CAMetalDrawable) {
+    guard let presentCommandBuffer, let presentEvent else { return }
+    let queue = renderer.commandQueue
+    let inFlight = R.maxFramesInFlight
+
+    let nextPresent = presentCount + 1
+    if nextPresent > inFlight {
+      let waitValue = nextPresent - inFlight
+      if presentEvent.signaledValue < waitValue {
+        presentEvent.wait(untilSignaledValue: waitValue, timeoutMS: 16)
+        guard presentEvent.signaledValue >= waitValue else { return }
+      }
+    }
+    presentCount = nextPresent
+    let slot = Int(presentCount % inFlight)
+    let allocator = presentAllocators[slot]
+    allocator.reset()
+
+    let renderPassDesc = MTL4RenderPassDescriptor()
+    renderPassDesc.colorAttachments[0].texture = drawable.texture
+    renderPassDesc.colorAttachments[0].loadAction = .clear
+    renderPassDesc.colorAttachments[0].storeAction = .store
+    renderPassDesc.colorAttachments[0].clearColor = clearColor
+
+    presentCommandBuffer.beginCommandBuffer(allocator: allocator)
+    if let encoder = presentCommandBuffer.makeRenderCommandEncoder(descriptor: renderPassDesc) {
+      if let intermediateTex {
+        encoder.barrier(afterQueueStages: .dispatch, beforeStages: .fragment)
+        encoder.setRenderPipelineState(pipeline)
+        let table = blitArgumentTables[slot]
+        table.setTexture(intermediateTex.gpuResourceID, index: 0)
+        encoder.setArgumentTable(table, stages: .fragment)
+        encoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 3)
+      }
+      encoder.endEncoding()
+    }
+    presentCommandBuffer.endCommandBuffer()
+
+    queue.waitForDrawable(drawable)
+    queue.commit([presentCommandBuffer])
+    queue.signalDrawable(drawable)
+    queue.signalEvent(presentEvent, value: presentCount)
+    drawable.present()
   }
 }
 

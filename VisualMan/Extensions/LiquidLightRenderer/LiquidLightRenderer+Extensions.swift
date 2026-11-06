@@ -11,6 +11,11 @@ import os
 
 extension LiquidLightRenderer {
   struct Pipelines {
+    let seed: MTLComputePipelineState
+    let advect: MTLComputePipelineState
+    let reduceTiles: MTLComputePipelineState
+    let reduceFinal: MTLComputePipelineState
+    let relax: MTLComputePipelineState
     let render: MTLComputePipelineState
     let feedback: MTLComputePipelineState
     let blur: MTLComputePipelineState
@@ -26,19 +31,27 @@ extension LiquidLightRenderer {
       Self.makePipeline(name, library: library, compiler: compiler)
     }
 
-    guard let renderPipeline = makePipeline("liquidLightRender"),
+    guard let seedPipeline = makePipeline("liquidSimSeed"),
+          let advectPipeline = makePipeline("liquidSimAdvect"),
+          let reduceTilesPipeline = makePipeline("liquidSimReduceTiles"),
+          let reduceFinalPipeline = makePipeline("liquidSimReduceFinal"),
+          let relaxPipeline = makePipeline("liquidSimRelax"),
+          let renderPipeline = makePipeline("liquidLightRender"),
           let feedbackPipeline = makePipeline("liquidLightFeedback"),
           let blurPipeline = makePipeline("liquidGlassBlur") else {
       return nil
     }
 
-    return Pipelines(render: renderPipeline, feedback: feedbackPipeline, blur: blurPipeline)
+    return Pipelines(seed: seedPipeline, advect: advectPipeline,
+                     reduceTiles: reduceTilesPipeline, reduceFinal: reduceFinalPipeline,
+                     relax: relaxPipeline, render: renderPipeline,
+                     feedback: feedbackPipeline, blur: blurPipeline)
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
     let desc = MTL4ArgumentTableDescriptor()
     desc.maxTextureBindCount = 3
-    desc.maxBufferBindCount = 1
+    desc.maxBufferBindCount = 3
     var tables = [any MTL4ArgumentTable]()
     for _ in 0..<maxFramesInFlight {
       do {
@@ -53,6 +66,8 @@ extension LiquidLightRenderer {
 
   func configureResidencySet() {
     for buf in uniformBuffers { residencySet.addAllocation(buf) }
+    residencySet.addAllocation(reduceTilesBuffer)
+    residencySet.addAllocation(lambdaBuffer)
     residencySet.commit()
     commandQueue.addResidencySet(residencySet)
   }

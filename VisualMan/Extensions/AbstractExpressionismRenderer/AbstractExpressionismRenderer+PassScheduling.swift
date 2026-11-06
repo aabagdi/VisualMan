@@ -115,6 +115,7 @@ extension AbstractExpressionismRenderer {
     copyRect(tex.colorOut, tex.colorMid, copy)
     copyRect(tex.hwOut, tex.hwMid, copy.halved)
     copyRect(tex.dryColorOut, tex.dryColorMid, copy.halved)
+    copyRect(tex.substrateOut, tex.substrateMid, copy.halved)
     encoder.barrier(afterEncoderStages: .blit, beforeEncoderStages: .dispatch)
   }
 }

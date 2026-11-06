@@ -8,7 +8,6 @@
 #if !targetEnvironment(simulator)
 import Metal
 import os
-import QuartzCore
 
 private nonisolated let rendererLogger = Logger(subsystem: "com.VisualMan", category: "MetalVisualizerRenderer")
 
@@ -30,7 +29,6 @@ protocol MetalVisualizerRenderer: AnyObject {
   static var uniformBufferSize: Int { get }
   
   func encodeFrame(bass: Float, mid: Float, high: Float, drawableWidth: Int, drawableHeight: Int) -> MTLTexture?
-  func commitFrame(drawable: CAMetalDrawable)
   func commitCompute()
   func reset()
   func prepareForResume()
@@ -173,15 +171,6 @@ extension MetalVisualizerRenderer {
     return encoder
   }
   
-  func commitFrame(drawable: CAMetalDrawable) {
-    commandBuffer.endCommandBuffer()
-    commandQueue.waitForDrawable(drawable)
-    commandQueue.commit([commandBuffer])
-    commandQueue.signalEvent(sharedEvent, value: frameNumber)
-    commandQueue.signalDrawable(drawable)
-    drawable.present()
-  }
-
   func commitCompute() {
     commandBuffer.endCommandBuffer()
     commandQueue.commit([commandBuffer])

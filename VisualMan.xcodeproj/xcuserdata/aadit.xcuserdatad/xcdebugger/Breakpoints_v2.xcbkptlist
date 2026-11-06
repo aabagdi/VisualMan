@@ -93,15 +93,6 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 17a2132d0f6a5ea2"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&lt;unsigned long long&gt;, unsigned long long&gt;)"
-                  moduleName = "WebKitLegacy"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 9aa96a930ee8a810"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
@@ -188,15 +179,6 @@
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
                   symbolName = "WebCore::FileReader::abort()"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 8ac5a21c12a18eab"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&lt;unsigned long long&gt;, unsigned long long&gt;)"
                   moduleName = "WebCore"
                   usesParentBreakpointCondition = "Yes">
                </Location>
@@ -417,15 +399,6 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 689de956be0ef509"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::IDBServer::MemoryBackingStoreTransaction::abort()"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 99ff04c85e9dcc39"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
@@ -453,20 +426,47 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - e6d6948cedc93222"
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 54ed0afbb535fd39"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "WebKit::SpeechRecognitionServer::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&lt;unsigned long long&gt;, unsigned long long&gt;)"
+                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
+                  moduleName = "WebKitLegacy"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - c98abbcaa8fe2d30"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 145be79ee1394d13"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::JSWritableStreamDefaultWriter::abort(JSC::JSGlobalObject&amp;, JSC::CallFrame&amp;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 413f0640142450f5"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::SpeechRecognitionServer::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
                   moduleName = "WebKit"
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 5ab2c12480f4f9c5"
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 555f70221a006439"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "WebKit::WebSpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&lt;unsigned long long&gt;, unsigned long long&gt;)"
+                  symbolName = "WebKit::WebSpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
                   moduleName = "WebKit"
                   usesParentBreakpointCondition = "Yes">
                </Location>

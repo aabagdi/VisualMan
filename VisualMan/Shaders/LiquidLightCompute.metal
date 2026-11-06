@@ -14,13 +14,43 @@ struct LiquidLightParams {
   float bass;
   float mid;
   float high;
-  float flowPhase;
+  float2 simSize;
+  float eps;
+  float apertureRadius;
+  float4 plate[6];
+};
+
+struct SeedParams {
+  float2 simSize;
+  float eps;
+  float threshold;
+};
+
+struct AdvectParams {
+  float2 simSize;
+  float2 tilt;
+  float frames;
+  float time;
+  float swirl;
+  float press;
+  float eps;
   float pad0;
   float pad1;
   float pad2;
   float4 drops[4];
-  float4 dropPrecomp[4];
-  float4 dropColors[4];
+  float4 dropState[4];
+};
+
+struct RelaxParams {
+  float dt;
+  float mobility;
+  float eps2;
+  float acMobility;
+};
+
+struct ReduceParams {
+  uint tileCount;
+  float invCellCount;
 };
 
 struct BlurParams {
@@ -29,6 +59,8 @@ struct BlurParams {
   float maxBlurRadius;
   float bass;
   float mid;
+  float bloomRadius;
+  float bloomStrength;
 };
 
 struct FeedbackParams {
@@ -38,11 +70,275 @@ struct FeedbackParams {
   uint historyValid;
 };
 
-struct VoronoiResult {
-  float dist1;
-  float edgeDist;
-  float cellID;
+constant float SQRT2 = 1.41421356;
+
+constant float2x2 ROT1 = float2x2( 0.7974,  0.6034, -0.6034,  0.7974);
+constant float2x2 ROT2 = float2x2(-0.4161,  0.9093, -0.9093, -0.4161);
+constant float2x2 ROT3 = float2x2( 0.2837, -0.9589,  0.9589,  0.2837);
+
+inline float2 liquidCurl(float2 p) {
+  const float e = 0.02;
+  float dx = shaderSimplex2D(p + float2(e, 0.0)) - shaderSimplex2D(p - float2(e, 0.0));
+  float dy = shaderSimplex2D(p + float2(0.0, e)) - shaderSimplex2D(p - float2(0.0, e));
+  return float2(dy, -dx) / (2.0 * e);
+}
+
+inline float discField(float2 p, float cellSize, float seed, float fillProb,
+                       float rMin, float rMax) {
+  float2 q = p / cellSize;
+  float2 n = floor(q);
+  float best = 1e3;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      float2 cell = n + float2(float(i), float(j));
+      float2 h = shaderHash22(cell + seed);
+      if (h.x > fillProb) continue;
+      float r = mix(rMin, rMax, shaderHash21(cell * 1.91 + seed + 4.7));
+      float margin = max(0.5 - r / cellSize, 0.0);
+      float2 centre = (cell + 0.5 + (h * 2.0 - 1.0) * margin) * cellSize;
+      best = min(best, length(p - centre) - r);
+    }
+  }
+  return best;
+}
+
+inline float continentField(float2 p, float freq, float threshold, float2 offset) {
+  float n = shaderSimplex2D(p * freq + offset)
+  + 0.5 * shaderSimplex2D(p * freq * 2.1 + offset * 1.7 + 3.3);
+  return (threshold - n) / (freq * 1.6);
+}
+
+struct SeedLayer {
+  float continentFreq;
+  float continentThreshold;
+  float discCell;
+  float discProb;
+  float2 discRadius;
+  float holeCell;
+  float holeProb;
+  float2 holeRadius;
 };
+
+inline float seedPhase(float2 p, SeedLayer L, float seed, float simLongSide, float eps) {
+  float sd = continentField(p, L.continentFreq, L.continentThreshold, float2(seed, seed * 0.37));
+  sd = min(sd, discField(p, L.discCell, seed + 11.0, L.discProb, L.discRadius.x, L.discRadius.y));
+  float hole = discField(p, L.holeCell, seed + 23.0, L.holeProb, L.holeRadius.x, L.holeRadius.y);
+  sd = max(sd, -hole);
+  float sdPx = sd * simLongSide;
+  return -tanh(clamp(sdPx, -40.0, 40.0) / (SQRT2 * eps));
+}
+
+kernel void liquidSimSeed(texture2d<float, access::write> phaseOut [[texture(0)]],
+                          constant SeedParams &params          [[buffer(0)]],
+                          uint2 gid [[thread_position_in_grid]]) {
+  uint w = phaseOut.get_width();
+  uint h = phaseOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  
+  float2 size = float2(w, h);
+  float longSide = max(size.x, size.y);
+  float2 uv = (float2(gid) + 0.5) / size;
+  float2 p = (uv - 0.5) * size / longSide;
+  float simH = longSide;
+  float eps = params.eps;
+  
+  SeedLayer a = { 1.3, 0.10, 0.11, 0.55, float2(0.014, 0.038), 0.09, 0.40, float2(0.010, 0.026) };
+  SeedLayer b = { 1.7, 0.25, 0.14, 0.60, float2(0.020, 0.055), 0.10, 0.30, float2(0.012, 0.030) };
+  SeedLayer c = { 1.0, 0.35, 0.08, 0.55, float2(0.009, 0.028), 0.12, 0.25, float2(0.015, 0.040) };
+  SeedLayer d = { 1.0, 9.00, 0.17, 0.55, float2(0.030, 0.070), 0.06, 0.45, float2(0.004, 0.011) };
+  
+  float4 phi;
+  phi.x = seedPhase(p, a, 0.0, simH, eps);
+  phi.y = seedPhase(ROT3 * p + float2(2.3, 1.1), b, 7.0, simH, eps);
+  phi.z = seedPhase(ROT1 * p + float2(5.1, 3.7), c, 13.0, simH, eps);
+  phi.w = seedPhase(ROT2 * p + float2(8.7, 0.4), d, 19.0, simH, eps);
+  phaseOut.write(phi, gid);
+}
+
+constant float4 LAYER_TILT_SCALE  = float4(1.0, 0.74, 0.55, 0.4);
+constant float4 LAYER_TILT_ANGLE  = float4(0.0, 0.2, -0.3, 0.45);
+constant float4 LAYER_SWIRL_SCALE = float4(1.0, 0.82, 0.68, 0.55);
+constant float4 LAYER_PRESS_SCALE = float4(1.0, 0.85, 0.72, 0.6);
+
+inline float2 rotate2(float2 v, float angle) {
+  float c = fast::cos(angle), s = fast::sin(angle);
+  return float2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
+kernel void liquidSimAdvect(texture2d<float, access::sample> phaseIn  [[texture(0)]],
+                            texture2d<float, access::write>  phaseOut [[texture(1)]],
+                            constant AdvectParams &params            [[buffer(0)]],
+                            uint2 gid [[thread_position_in_grid]]) {
+  uint w = phaseOut.get_width();
+  uint h = phaseOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  
+  constexpr sampler bilinear(filter::linear, address::mirrored_repeat);
+  float2 size = params.simSize;
+  float2 px = float2(gid) + 0.5;
+  float2 uv = px / size;
+  float longSide = max(size.x, size.y);
+  float2 p = (uv - 0.5) * size / longSide;
+  
+  float2 pushVel = float2(0.0);
+  for (int i = 0; i < 4; i++) {
+    float4 st = params.dropState[i];
+    if (st.w < 0.5) continue;
+    float2 dropPx = params.drops[i].xy * longSide + size * 0.5;
+    float2 toHere = px - dropPx;
+    float d = length(toHere);
+    float2 dir = d > 1e-3 ? toHere / d : float2(0.0);
+    float reach = st.x * 1.8;
+    pushVel += dir * st.z * fast::exp(-(d * d) / (reach * reach));
+  }
+  
+  float4 result = float4(0.0);
+  for (int k = 0; k < 4; k++) {
+    float2 tilt = rotate2(params.tilt, LAYER_TILT_ANGLE[k]) * LAYER_TILT_SCALE[k];
+    float2 swirlCoord = p * 1.1 + params.time * 0.03 + float2(3.1, 1.7) * float(k);
+    float2 swirl = liquidCurl(swirlCoord)
+    + 0.15 * liquidCurl(p * 2.6 - params.time * 0.05 + float2(1.3, 6.2) * float(k));
+    swirl *= params.swirl * LAYER_SWIRL_SCALE[k];
+    float2 press = p * params.press * LAYER_PRESS_SCALE[k];
+    
+    float2 vel = (tilt + swirl) * params.frames + press + pushVel;
+    float2 srcUV = (px - vel) / size;
+    float phi = sampleCatmullRom(phaseIn, bilinear, srcUV, size)[k];
+    result[k] = clamp(phi, -1.0, 1.0);
+  }
+  
+  for (int i = 0; i < 4; i++) {
+    float4 st = params.dropState[i];
+    if (st.w < 0.5 || abs(st.y) < 0.5) continue;
+    int layer = int(params.drops[i].w + 0.5);
+    float2 dropPx = params.drops[i].xy * longSide + size * 0.5;
+    float d = length(px - dropPx);
+    float blob = tanh((st.x - d) / (SQRT2 * params.eps));
+    result[layer] = st.y > 0.0 ? max(result[layer], blob) : min(result[layer], -blob);
+  }
+  
+  phaseOut.write(result, gid);
+}
+
+inline float4 phaseAt(texture2d<float, access::read> t, int2 c, int2 maxC) {
+  return t.read(uint2(clamp(c, int2(0), maxC)));
+}
+
+inline float4 chemicalPotential(texture2d<float, access::read> t, int2 c, int2 maxC, float eps2) {
+  float4 phi = phaseAt(t, c, maxC);
+  float4 lap = phaseAt(t, c + int2(1, 0), maxC) + phaseAt(t, c - int2(1, 0), maxC)
+  + phaseAt(t, c + int2(0, 1), maxC) + phaseAt(t, c - int2(0, 1), maxC)
+  - 4.0 * phi;
+  return phi * phi * phi - phi - eps2 * lap;
+}
+
+kernel void liquidSimReduceTiles(texture2d<float, access::read> phase [[texture(0)]],
+                                 device float4 *tiles                 [[buffer(1)]],
+                                 uint2 gid       [[thread_position_in_grid]],
+                                 uint2 tgid      [[threadgroup_position_in_grid]],
+                                 uint2 tgCount   [[threadgroups_per_grid]],
+                                 uint  tid       [[thread_index_in_threadgroup]],
+                                 uint  simdLane  [[thread_index_in_simdgroup]],
+                                 uint  simdIndex [[simdgroup_index_in_threadgroup]],
+                                 uint  simdCount [[simdgroups_per_threadgroup]]) {
+  threadgroup float4 partial[16];
+  
+  float4 v = float4(0.0);
+  if (gid.x < phase.get_width() && gid.y < phase.get_height()) {
+    float4 phi = phase.read(gid);
+    v = phi * phi * phi - phi;
+  }
+  v = simd_sum(v);
+  if (simdLane == 0) partial[simdIndex] = v;
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  
+  if (tid == 0) {
+    float4 s = float4(0.0);
+    for (uint i = 0; i < simdCount; i++) s += partial[i];
+    tiles[tgid.y * tgCount.x + tgid.x] = s;
+  }
+}
+
+kernel void liquidSimReduceFinal(device const float4 *tiles  [[buffer(1)]],
+                                 device float4 *lambda        [[buffer(2)]],
+                                 constant ReduceParams &params [[buffer(0)]],
+                                 uint tid       [[thread_index_in_threadgroup]],
+                                 uint simdLane  [[thread_index_in_simdgroup]],
+                                 uint simdIndex [[simdgroup_index_in_threadgroup]],
+                                 uint simdCount [[simdgroups_per_threadgroup]]) {
+  threadgroup float4 partial[16];
+  
+  float4 s = float4(0.0);
+  for (uint i = tid; i < params.tileCount; i += 256u) s += tiles[i];
+  s = simd_sum(s);
+  if (simdLane == 0) partial[simdIndex] = s;
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  
+  if (tid == 0) {
+    float4 total = float4(0.0);
+    for (uint i = 0; i < simdCount; i++) total += partial[i];
+    lambda[0] = total * params.invCellCount;
+  }
+}
+
+kernel void liquidSimRelax(texture2d<float, access::read>  phaseIn  [[texture(0)]],
+                           texture2d<float, access::write> phaseOut [[texture(1)]],
+                           constant RelaxParams &params            [[buffer(0)]],
+                           device const float4 *lambda             [[buffer(1)]],
+                           uint2 gid [[thread_position_in_grid]]) {
+  int w = int(phaseOut.get_width());
+  int h = int(phaseOut.get_height());
+  if (int(gid.x) >= w || int(gid.y) >= h) return;
+  
+  int2 c = int2(gid);
+  int2 maxC = int2(w - 1, h - 1);
+  float eps2 = params.eps2;
+  
+  float4 muC = chemicalPotential(phaseIn, c, maxC, eps2);
+  float4 lapMu = chemicalPotential(phaseIn, c + int2(1, 0), maxC, eps2)
+  + chemicalPotential(phaseIn, c - int2(1, 0), maxC, eps2)
+  + chemicalPotential(phaseIn, c + int2(0, 1), maxC, eps2)
+  + chemicalPotential(phaseIn, c - int2(0, 1), maxC, eps2)
+  - 4.0 * muC;
+  
+  float4 dphi = params.mobility * lapMu + params.acMobility * (lambda[0] - muC);
+  float4 phi = phaseIn.read(gid) + params.dt * dphi;
+  phaseOut.write(clamp(phi, -1.05, 1.05), gid);
+}
+
+struct DyeLayer {
+  float coverage;
+  float body;
+  float rim;
+  float fringe;
+  float shadow;
+  float lit;
+  float ndl;
+};
+
+inline DyeLayer resolveLayer(float phi, float phiShadow, float2 gradPx,
+                             float eps, float simLongSide, float pixel, float rimWidth,
+                             float3 lightDir) {
+  float c = clamp(phi, -0.995, 0.995);
+  float sdPx = SQRT2 * eps * 0.5 * log((1.0 + c) / (1.0 - c));
+  float inside = sdPx / simLongSide;
+  
+  DyeLayer L;
+  L.coverage = smoothstep(-pixel, pixel, inside);
+  L.body = smoothstep(0.0, 0.9, phi);
+  L.rim = L.coverage * (1.0 - smoothstep(rimWidth * 0.2, rimWidth, inside));
+  L.fringe = L.coverage
+  * smoothstep(rimWidth * 0.7, rimWidth * 1.4, inside)
+  * (1.0 - smoothstep(rimWidth * 1.8, rimWidth * 3.4, inside));
+  L.shadow = smoothstep(-0.4, 0.4, phiShadow) * (1.0 - L.coverage);
+  
+  float gradLen = max(length(gradPx), 1e-4);
+  float2 outward = -gradPx / gradLen;
+  L.lit = saturate(dot(outward, normalize(lightDir.xy)) * 0.5 + 0.5);
+  float3 nrm = fast::normalize(float3(-gradPx * 3.5, 1.0));
+  L.ndl = saturate(dot(nrm, lightDir));
+  return L;
+}
 
 inline float vnoise(float2 p) {
   float2 i = floor(p);
@@ -52,240 +348,135 @@ inline float vnoise(float2 p) {
   float b = shaderHash21(i + float2(1.0, 0.0));
   float c = shaderHash21(i + float2(0.0, 1.0));
   float d = shaderHash21(i + float2(1.0, 1.0));
-  float n = mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-  return n * 2.0 - 1.0;
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y) * 2.0 - 1.0;
 }
 
-constant float2x2 ROT1 = float2x2( 0.7974,  0.6034, -0.6034,  0.7974);
-constant float2x2 ROT2 = float2x2(-0.4161,  0.9093, -0.9093, -0.4161);
-constant float2x2 ROT3 = float2x2( 0.2837, -0.9589,  0.9589,  0.2837);
-
-inline float2 liquidWarp(float2 p, float time, float intensity) {
-  float2 pX1 = ROT1 * p;
-  float2 pY1 = ROT2 * p;
-  float2 q = float2(
-    shaderSimplex2D(pX1 + time * 0.04),
-    shaderSimplex2D(pY1 + float2(5.2, 1.3) + time * 0.035)
-  );
-
-  float2 warped = p + 3.0 * q;
-  float2 rX = ROT2 * warped;
-  float2 rY = ROT3 * warped;
-  float2 r = float2(
-    shaderSimplex2D(rX + float2(1.7, 9.2) + time * 0.025),
-    shaderSimplex2D(rY + float2(8.3, 2.8) + time * 0.03)
-  );
-
-  return p + r * intensity;
+inline float3 agedFilm(float3 c) {
+  c *= float3(1.05, 0.97, 0.84);
+  c = c * (1.0 + c * (1.0 / 1.44)) / (1.0 + c);
+  float l = dot(c, float3(0.299, 0.587, 0.114));
+  c = mix(c, float3(l), 0.1);
+  c = c * 0.94 + float3(0.055, 0.04, 0.018);
+  c += (l - 0.5) * float3(0.03, 0.015, -0.03);
+  return saturate(c);
 }
 
-inline VoronoiResult voronoi(float2 p) {
-  float2 n = floor(p);
-  float2 f = fract(p);
-
-  float dist1 = 8.0;
-  float dist2 = 8.0;
-  float2 nearestDelta = float2(0.0);
-  float2 secondDelta = float2(0.0);
-  float2 nearestCell = n;
-
-  for (int j = -1; j <= 1; j++) {
-    for (int i = -1; i <= 1; i++) {
-      float2 g = float2(float(i), float(j));
-      float2 o = shaderHash22(n + g);
-      float2 delta = g + o - f;
-      float d = dot(delta, delta);
-      if (d < dist1) {
-        dist2 = dist1;
-        secondDelta = nearestDelta;
-        dist1 = d;
-        nearestDelta = delta;
-        nearestCell = n + g;
-      } else if (d < dist2) {
-        dist2 = d;
-        secondDelta = delta;
-      }
-    }
-  }
-
-  float2 midpoint = 0.5 * (nearestDelta + secondDelta);
-  float2 diff = secondDelta - nearestDelta;
-  float diffLen = fast::length(diff);
-  float2 edgeDir = diffLen > 1e-6 ? diff / diffLen : float2(1.0, 0.0);
-
-  VoronoiResult r;
-  r.dist1 = fast::sqrt(dist1);
-  r.edgeDist = dot(midpoint, edgeDir);
-  r.cellID = shaderHash21(nearestCell);
-  return r;
+inline float glassDust(float2 pxPos) {
+  float2 cell = floor(pxPos / 46.0);
+  float2 h = shaderHash22(cell + 31.7);
+  if (h.x > 0.14) return 0.0;
+  float2 centre = (cell + 0.2 + 0.6 * shaderHash22(cell + 9.1)) * 46.0;
+  float radius = 1.2 + h.y * 2.2;
+  float d = length(pxPos - centre);
+  float speck = 1.0 - smoothstep(radius - 1.0, radius + 1.0, d);
+  float bubble = step(0.09, h.x) * (1.0 - smoothstep(0.0, radius * 0.6, d));
+  return speck * (0.55 - 0.9 * bubble);
 }
 
-inline half3 liquidColor(float id, float time) {
-  half h = half(fract(id * 5.0 + time));
-  half3 color;
-  if (h < 0.18h)
-    color = mix(half3(0.6h, 0.0h, 0.02h), half3(0.85h, 0.02h, 0.1h), h / 0.18h);
-  else if (h < 0.35h)
-    color = mix(half3(0.85h, 0.02h, 0.1h), half3(0.6h, 0.0h, 0.55h), (h - 0.18h) / 0.17h);
-  else if (h < 0.52h)
-    color = mix(half3(0.6h, 0.0h, 0.55h), half3(0.02h, 0.06h, 0.7h), (h - 0.35h) / 0.17h);
-  else if (h < 0.68h)
-    color = mix(half3(0.02h, 0.06h, 0.7h), half3(0.0h, 0.5h, 0.6h), (h - 0.52h) / 0.16h);
-  else if (h < 0.84h)
-    color = mix(half3(0.0h, 0.5h, 0.6h), half3(0.7h, 0.35h, 0.0h), (h - 0.68h) / 0.16h);
-  else
-    color = mix(half3(0.7h, 0.35h, 0.0h), half3(0.6h, 0.0h, 0.02h), (h - 0.84h) / 0.16h);
-  return color;
-}
-
-kernel void liquidLightRender(texture2d<float, access::write> output [[texture(0)]],
-                               constant LiquidLightParams &params  [[buffer(0)]],
-                               uint2 gid [[thread_position_in_grid]]) {
+kernel void liquidLightRender(texture2d<float, access::write>  output [[texture(0)]],
+                              texture2d<float, access::sample> phase  [[texture(1)]],
+                              constant LiquidLightParams &params      [[buffer(0)]],
+                              uint2 gid [[thread_position_in_grid]]) {
   uint w = output.get_width();
   uint h = output.get_height();
   if (gid.x >= w || gid.y >= h) return;
-
-  float2 uv = (float2(gid) + 0.5) / float2(w, h);
-  float aspect = float(w) / float(h);
-  float2 p = (uv - 0.5) * float2(aspect, 1.0);
-
+  
+  constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
+  float2 size = float2(w, h);
+  float longSide = max(size.x, size.y);
+  float2 uv = (float2(gid) + 0.5) / size;
+  float2 p = (uv - 0.5) * size / longSide;
+  float pixel = 1.4 / longSide;
   float time = params.time;
-  float bass = params.bass;
-  float mid  = params.mid;
-  float high = params.high;
-
-  float warpIntensity = 0.55 + bass * 0.35;
-  float flowSpeed     = params.flowPhase;
-  float colorShift    = time * 0.015 + mid * 0.08;
-  float edgeSharpness = 10.0 + high * 6.0;
-
-  float2 coords = p * 1.8;
-
-  float breath = 1.0 + 0.08 * fast::sin(time * 0.35) + bass * 0.1;
-  float2 drift = float2(fast::cos(time * 0.07), fast::sin(time * 0.09)) * 1.2;
-  coords = coords * breath + drift;
-
-  half3 dropTint = half3(0.0h);
-  half  dropTintWeight = 0.0h;
-  for (int i = 0; i < 4; i++) {
-    float4 pre = params.dropPrecomp[i];
-    if (pre.z < 0.5) continue;
-
-    float4 drop = params.drops[i];
-    float2 toCenter = p - drop.xy;
-    float d = fast::length(toCenter);
-    float2 dir = d > 1e-4 ? toCenter / d : float2(0.0);
-
-    float e = (d - pre.x) * 4.0;
-    float pulse = fast::exp(-e * e);
-    float pf = pulse * pre.y;
-
-    coords += dir * pf * 0.18;
-
-    half washStrength = half(pf);
-    dropTint += half3(params.dropColors[i].rgb) * washStrength;
-    dropTintWeight += washStrength;
+  
+  float2 shimmer = float2(vnoise(p * 6.0 + time * 1.5),
+                          vnoise(p * 6.0 + float2(3.1, 7.4) - time * 1.3)) * 0.0012;
+  float2 suv = uv + shimmer;
+  
+  float2 simSize = params.simSize;
+  float2 texel = 1.0 / simSize;
+  float4 phi = sampleCatmullRom(phase, bilinear, suv, simSize);
+  float4 gx = (phase.sample(bilinear, suv + float2(texel.x, 0.0))
+               - phase.sample(bilinear, suv - float2(texel.x, 0.0))) * 0.5;
+  float4 gy = (phase.sample(bilinear, suv + float2(0.0, texel.y))
+               - phase.sample(bilinear, suv - float2(0.0, texel.y))) * 0.5;
+  
+  const float3 lightDir = float3(-0.42, -0.55, 0.722);
+  float2 shadowDir = -normalize(lightDir.xy);
+  float rimWidth = 0.0038 + params.bass * 0.0008;
+  float mottle = vnoise(p * 9.0 + time * 0.05) * 0.5
+  + vnoise(p * 23.0 - time * 0.03) * 0.25;
+  
+  DyeLayer layers[4];
+  for (int k = 0; k < 4; k++) {
+    float2 offset = shadowDir * (0.003 + 0.0022 * float(k)) * longSide / size;
+    float phiShadow = phase.sample(bilinear, suv - offset)[k];
+    layers[k] = resolveLayer(phi[k], phiShadow, float2(gx[k], gy[k]), params.eps,
+                             max(simSize.x, simSize.y), pixel, rimWidth, lightDir);
   }
+  
+  float3 T = float3(1.0);
+  float3 additive = float3(0.0);
+  float covSum = 0.0;
+  float spec = 0.0;
+  float gaps = 1.0;
+  for (int k = 0; k < 4; k++) {
+    DyeLayer L = layers[k];
+    float3 dye = params.plate[k].rgb;
 
-  float2 warped = liquidWarp(coords, time, warpIntensity);
+    float thickness = 0.8 + 0.5 * L.body + 0.18 * mottle;
+    float3 dyeT = pow(dye, max(thickness, 0.3));
+    T *= mix(float3(1.0), dyeT, L.coverage);
 
-  float scaleField = shaderSimplex2D(p * 1.2 + time * 0.015) * 0.45 + 1.0;
-
-  VoronoiResult v1 = voronoi(warped * (0.9 * scaleField) + flowSpeed * 0.25);
-  VoronoiResult v2 = voronoi(warped * (1.4 * scaleField) + float2(4.0, 8.0) + flowSpeed * 0.18);
-
-  float paletteField = shaderSimplex2D(p * 0.6 + time * 0.02) * 0.5 + 0.5;
-  float cellVariation1 = v1.cellID * 0.25;
-  float cellVariation2 = v2.cellID * 0.25;
-  float cellPhase1 = colorShift * (0.3 + v1.cellID * 0.7);
-  float cellPhase2 = colorShift * (0.3 + v2.cellID * 0.7) + 1.5;
-  half3 color1 = liquidColor(paletteField + cellVariation1, cellPhase1);
-  half3 color2 = liquidColor(paletteField + cellVariation2 + 0.15, cellPhase2);
-
-  half edge1 = half(1.0 - fast::exp(-v1.edgeDist * edgeSharpness));
-  half edge2 = half(1.0 - fast::exp(-v2.edgeDist * (edgeSharpness * 0.7)));
-
-  half cellFill1 = mix(0.78h, 1.0h, edge1);
-  half cellFill2 = mix(0.78h, 1.0h, edge2);
-
-  half3 result = color1 * cellFill1;
-  half blend2 = half(smoothstep(0.18, 0.55, v2.dist1) * 0.32);
-  result = mix(result, color2 * cellFill2, blend2);
-
-  float minEdge = min(v1.edgeDist, v2.edgeDist * 1.3);
-
-  float rimMask = fast::exp(-minEdge * 40.0);
-  float thicknessJitter = vnoise(warped * 4.0 + time * 0.08) * 0.2;
-  half thickness = half(rimMask * (1.0 + thicknessJitter));
-
-  half3 filmPhase = half3(5.5h, 7.0h, 8.5h) * thickness * half(1.0 + bass * 0.25);
-  half3 iridescence = 0.5h + 0.18h * cos(filmPhase + half3(0.0h, 2.094h, 4.188h));
-
-  float edgeAA = 1.62 / float(h) * 1.5;
-  float rimOuter = 1.0 - smoothstep(0.0, 0.05, minEdge);
-  float rimInner = smoothstep(0.0, max(0.012, edgeAA), minEdge);
-  half rimIntensity = half(rimOuter * rimInner);
-
-  half cellSizeScale = half(0.45 + 0.55 * smoothstep(0.05, 0.25, v1.dist1));
-  half contactLine = half(smoothstep(0.008, 0.065, minEdge)) * cellSizeScale;
-  contactLine = 1.0h - contactLine;
-  result *= (1.0h - contactLine * 0.45h);
-
-  half3 tint = iridescence * 2.0h;
-  result *= mix(half3(1.0h), tint, rimIntensity * 0.55h);
-
-  float2 noiseCoord = ROT2 * warped * 2.5 + time * 0.08;
-  float specf = vnoise(noiseCoord);
-  specf = max(specf, 0.0f);
-  float s2 = specf * specf;
-  float s4 = s2 * s2;
-  float s8 = s4 * s4;
-  specf = s8 * s2;
-  half spec = half(specf);
-  half specMask = edge1 * half(smoothstep(0.0, 0.25, v1.dist1));
-  result += half3(1.0h, 0.95h, 0.9h) * spec * 0.4h * specMask;
-
-  result *= 1.0h + half(bass) * 0.45h;
-  float shimmerf = vnoise(noiseCoord * 1.6 + float2(7.3, 3.1));
-  shimmerf = max(shimmerf, 0.0f);
-  float sh2 = shimmerf * shimmerf;
-  float sh4 = sh2 * sh2;
-  shimmerf = sh4 * sh2 * high * 0.35;
-  half shimmer = half(shimmerf);
-  result += half3(0.35h, 0.25h, 0.45h) * shimmer * specMask;
-
-  float2 hotUV = p * float2(1.0, 1.1);
-  float hotDist = fast::length(hotUV);
-  float falloff = 1.0 - smoothstep(0.2, 1.0, hotDist);
-  float hotspot = fast::exp(-hotDist * hotDist * 2.2);
-  result *= half(mix(0.55, 1.0, falloff) * (1.0 + hotspot * 0.30));
-  result += half3(0.22h, 0.15h, 0.07h) * half(hotspot * 0.35);
-
-  if (dropTintWeight > 0.0h) {
-    half3 avgTint = dropTint / max(dropTintWeight, 1.0h);
-    half luma = dot(result, half3(0.2126h, 0.7152h, 0.0722h));
-    half3 tinted = avgTint * max(luma * 1.6h, 0.15h);
-    half blend = saturate(dropTintWeight * 0.35h);
-    result = mix(result, tinted, blend);
+    T *= 1.0 - L.rim * (0.58 - 0.28 * L.lit);
+    T *= 1.0 + L.fringe * (0.22 + 0.4 * L.lit);
+    
+    T *= 1.0 - L.shadow * (0.14 + 0.04 * float(k));
+    
+    float sheen = L.ndl * L.ndl * L.ndl;
+    sheen *= sheen;
+    float hot = sheen * sheen * sheen * sheen * sheen * sheen * sheen * sheen;
+    float above = 1.0;
+    for (int j = k + 1; j < 4; j++) above *= 1.0 - layers[j].coverage * 0.7;
+    spec += (sheen * 0.05 + hot * 0.45) * L.coverage * (1.0 - L.rim) * above;
+    
+    additive += dye * L.coverage;
+    covSum += L.coverage;
+    gaps *= 1.0 - L.coverage;
   }
+  
+  float4 water = params.plate[4];
+  T *= mix(float3(1.0), water.rgb, water.w * gaps);
 
-  {
-    half3 x = result;
-    half a = 2.51h, b = 0.03h, d = 0.59h, e = 0.14h;
-    result = clamp((x * (a * x + b)) / (x * (2.43h * x + d) + e), 0.0h, 1.0h);
-  }
+  float R = params.apertureRadius;
+  float circ = fast::length(p);
+  float beam = 1.0 - smoothstep(R - 0.010, R + 0.003, circ);
+  float rimward = smoothstep(R * 0.45, R, circ);
+  float3 lamp = params.plate[5].rgb;
+  lamp = mix(lamp, lamp * float3(1.0, 0.80, 0.55) * 0.8, rimward);
+  float hotspot = fast::exp(-circ * circ / (R * R) * 2.2);
+  float flicker = 1.0 + 0.012 * fast::sin(time * 37.0) + 0.012 * vnoise(float2(time * 9.0, 0.5));
+  lamp *= (1.0 + hotspot * 0.14 + params.bass * 0.10) * flicker;
 
-  result.r = result.r * (1.0h - 0.05h * (1.0h - result.r));
-  result.b = result.b * (1.0h + 0.05h * (1.0h - result.b));
-
-  output.write(float4(float3(result), 1.0), gid);
-}
-
-inline float2 liquidCurl(float2 p) {
-  const float e = 0.02;
-  float dx = shaderSimplex2D(p + float2(e, 0.0)) - shaderSimplex2D(p - float2(e, 0.0));
-  float dy = shaderSimplex2D(p + float2(0.0, e)) - shaderSimplex2D(p - float2(0.0, e));
-  return float2(dy, -dx) / (2.0 * e);
+  float lumaT = dot(T, float3(0.333));
+  float3 scatter = covSum > 0.0 ? additive / max(covSum, 1.0) : float3(0.0);
+  float3 result = lamp * (T + 0.2 * scatter * (1.0 - lumaT)) + lamp * spec;
+  
+  result *= 1.0 - glassDust(float2(gid) * 1.333);
+  
+  float weave = vnoise(float2(gid) * 0.33) * 0.015 + vnoise(float2(gid) * 0.09) * 0.012;
+  result *= 1.0 + weave;
+  result += params.plate[5].rgb * 0.03;
+  
+  result = agedFilm(result);
+  
+  float grain = shaderHash21(float2(gid) + fract(time * 13.7) * 97.0) - 0.5;
+  result += grain * 0.02;
+  
+  float flare = fast::exp(-max(circ - R, 0.0) * 60.0) * (1.0 - beam) * 0.05;
+  result = result * beam + params.plate[5].rgb * flare;
+  
+  output.write(float4(saturate(result), 1.0), gid);
 }
 
 kernel void liquidLightFeedback(texture2d<float, access::read>   render     [[texture(0)]],
@@ -296,27 +487,21 @@ kernel void liquidLightFeedback(texture2d<float, access::read>   render     [[te
   uint w = historyOut.get_width();
   uint h = historyOut.get_height();
   if (gid.x >= w || gid.y >= h) return;
-
+  
   float4 current = render.read(gid);
   if (params.historyValid == 0u) {
     historyOut.write(current, gid);
     return;
   }
-
+  
   constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
   float2 uv = (float2(gid) + 0.5) / float2(w, h);
-  float aspect = float(w) / float(h);
-  float2 p = (uv - 0.5) * float2(aspect, 1.0);
-
-  float2 flow = liquidCurl(p * 1.3 + params.time * 0.04) * 0.0008;
-  flow += p * params.bass * 0.002;
-  float2 srcUV = uv - flow * (params.dt * 60.0) / float2(aspect, 1.0);
   float2 size = float2(w, h);
-  float3 previous = max(sampleCatmullRom(historyIn, bilinear, srcUV, size).rgb, 0.0);
+  float3 previous = max(sampleCatmullRom(historyIn, bilinear, uv, size).rgb, 0.0);
 
-  float retention60 = 0.70 - params.bass * 0.20;
+  float retention60 = 0.45 - params.bass * 0.15;
   float retention = pow(saturate(retention60), params.dt * 60.0);
-
+  
   float3 blended = mix(current.rgb, previous, retention);
   historyOut.write(float4(blended, 1.0), gid);
 }
@@ -340,80 +525,73 @@ constant float4 BLUR_SAMPLES[16] = {
   float4(-0.406217f,  0.913776f, 0.939150f, 0.000079f),
 };
 
-constant int BLUR_TAPS = 10;
+constant int BLUR_TAPS = 12;
 
 kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)]],
-                             texture2d<float, access::write> output  [[texture(1)]],
-                             constant BlurParams &params             [[buffer(0)]],
-                             uint2 gid [[thread_position_in_grid]]) {
+                            texture2d<float, access::write> output  [[texture(1)]],
+                            constant BlurParams &params             [[buffer(0)]],
+                            uint2 gid [[thread_position_in_grid]]) {
   const int w = int(input.get_width());
   const int h = int(input.get_height());
   if (int(gid.x) >= w || int(gid.y) >= h) return;
-
+  
   const int2 maxXY = int2(w - 1, h - 1);
   const half4 sharp_h = half4(saturate(input.read(gid)));
-
+  
   float2 uv = (float2(gid) + 0.5) / float2(w, h);
   float2 norm = (uv - 0.5) * 2.0;
   float dist = length(norm);
-
+  
   float dynamicInner = params.innerRadius - params.bass * 0.15;
   float dynamicOuter = params.outerRadius - params.bass * 0.1;
   dynamicOuter = max(dynamicOuter, dynamicInner + 0.01);
-
+  
   float blurStrength = smoothstep(dynamicInner, dynamicOuter, dist);
   blurStrength *= blurStrength;
 
-  if (blurStrength < 0.001) {
-    output.write(float4(sharp_h), gid);
-    return;
-  }
-
-  float radius = blurStrength * params.maxBlurRadius * (1.0 + params.bass * 0.3);
-
+  float radius = params.bloomRadius + blurStrength * params.maxBlurRadius * (1.0 + params.bass * 0.3);
+  
   float rndAngle = fract(sin(dot(float2(gid), float2(12.9898, 78.233))) * 43758.5453) * 6.2831853;
   float rc = fast::cos(rndAngle), rs = fast::sin(rndAngle);
-
+  
   half4 accum = half4(0.0h);
   half  totalWeight = 0.0h;
-
+  
   const int2 centeri = int2(gid);
   for (int i = 0; i < BLUR_TAPS; i++) {
     float4 s = BLUR_SAMPLES[i];
     float2 o = float2(s.x * rc - s.y * rs, s.x * rs + s.y * rc);
     float2 offset = o * (s.z * radius);
-
+    
     int2 sp = clamp(centeri + int2(round(offset)), int2(0), maxXY);
-
+    
     half weight = half(s.w);
     accum += half4(input.read(uint2(sp))) * weight;
     totalWeight += weight;
   }
-
-  if (totalWeight < 1e-4h) {
-    output.write(float4(sharp_h), gid);
-    return;
-  }
-  half4 blurred_h = accum / totalWeight;
+  
+  half4 blurred_h = accum / max(totalWeight, 1e-4h);
   half4 result_h = mix(sharp_h, blurred_h, half(blurStrength));
-
-  float rimCA = blurStrength * (1.0 - blurStrength) * 4.0;
+  
+  half3 bloom = max(blurred_h.rgb - 0.55h, 0.0h) * half(params.bloomStrength);
+  result_h.rgb += bloom;
+  
+  float rimCA = smoothstep(0.35, 1.3, dist);
   if (rimCA > 0.01) {
     float2 radialDir = dist > 1e-4 ? norm / dist : float2(1.0, 0.0);
-    int2 offR = clamp(centeri + int2(round(radialDir *  1.5)), int2(0), maxXY);
-    int2 offB = clamp(centeri - int2(round(radialDir *  1.5)), int2(0), maxXY);
+    float shift = 1.0 + rimCA * 2.5;
+    int2 offR = clamp(centeri + int2(round(radialDir * shift)), int2(0), maxXY);
+    int2 offB = clamp(centeri - int2(round(radialDir * shift)), int2(0), maxXY);
     half rCh = half(input.read(uint2(offR)).r);
     half bCh = half(input.read(uint2(offB)).b);
-    half mixAmt = half(rimCA * 0.35);
+    half mixAmt = half(rimCA * 0.6);
     result_h.r = mix(result_h.r, rCh, mixAmt);
     result_h.b = mix(result_h.b, bCh, mixAmt);
   }
-
+  
   half luma = dot(result_h.rgb, half3(0.2126h, 0.7152h, 0.0722h));
-  half desatAmount = half(blurStrength * max(0.2 - params.mid * 0.15, 0.05));
+  half desatAmount = half(blurStrength * max(0.12 - params.mid * 0.1, 0.03));
   result_h.rgb = mix(result_h.rgb, half3(luma), desatAmount);
-
-  result_h.rgb += half3(0.02h, 0.02h, 0.03h) * half(blurStrength);
-
+  
   output.write(float4(saturate(result_h)), gid);
 }

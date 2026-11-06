@@ -19,7 +19,7 @@ extension AbstractExpressionismRenderer {
     if isFirstFrame || pigmentFullRefreshFrames > 0 {
       pigmentFullRefreshFrames = max(0, pigmentFullRefreshFrames - 1)
       pigmentDirtyHistory.removeAll()
-      return [region]
+      return [CanvasRegion(x: 0, y: 0, width: canvasSize, height: canvasSize)]
     }
 
     var regions: [CanvasRegion] = []

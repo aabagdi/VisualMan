@@ -139,6 +139,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var dryColorA: MTLTexture?
   var dryColorB: MTLTexture?
   var dryColorMid: MTLTexture?
+  var substrateMid: MTLTexture?
 
   var substrateA: MTLTexture?
   var substrateB: MTLTexture?
