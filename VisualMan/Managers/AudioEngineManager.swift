@@ -275,5 +275,4 @@ final class AudioEngineManager {
       securityScopedURL = nil
     }
   }
-  
 }
