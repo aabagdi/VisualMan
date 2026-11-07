@@ -18,6 +18,7 @@ struct LiquidLightParams {
   float eps;
   float apertureRadius;
   float4 plate[6];
+  float4 ripples[4];
 };
 
 struct SeedParams {
@@ -39,6 +40,13 @@ struct AdvectParams {
   float pad2;
   float4 drops[4];
   float4 dropState[4];
+};
+
+struct ProbeParams {
+  float2 simSize;
+  float2 center;
+  float2 offset;
+  float2 pad;
 };
 
 struct RelaxParams {
@@ -165,6 +173,62 @@ inline float2 rotate2(float2 v, float angle) {
   return float2(c * v.x - s * v.y, s * v.x + c * v.y);
 }
 
+constant float DROP_RELEASE = 0.3;
+constant float DROP_SPREAD_END = 0.85;
+constant float RIPPLE_SPEED = 0.10;
+constant float RIPPLE_WIDTH = 0.014;
+
+inline float dropRadius(float age, float finalRadius) {
+  float r;
+  if (age < DROP_RELEASE) {
+    r = finalRadius * (0.12 + 0.18 * age / DROP_RELEASE);
+  } else {
+    float u = saturate((age - DROP_RELEASE) / (DROP_SPREAD_END - DROP_RELEASE));
+    r = finalRadius * (0.30 + 0.70 * sqrt(u));
+  }
+  return max(r, 3.5);
+}
+
+inline float ringRadius(float age, float finalRadius, float longSide) {
+  float launched = max(0.12 * finalRadius, 3.5) + age * RIPPLE_SPEED * longSide;
+  return max(launched, dropRadius(age, finalRadius));
+}
+
+inline float rippleWave(float dist, float age, float finalRadius, float longSide) {
+  if (age < 0.0) return 0.0;
+  float ringR = ringRadius(age, finalRadius, longSide);
+  float width = RIPPLE_WIDTH * longSide;
+  float s = (dist - ringR) / width;
+  float s2 = (dist - ringR + 2.2 * width) / width;
+  float wave = s * fast::exp(-s * s) + 0.5 * s2 * fast::exp(-s2 * s2);
+  float spread = rsqrt(max(ringR / max(finalRadius, 1.0), 1.0));
+  return wave * fast::exp(-age / 1.3) * spread;
+}
+
+inline float dropImpactFlow(float dist, float age, float finalRadius, float longSide) {
+  float amp = 2.4 * finalRadius / (0.06 * longSide);
+  float ripple = rippleWave(dist, age, finalRadius, longSide) * amp * 0.45;
+  if (age < DROP_RELEASE) return ripple;
+  float front = dropRadius(age, finalRadius);
+  float sf = (dist - front) / max(0.5 * finalRadius, 2.0);
+  float frontFlow = 0.8 * fast::exp(-sf * sf) * step(0.4 * front, dist)
+                  * (1.0 - smoothstep(DROP_SPREAD_END - 0.15, DROP_SPREAD_END, age));
+  float t = max(age - DROP_SPREAD_END + 0.15, 0.0);
+  float sr = dist / (finalRadius * 1.7);
+  float recoil = 2.0 * sr * fast::exp(-sr * sr) * 0.2 * fast::exp(-t / 0.8) * -fast::cos(t * 7.0)
+               * smoothstep(0.0, 0.2, t);
+  return (frontFlow + recoil) * amp + ripple;
+}
+
+inline float dropSwellFlow(float dist, float age, float finalRadius, float longSide) {
+  if (age < DROP_RELEASE) return 0.0;
+  float amp = 2.4 * finalRadius / (0.06 * longSide);
+  float s = dist / (3.0 * finalRadius);
+  float envelope = smoothstep(DROP_RELEASE, DROP_RELEASE + 0.15, age)
+                 * (age < DROP_SPREAD_END ? 1.0 : fast::exp(-(age - DROP_SPREAD_END) / 0.5));
+  return 0.5 * amp * s * fast::exp(-s * s) * 1.65 * envelope;
+}
+
 kernel void liquidSimAdvect(texture2d<float, access::sample> phaseIn  [[texture(0)]],
                             texture2d<float, access::write>  phaseOut [[texture(1)]],
                             constant AdvectParams &params            [[buffer(0)]],
@@ -188,9 +252,9 @@ kernel void liquidSimAdvect(texture2d<float, access::sample> phaseIn  [[texture(
     float2 toHere = px - dropPx;
     float d = length(toHere);
     float2 dir = d > 1e-3 ? toHere / d : float2(0.0);
-    float reach = st.x * 1.8;
-    pushVel += dir * st.z * fast::exp(-(d * d) / (reach * reach));
+    pushVel += dir * dropImpactFlow(d, st.z, st.x, longSide);
   }
+  pushVel *= params.frames;
   
   float4 result = float4(0.0);
   for (int k = 0; k < 4; k++) {
@@ -200,8 +264,19 @@ kernel void liquidSimAdvect(texture2d<float, access::sample> phaseIn  [[texture(
     + 0.15 * liquidCurl(p * 2.6 - params.time * 0.05 + float2(1.3, 6.2) * float(k));
     swirl *= params.swirl * LAYER_SWIRL_SCALE[k];
     float2 press = p * params.press * LAYER_PRESS_SCALE[k];
+
+    float2 swell = float2(0.0);
+    for (int i = 0; i < 4; i++) {
+      float4 st = params.dropState[i];
+      if (st.w < 0.5 || st.y < 0.0 || int(params.drops[i].w + 0.5) != k) continue;
+      float2 dropPx = params.drops[i].xy * longSide + size * 0.5;
+      float2 toHere = px - dropPx;
+      float d = length(toHere);
+      float2 dir = d > 1e-3 ? toHere / d : float2(0.0);
+      swell += dir * dropSwellFlow(d, st.z, st.x, longSide) * st.w;
+    }
     
-    float2 vel = (tilt + swirl) * params.frames + press + pushVel;
+    float2 vel = (tilt + swirl) * params.frames + press + pushVel + swell * params.frames;
     float2 srcUV = (px - vel) / size;
     float phi = sampleCatmullRom(phaseIn, bilinear, srcUV, size)[k];
     result[k] = clamp(phi, -1.0, 1.0);
@@ -209,15 +284,46 @@ kernel void liquidSimAdvect(texture2d<float, access::sample> phaseIn  [[texture(
   
   for (int i = 0; i < 4; i++) {
     float4 st = params.dropState[i];
-    if (st.w < 0.5 || abs(st.y) < 0.5) continue;
+    if (st.w < 0.5 || st.z > DROP_SPREAD_END) continue;
     int layer = int(params.drops[i].w + 0.5);
     float2 dropPx = params.drops[i].xy * longSide + size * 0.5;
     float d = length(px - dropPx);
-    float blob = tanh((st.x - d) / (SQRT2 * params.eps));
-    result[layer] = st.y > 0.0 ? max(result[layer], blob) : min(result[layer], -blob);
+    float blob = tanh((dropRadius(st.z, st.x) - d) / (SQRT2 * params.eps));
+    if (st.y > 0.0) {
+      result[layer] = max(result[layer], blob);
+    } else {
+      result = min(result, float4(-blob));
+    }
   }
   
   phaseOut.write(result, gid);
+}
+
+kernel void liquidSimProbe(texture2d<float, access::sample> phase [[texture(0)]],
+                           device float4 *probe                   [[buffer(1)]],
+                           constant ProbeParams &params           [[buffer(0)]],
+                           uint tid [[thread_position_in_grid]]) {
+  if (tid >= 5) return;
+  constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
+  float2 offsets[5] = { float2(0.0), float2(1.0, 0.0), float2(-1.0, 0.0),
+                        float2(0.0, 1.0), float2(0.0, -1.0) };
+  float2 p = params.center + offsets[tid] * params.offset;
+  float longSide = max(params.simSize.x, params.simSize.y);
+  float2 uv = p * longSide / params.simSize + 0.5;
+  probe[tid] = phase.sample(bilinear, uv);
+}
+
+kernel void liquidSimResample(texture2d<float, access::sample> phaseIn  [[texture(0)]],
+                              texture2d<float, access::write>  phaseOut [[texture(1)]],
+                              uint2 gid [[thread_position_in_grid]]) {
+  uint w = phaseOut.get_width();
+  uint h = phaseOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+  constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
+  float2 uv = (float2(gid) + 0.5) / float2(w, h);
+  float2 inSize = float2(phaseIn.get_width(), phaseIn.get_height());
+  float4 phi = sampleCatmullRom(phaseIn, bilinear, uv, inSize);
+  phaseOut.write(clamp(phi, -1.0, 1.0), gid);
 }
 
 inline float4 phaseAt(texture2d<float, access::read> t, int2 c, int2 maxC) {
@@ -316,9 +422,9 @@ struct DyeLayer {
   float ndl;
 };
 
-inline DyeLayer resolveLayer(float phi, float phiShadow, float2 gradPx,
-                             float eps, float simLongSide, float pixel, float rimWidth,
-                             float3 lightDir) {
+inline DyeLayer resolveLayer(float phi, float phiShadowNear, float phiShadowFar,
+                             float2 gradPx, float eps, float simLongSide, float pixel,
+                             float rimWidth, float3 lightDir) {
   float c = clamp(phi, -0.995, 0.995);
   float sdPx = SQRT2 * eps * 0.5 * log((1.0 + c) / (1.0 - c));
   float inside = sdPx / simLongSide;
@@ -326,11 +432,14 @@ inline DyeLayer resolveLayer(float phi, float phiShadow, float2 gradPx,
   DyeLayer L;
   L.coverage = smoothstep(-pixel, pixel, inside);
   L.body = smoothstep(0.0, 0.9, phi);
-  L.rim = L.coverage * (1.0 - smoothstep(rimWidth * 0.2, rimWidth, inside));
+  float edge = fast::exp(-inside / rimWidth * 1.6);
+  L.rim = L.coverage * saturate((edge - 0.1) / 0.9);
   L.fringe = L.coverage
-  * smoothstep(rimWidth * 0.7, rimWidth * 1.4, inside)
-  * (1.0 - smoothstep(rimWidth * 1.8, rimWidth * 3.4, inside));
-  L.shadow = smoothstep(-0.4, 0.4, phiShadow) * (1.0 - L.coverage);
+  * smoothstep(rimWidth * 0.5, rimWidth * 1.0, inside)
+  * (1.0 - smoothstep(rimWidth * 1.3, rimWidth * 2.6, inside));
+  float near = smoothstep(-0.7, 0.7, phiShadowNear);
+  float far = smoothstep(-0.7, 0.7, phiShadowFar);
+  L.shadow = (0.6 * near + 0.4 * far) * (1.0 - L.coverage);
   
   float gradLen = max(length(gradPx), 1e-4);
   float2 outward = -gradPx / gradLen;
@@ -395,9 +504,25 @@ kernel void liquidLightRender(texture2d<float, access::write>  output [[texture(
   const float groovePitch = 0.0045;
   float grooves = sin(6.2831853 * fract(circ / groovePitch));
   
+  float2 rippleDisp = float2(0.0);
+  float caustic = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float4 rp = params.ripples[i];
+    if (rp.z < 0.0) continue;
+    float2 toHere = p - rp.xy;
+    float d = fast::length(toHere);
+    float2 dir = d > 1e-4 ? toHere / d : float2(0.0);
+    float wave = rippleWave(d * longSide, rp.z, rp.w * longSide, longSide);
+    float ahead = rippleWave((d + 0.004) * longSide, rp.z, rp.w * longSide, longSide);
+    float strength = rp.w / 0.06;
+    rippleDisp += dir * wave * 0.003 * strength;
+    caustic += (ahead - wave) * 1.0 * strength;
+  }
+  
   float2 shimmer = float2(vnoise(p * 6.0 + time * 1.5),
                           vnoise(p * 6.0 + float2(3.1, 7.4) - time * 1.3)) * 0.0012
-                 + radial * grooves * 0.00035;
+                 + radial * grooves * 0.00035
+                 + rippleDisp;
   float2 suv = uv + shimmer * longSide / size;
   
   float2 simSize = params.simSize;
@@ -410,16 +535,17 @@ kernel void liquidLightRender(texture2d<float, access::write>  output [[texture(
   
   const float3 lightDir = float3(-0.42, -0.55, 0.722);
   float2 shadowDir = -normalize(lightDir.xy);
-  float rimWidth = 0.0038 + params.bass * 0.0008;
+  float rimWidth = 0.003 + params.bass * 0.0006;
   float mottle = vnoise(p * 9.0 + time * 0.05) * 0.5
   + vnoise(p * 23.0 - time * 0.03) * 0.25;
   
   DyeLayer layers[4];
   for (int k = 0; k < 4; k++) {
-    float2 offset = shadowDir * (0.003 + 0.0022 * float(k)) * longSide / size;
-    float phiShadow = phase.sample(bilinear, suv - offset)[k];
-    layers[k] = resolveLayer(phi[k], phiShadow, float2(gx[k], gy[k]), params.eps,
-                             max(simSize.x, simSize.y), pixel, rimWidth, lightDir);
+    float2 offset = shadowDir * (0.004 + 0.003 * float(k)) * longSide / size;
+    float phiNear = phase.sample(bilinear, suv - offset * 0.5)[k];
+    float phiFar = phase.sample(bilinear, suv - offset)[k];
+    layers[k] = resolveLayer(phi[k], phiNear, phiFar, float2(gx[k], gy[k]),
+                             params.eps, max(simSize.x, simSize.y), pixel, rimWidth, lightDir);
   }
   
   float3 T = float3(1.0);
@@ -431,21 +557,21 @@ kernel void liquidLightRender(texture2d<float, access::write>  output [[texture(
     DyeLayer L = layers[k];
     float3 dye = params.plate[k].rgb;
 
-    float thickness = 0.8 + 0.5 * L.body + 0.18 * mottle;
+    float thickness = 0.85 + 0.25 * L.body + 0.15 * mottle;
     float3 dyeT = pow(dye, max(thickness, 0.3));
     T *= mix(float3(1.0), dyeT, L.coverage);
 
-    T *= 1.0 - L.rim * (0.58 - 0.28 * L.lit);
-    T *= 1.0 + L.fringe * (0.22 + 0.4 * L.lit);
-    
-    T *= 1.0 - L.shadow * (0.14 + 0.04 * float(k));
+    float3 deep = dye * dye * 0.7;
+    T *= mix(float3(1.0), deep, L.rim * (0.8 - 0.25 * L.lit));
+    T *= 1.0 + L.fringe * (0.06 + 0.12 * L.lit);
+    T *= mix(float3(1.0), dye * 0.55 + 0.1, L.shadow * (0.5 + 0.1 * float(k)));
     
     float sheen = L.ndl * L.ndl * L.ndl;
     sheen *= sheen;
     float hot = sheen * sheen * sheen * sheen * sheen * sheen * sheen * sheen;
     float above = 1.0;
     for (int j = k + 1; j < 4; j++) above *= 1.0 - layers[j].coverage * 0.7;
-    spec += (sheen * 0.05 + hot * 0.45) * L.coverage * (1.0 - L.rim) * above;
+    spec += (sheen * 0.04 + hot * 0.22) * L.coverage * (1.0 - L.rim) * above;
     
     additive += dye * L.coverage;
     covSum += L.coverage;
@@ -465,7 +591,7 @@ kernel void liquidLightRender(texture2d<float, access::write>  output [[texture(
 
   float sheet2 = sin(6.2831853 * fract(length(p - float2(0.011, -0.007)) / (groovePitch * 1.012)));
   float fresnel = 1.0 + grooves * (0.012 + 0.035 * rimward) + grooves * sheet2 * 0.02;
-  lamp *= fresnel;
+  lamp *= fresnel * (1.0 + clamp(caustic, -0.35, 0.5));
 
   float lumaT = dot(T, float3(0.333));
   float3 scatter = covSum > 0.0 ? additive / max(covSum, 1.0) : float3(0.0);

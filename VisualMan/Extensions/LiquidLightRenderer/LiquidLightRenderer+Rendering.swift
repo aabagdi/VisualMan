@@ -32,41 +32,6 @@ extension LiquidLightRenderer {
     }
   }
 
-  private func detectAndEmitDrop(bass: Float, inResumeGrace: Bool) {
-    let bassBaseline: Float = 0.08
-    let bassUpTau: Float = 0.06
-    let bassDownTau: Float = 0.20
-    let bassA = 1 - exp(-dt / (bass > smoothedBass ? bassUpTau : bassDownTau))
-    smoothedBass += (bass - smoothedBass) * bassA
-
-    let transient = bass > smoothedBass * 1.6 && bass > bassBaseline
-    let cooldownOK = (wallClock - lastDropWallTime) > 0.45
-    if transient && cooldownOK && !inResumeGrace {
-      lastDropWallTime = wallClock
-      emitDrop(size: 0.045 + 0.025 * hashUnit(3.3))
-    } else if wallClock >= nextDripWallTime && !inResumeGrace {
-      let size = 0.010 + 0.018 * hashUnit(5.1)
-      emitDrop(size: hashUnit(9.9) < 0.35 ? -size : size)
-      nextDripWallTime = wallClock + 0.8 + 1.0 * hashUnit(7.7)
-    }
-  }
-
-  private func hashUnit(_ salt: Float) -> Float {
-    let v = sin(Float(frameNumber) * 0.6180339 * salt * 12.9898) * 43758.5453
-    return v - v.rounded(.down)
-  }
-
-  private func emitDrop(size: Float) {
-    let longSide = Float(max(simWidth, simHeight, 1))
-    let halfExtent = SIMD2<Float>(Float(simWidth), Float(simHeight)) / longSide * 0.5
-    let x = (hashUnit(1.7) - 0.5) * 1.8 * halfExtent.x
-    let y = (hashUnit(2.9) - 0.5) * 1.7 * halfExtent.y
-    let layer = Float(Int(hashUnit(4.3) * 4) % 4)
-    drops[nextDropSlot] = SIMD4<Float>(x, y, wallClock, layer)
-    dropSizes[nextDropSlot] = size
-    nextDropSlot = (nextDropSlot + 1) % 4
-  }
-
   func processAudio(bass: Float, mid: Float, high: Float) -> SIMD3<Float> {
     let now = CACurrentMediaTime()
     let gap = lastFrameTime == 0 ? 0 : (now - lastFrameTime)
@@ -89,13 +54,13 @@ extension LiquidLightRenderer {
     slowEnvelope += (input - slowEnvelope) * slowA
 
     let audioEnergy = slowEnvelope.sum() / 3.0
-    let targetSpeed = 0.14 + audioEnergy * 0.35
+    let targetSpeed = 0.09 + audioEnergy * 0.22
     let speedA = 1 - exp(-dt / (targetSpeed > smoothedSpeed ? 0.3 : 0.5))
     smoothedSpeed += (targetSpeed - smoothedSpeed) * speedA
     time += dt * smoothedSpeed
 
-    tiltPhase += dt * (0.14 + audioEnergy * 0.2)
-    tiltAxis += dt * 0.04
+    tiltPhase += dt * (0.08 + audioEnergy * 0.12)
+    tiltAxis += dt * 0.025
 
     detectAndEmitDrop(bass: bass, inResumeGrace: inResumeGrace)
 
@@ -125,6 +90,15 @@ extension LiquidLightRenderer {
     dispatch(encoder, width: phaseOut.width, height: phaseOut.height)
   }
 
+  func resamplePhase(encoder: any MTL4ComputeCommandEncoder,
+                     phaseIn: MTLTexture,
+                     phaseOut: MTLTexture) {
+    encoder.setComputePipelineState(resamplePipeline)
+    argumentTable.setTexture(phaseIn.gpuResourceID, index: 0)
+    argumentTable.setTexture(phaseOut.gpuResourceID, index: 1)
+    dispatch(encoder, width: phaseOut.width, height: phaseOut.height)
+  }
+
   func advectPhase(encoder: any MTL4ComputeCommandEncoder,
                    phaseIn: MTLTexture,
                    phaseOut: MTLTexture,
@@ -137,37 +111,22 @@ extension LiquidLightRenderer {
     let axis = SIMD2<Float>(cos(tiltAxis), sin(tiltAxis))
     let lean = SIMD2<Float>(cos(tiltAxis * 0.31 + 1.2), sin(tiltAxis * 0.31 + 1.2))
     let rock = sin(tiltPhase)
-    let tilt = axis * rock * (0.26 + energy * 0.55) + lean * 0.06
+    let tilt = axis * rock * (0.18 + energy * 0.4) + lean * 0.04
 
     let pressDelta = audio.x - lastPressBass
     lastPressBass = audio.x
     let press = max(-5, min(5, pressDelta * 14))
-
-    func dropState(_ i: Int) -> SIMD4<Float> {
-      let d = drops[i]
-      let age = wallClock - d.z
-      let alive: Float = (d.z >= 0 && age >= 0 && age <= 1.6) ? 1.0 : 0.0
-      let spread = min(1, age / 0.9)
-      let finalRadius = abs(dropSizes[i])
-      let longSide = Float(max(simWidth, simHeight))
-      let radius = (finalRadius * 0.2 + finalRadius * 0.8 * spread * (2 - spread)) * longSide
-      let sign: Float = dropSizes[i] < 0 ? -1 : 1
-      let inject: Float = age <= 1.0 ? sign : 0.0
-      let push = 0.9 * (finalRadius / 0.06) * exp(-age / 0.5)
-      return SIMD4<Float>(radius, inject, push, alive)
-    }
 
     let params = LiquidAdvectParams(
       simSize: simSize,
       tilt: tilt,
       frames: dt * 60,
       time: time,
-      swirl: 0.06 + audio.y * 0.18,
+      swirl: 0.04 + audio.y * 0.12,
       press: press,
       eps: Self.interfaceEps,
       drops: LiquidLightDrops(d0: drops[0], d1: drops[1], d2: drops[2], d3: drops[3]),
-      dropState: LiquidLightDropState(s0: dropState(0), s1: dropState(1),
-                                      s2: dropState(2), s3: dropState(3))
+      dropState: dropStateUniforms()
     )
     argumentTable.setAddress(writeUniform(params), index: 0)
     dispatch(encoder, width: phaseOut.width, height: phaseOut.height)
@@ -226,7 +185,8 @@ extension LiquidLightRenderer {
       time: time, bass: audio.x, mid: audio.y, high: audio.z,
       simSize: simSize, eps: Self.interfaceEps,
       apertureRadius: Self.apertureRadius,
-      plate: currentPlate()
+      plate: currentPlate(),
+      ripples: rippleUniforms()
     )
     argumentTable.setAddress(writeUniform(params), index: 0)
     dispatch(encoder, width: output.width, height: output.height)
@@ -255,9 +215,9 @@ extension LiquidLightRenderer {
                      water: SIMD4(0.32, 0.08, 0.62, 0.9), lamp: halogen),
   ]
 
-  static let plateDuration: Float = 60
-  static let plateCrossfade: Float = 10
-  static let hueDriftRate: Float = 0.05
+  static let plateDuration: Float = 90
+  static let plateCrossfade: Float = 14
+  static let hueDriftRate: Float = 0.035
 
   func currentPlate() -> LiquidLightPlate {
     let plates = Self.plates

@@ -22,7 +22,7 @@ struct GameOfLifeParams {
 };
 
 constant float LCD_CHARGE_PER_STEP = 1.0 / 32.0;
-constant float LCD_DECAY_PER_STEP = 0.55;
+constant float LCD_DECAY_PER_STEP = 0.45;
 
 inline float hash(uint2 p, uint seed) {
   uint h = p.x * 374761393u + p.y * 668265263u + seed * 1013904223u;
@@ -248,7 +248,7 @@ kernel void gameOfLifeRender(texture2d<half, access::read>  sim     [[texture(0)
     float ghost = saturate(charge * 6.0);
     if (ghost > 0.0) {
       float3 ghostColor = mix(backlight, pixelDark, 0.92) * vignette;
-      color = mix(color, ghostColor, ghost * 0.85);
+      color = mix(color, ghostColor, ghost * 0.6);
     }
   }
 

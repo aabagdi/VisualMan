@@ -16,10 +16,12 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   let commandQueue: any MTL4CommandQueue
 
   var seedPipeline: MTLComputePipelineState
+  var resamplePipeline: MTLComputePipelineState
   var advectPipeline: MTLComputePipelineState
   var reduceTilesPipeline: MTLComputePipelineState
   var reduceFinalPipeline: MTLComputePipelineState
   var relaxPipeline: MTLComputePipelineState
+  var probePipeline: MTLComputePipelineState
   var renderPipeline: MTLComputePipelineState
   var feedbackPipeline: MTLComputePipelineState
   var blurPipeline: MTLComputePipelineState
@@ -40,8 +42,13 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   var smoothedBass: Float = 0
   var lastDropWallTime: Float = -10
   var nextDripWallTime: Float = 1.5
+  var pipettePos: SIMD2<Float> = .zero
+  var pipetteLayer: Int = 0
+  var lastPipetteMoveWallTime: Float = -10
+  var nextPipetteMoveWallTime: Float = 0
   var drops: [SIMD4<Float>] = Array(repeating: SIMD4<Float>(0, 0, -1, 0), count: 4)
   var dropSizes: [Float] = Array(repeating: 0.05, count: 4)
+  var dropSwellGains: [Float] = Array(repeating: 1, count: 4)
   var nextDropSlot: Int = 0
 
   static let maxFramesInFlight: UInt64 = 3
@@ -71,8 +78,11 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   static let maxReduceTiles = 4096
   let reduceTilesBuffer: MTLBuffer
   let lambdaBuffer: MTLBuffer
+  static let probeCount = 5
+  let probeBuffer: MTLBuffer
 
   var frameTextures: FrameTextures?
+  var phaseCarryOver: MTLTexture?
   var lastDrawableWidth: Int = 0
   var lastDrawableHeight: Int = 0
   var historyValid: Bool = false
@@ -123,16 +133,10 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
       return nil
     }
 
-    let tilesLength = Self.maxReduceTiles * MemoryLayout<SIMD4<Float>>.stride
-    guard let reduceTilesBuffer = device.makeBuffer(length: tilesLength, options: .storageModePrivate),
-          let lambdaBuffer = device.makeBuffer(length: MemoryLayout<SIMD4<Float>>.stride,
-                                               options: .storageModePrivate) else {
-      return nil
-    }
-    reduceTilesBuffer.label = "LiquidLight.reduceTiles"
-    lambdaBuffer.label = "LiquidLight.lambda"
-    self.reduceTilesBuffer = reduceTilesBuffer
-    self.lambdaBuffer = lambdaBuffer
+    guard let scratch = Self.makeScratchBuffers(device: device) else { return nil }
+    self.reduceTilesBuffer = scratch.tiles
+    self.lambdaBuffer = scratch.lambda
+    self.probeBuffer = scratch.probe
 
     self.device = device
     self.commandQueue = commandQueue
@@ -143,10 +147,12 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     self.currentUniformBuffer = firstUniformBuffer
     self.argumentTables = argumentTables
     self.seedPipeline = pipelines.seed
+    self.resamplePipeline = pipelines.resample
     self.advectPipeline = pipelines.advect
     self.reduceTilesPipeline = pipelines.reduceTiles
     self.reduceFinalPipeline = pipelines.reduceFinal
     self.relaxPipeline = pipelines.relax
+    self.probePipeline = pipelines.probe
     self.renderPipeline = pipelines.render
     self.feedbackPipeline = pipelines.feedback
     self.blurPipeline = pipelines.blur
@@ -173,8 +179,17 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
       return existing
     }
 
+    let sameAspect = lastDrawableHeight > 0
+      && abs(Float(width) / Float(height) - Float(lastDrawableWidth) / Float(lastDrawableHeight)) < 0.02
+    let upscale = Float(max(width, height)) / Float(max(lastDrawableWidth, lastDrawableHeight, 1))
+    if let old = frameTextures, simValid, sameAspect, upscale < 1.4 {
+      phaseCarryOver = old.phase[0]
+    } else {
+      phaseCarryOver = nil
+    }
+
     for old in frameTextures?.all ?? [] {
-      pendingTextureReleases.append((frame: frameNumber, texture: old))
+      pendingTextureReleases.append((frame: frameNumber + 1, texture: old))
     }
 
     let simW = max(32, Int((Float(width) * Self.simScale / Self.renderScale).rounded()))
@@ -182,6 +197,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     guard let textures = makeFrameTextures(width: width, height: height,
                                            simWidth: simW, simHeight: simH) else {
       frameTextures = nil
+      phaseCarryOver = nil
       lastDrawableWidth = 0
       lastDrawableHeight = 0
       return nil
@@ -192,7 +208,7 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
 
     frameTextures = textures
     historyValid = false
-    simValid = false
+    simValid = phaseCarryOver != nil
     simWidth = simW
     simHeight = simH
     lastDrawableWidth = width
@@ -205,7 +221,11 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
                                 audio: SIMD3<Float>) -> MTLTexture {
     var src = textures.phase[0]
     var dst = textures.phase[1]
-    if !simValid {
+    if let carried = phaseCarryOver {
+      resamplePhase(encoder: encoder, phaseIn: carried, phaseOut: src)
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+      phaseCarryOver = nil
+    } else if !simValid {
       seedPhase(encoder: encoder, phaseOut: src)
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
       simValid = true
@@ -223,6 +243,8 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
       swap(&src, &dst)
     }
+
+    probePipette(encoder: encoder, phase: src)
 
     if src !== textures.phase[0] {
       frameTextures = FrameTextures(intermediate: textures.intermediate,

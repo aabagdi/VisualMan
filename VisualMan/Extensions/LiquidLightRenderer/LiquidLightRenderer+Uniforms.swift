@@ -40,6 +40,7 @@ struct LiquidLightParams {
   var eps: Float
   var apertureRadius: Float
   var plate: LiquidLightPlate
+  var ripples: LiquidLightDrops
 }
 
 struct LiquidSeedParams {
@@ -68,6 +69,13 @@ struct LiquidRelaxParams {
   var mobility: Float
   var eps2: Float
   var acMobility: Float
+}
+
+struct LiquidProbeParams {
+  var simSize: SIMD2<Float>
+  var center: SIMD2<Float>
+  var offset: SIMD2<Float>
+  var pad: SIMD2<Float> = .zero
 }
 
 struct LiquidReduceParams {

@@ -46,6 +46,27 @@ extension LiquidLightRenderer {
     historyTextureDescriptor(width: width, height: height)
   }
 
+  struct ScratchBuffers {
+    let tiles: MTLBuffer
+    let lambda: MTLBuffer
+    let probe: MTLBuffer
+  }
+
+  static func makeScratchBuffers(device: MTLDevice) -> ScratchBuffers? {
+    let stride = MemoryLayout<SIMD4<Float>>.stride
+    guard let tiles = device.makeBuffer(length: maxReduceTiles * stride, options: .storageModePrivate),
+          let lambda = device.makeBuffer(length: stride, options: .storageModePrivate),
+          let probe = device.makeBuffer(length: probeCount * stride, options: .storageModeShared) else {
+      return nil
+    }
+    tiles.label = "LiquidLight.reduceTiles"
+    lambda.label = "LiquidLight.lambda"
+    probe.label = "LiquidLight.probe"
+    probe.contents().initializeMemory(as: SIMD4<Float>.self, repeating: SIMD4<Float>(repeating: -1),
+                                      count: probeCount)
+    return ScratchBuffers(tiles: tiles, lambda: lambda, probe: probe)
+  }
+
   func makeFrameTextures(width: Int, height: Int, simWidth: Int, simHeight: Int) -> FrameTextures? {
     let colorDesc = Self.colorTextureDescriptor(width: width, height: height)
     let historyDesc = Self.historyTextureDescriptor(width: width, height: height)

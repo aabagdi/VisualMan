@@ -83,6 +83,8 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var gpuRampedUp = false
     private let rampUpFrameThreshold = 30
     private var hasEverPresented = false
+    private var consecutiveSkippedFrames = 0
+    private let stalledGPUFrameThreshold = 120
 
     init(renderer: R) {
       self.renderer = renderer
@@ -187,8 +189,6 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
       let now = CACurrentMediaTime()
       if lastFrameTime > 0, now - lastFrameTime > 0.1 {
-        renderer.recoverFromStalledGPU()
-        recoverFromStalledPresents()
         renderer.prepareForResume()
       }
       lastFrameTime = now
@@ -209,6 +209,14 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
       if intermediateTex != nil {
         renderer.commitCompute()
+        consecutiveSkippedFrames = 0
+      } else {
+        consecutiveSkippedFrames += 1
+        if consecutiveSkippedFrames >= stalledGPUFrameThreshold {
+          consecutiveSkippedFrames = 0
+          renderer.recoverFromStalledGPU()
+          recoverFromStalledPresents()
+        }
       }
 
       guard intermediateTex != nil || !hasEverPresented,

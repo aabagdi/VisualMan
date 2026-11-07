@@ -15,6 +15,7 @@ extension LiquidLightRenderer {
     lastFrameTime = 0
     historyValid = false
     simValid = false
+    phaseCarryOver = nil
     tiltPhase = 0
     tiltAxis = 0.6
     lastPressBass = 0
@@ -22,8 +23,13 @@ extension LiquidLightRenderer {
     smoothedSpeed = 0.25
     lastDropWallTime = -10
     nextDripWallTime = 1.5
+    pipettePos = .zero
+    pipetteLayer = 0
+    lastPipetteMoveWallTime = -10
+    nextPipetteMoveWallTime = 0
     drops = Array(repeating: SIMD4<Float>(0, 0, -1, 0), count: 4)
     dropSizes = Array(repeating: 0.05, count: 4)
+    dropSwellGains = Array(repeating: 1, count: 4)
     nextDropSlot = 0
     envelope = .zero
     slowEnvelope = .zero
