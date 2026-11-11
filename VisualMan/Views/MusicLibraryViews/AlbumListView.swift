@@ -6,13 +6,14 @@
 //
 
 import SwiftUI
+import Dependencies
 import MediaPlayer
 
 struct AlbumListView: View {
   @State private var searchText: String = ""
   @State private var filteredAlbums: [MPMediaItemCollection]?
   
-  @Environment(MusicLibraryAccessManager.self) private var library
+  @Dependency(MusicLibraryAccessManager.self) private var library
   
   let albums: [MPMediaItemCollection]
 
@@ -48,7 +49,8 @@ struct AlbumListView: View {
                   .padding(.vertical, 4)
                 }
                 
-                NavigationLink(destination: ArtistListView(artists: library.artists, albums: library.albums)) {
+                NavigationLink(destination: ArtistListView(artists: library.artists,
+                                                             albums: library.albums + library.compilations)) {
                   HStack {
                     Image(systemName: "music.microphone")
                       .font(.system(size: 20))

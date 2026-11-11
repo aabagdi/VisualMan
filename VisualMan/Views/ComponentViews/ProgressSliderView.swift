@@ -49,8 +49,12 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     return currentProgress * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
   }
   
+  private var elapsedSeconds: T {
+    displayTime.rounded(.down)
+  }
+
   private var remainingTime: T {
-    return inRange.upperBound - displayTime
+    max(inRange.upperBound.rounded() - elapsedSeconds, 0)
   }
   
   var body: some View {
@@ -69,7 +73,7 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
           .frame(height: height)
           
           HStack {
-            Text(displayTime.asTimeString())
+            Text(elapsedSeconds.asTimeString())
               .font(.caption)
               .monospacedDigit()
               .foregroundStyle(isDragging ? fillColor : emptyColor)

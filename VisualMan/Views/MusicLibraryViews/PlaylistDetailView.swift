@@ -6,12 +6,13 @@
 //
 
 import SwiftUI
+import Dependencies
 import MediaPlayer
 
 struct PlaylistDetailView: View {
   let playlist: MPMediaItemCollection
   
-  @Environment(AudioEngineManager.self) private var audioManager
+  @Dependency(AudioEngineManager.self) private var audioManager
   
   var body: some View {
     List(playlist.items.enumerated(), id: \.1.persistentID) { index, song in

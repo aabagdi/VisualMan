@@ -6,13 +6,14 @@
 //
 
 import SwiftUI
+import Dependencies
 import MediaPlayer
 
 struct AlbumDetailView: View {
   let album: MPMediaItemCollection
   let sortedSongs: [MPMediaItem]
 
-  @Environment(AudioEngineManager.self) private var audioManager
+  @Dependency(AudioEngineManager.self) private var audioManager
 
   private let placeholder = UIImage(resource: .artPlaceholder)
 

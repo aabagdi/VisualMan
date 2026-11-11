@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Dependencies
 internal import UniformTypeIdentifiers
 
 private struct NowPlayingDestination: Hashable {}
@@ -18,9 +19,9 @@ struct HomeScreenView: View {
   @State private var fileLoadingFailed = false
   @State private var fileError: VMError?
   
-  @Environment(AudioEngineManager.self) private var audioManager
-  @Environment(MusicLibraryAccessManager.self) private var library
-  @Environment(AudioPlaylistManager.self) private var playlistManager
+  @Dependency(AudioEngineManager.self) private var audioManager
+  @Dependency(MusicLibraryAccessManager.self) private var library
+  @Dependency(AudioPlaylistManager.self) private var playlistManager
   
   var body: some View {
     NavigationStack {

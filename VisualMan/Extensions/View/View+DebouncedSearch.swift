@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Dependencies
 
 extension View {
   func debouncedSearchable<T>(
@@ -17,11 +18,12 @@ extension View {
     self
       .searchable(text: text, placement: .navigationBarDrawer(displayMode: .always))
       .task(id: text.wrappedValue) {
+        @Dependency(\.continuousClock) var clock
         if text.wrappedValue.isEmpty {
           results.wrappedValue = nil
           return
         }
-        try? await Task.sleep(for: .milliseconds(300))
+        try? await clock.sleep(for: .milliseconds(300))
         guard !Task.isCancelled else { return }
         results.wrappedValue = source.filtered(by: text.wrappedValue, matching: keyPaths)
       }

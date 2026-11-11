@@ -76,10 +76,6 @@
           "package": "swift-dependencies",
           "product-name": "Dependencies",
           "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": "swift-dependencies",
-          "product-name": "DependenciesMacros",
-          "build-phase": { "build-phase": "frameworks" },
         },
       ],
       "build-settings": {

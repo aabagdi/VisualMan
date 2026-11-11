@@ -38,9 +38,6 @@ struct VisualManApp: App {
         } message: {
           Text("VisualMan performs best with Low Power Mode turned off.")
         }
-        .environment(musicLibraryManager)
-        .environment(playlistManager)
-        .environment(audioEngineManager)
         .environment(rendererCache)
     }
   }

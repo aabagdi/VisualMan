@@ -13,6 +13,8 @@ final class LockScreenControlManager {
   @Dependency(AudioEngineManager.self) private var audioManager
   private let placeholder = UIImage(resource: .artPlaceholder)
   
+  var onPlay: (() -> Void)?
+  var onPause: (() -> Void)?
   var onPlayPause: (() -> Void)?
   var onNext: (() -> Void)?
   var onPrevious: (() -> Void)?
@@ -32,16 +34,22 @@ final class LockScreenControlManager {
 
     commandCenter.playCommand.isEnabled = true
     commandCenter.pauseCommand.isEnabled = true
+    commandCenter.togglePlayPauseCommand.isEnabled = true
     commandCenter.previousTrackCommand.isEnabled = true
     commandCenter.nextTrackCommand.isEnabled = true
     commandCenter.changePlaybackPositionCommand.isEnabled = true
 
     commandTargets.append(commandCenter.playCommand.addTarget { [weak self] _ in
-      Task { @MainActor in self?.onPlayPause?() }
+      Task { @MainActor in self?.onPlay?() }
       return .success
     })
 
     commandTargets.append(commandCenter.pauseCommand.addTarget { [weak self] _ in
+      Task { @MainActor in self?.onPause?() }
+      return .success
+    })
+
+    commandTargets.append(commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
       Task { @MainActor in self?.onPlayPause?() }
       return .success
     })
@@ -100,6 +108,7 @@ final class LockScreenControlManager {
       let commandCenter = MPRemoteCommandCenter.shared()
       commandCenter.playCommand.isEnabled = true
       commandCenter.pauseCommand.isEnabled = true
+      commandCenter.togglePlayPauseCommand.isEnabled = true
       commandCenter.previousTrackCommand.isEnabled = true
       commandCenter.nextTrackCommand.isEnabled = true
       commandCenter.changePlaybackPositionCommand.isEnabled = true
@@ -111,6 +120,7 @@ final class LockScreenControlManager {
     for target in commandTargets {
       commandCenter.playCommand.removeTarget(target)
       commandCenter.pauseCommand.removeTarget(target)
+      commandCenter.togglePlayPauseCommand.removeTarget(target)
       commandCenter.previousTrackCommand.removeTarget(target)
       commandCenter.nextTrackCommand.removeTarget(target)
       commandCenter.changePlaybackPositionCommand.removeTarget(target)
@@ -119,10 +129,13 @@ final class LockScreenControlManager {
 
     commandCenter.playCommand.isEnabled = false
     commandCenter.pauseCommand.isEnabled = false
+    commandCenter.togglePlayPauseCommand.isEnabled = false
     commandCenter.previousTrackCommand.isEnabled = false
     commandCenter.nextTrackCommand.isEnabled = false
     commandCenter.changePlaybackPositionCommand.isEnabled = false
 
+    onPlay = nil
+    onPause = nil
     onPlayPause = nil
     onNext = nil
     onPrevious = nil

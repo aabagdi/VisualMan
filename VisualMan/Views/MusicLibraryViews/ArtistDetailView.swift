@@ -9,6 +9,7 @@ import SwiftUI
 import MediaPlayer
 
 struct ArtistDetailView: View {
+  let artistName: String
   let albums: [MPMediaItemCollection]
 
   var body: some View {
@@ -17,7 +18,7 @@ struct ArtistDetailView: View {
         AlbumRowView(album: album)
       }
     }
-    .navigationTitle(albums.first?.representativeItem?.artist ?? "Unknown")
+    .navigationTitle(artistName)
     .toolbarVisibility(.hidden, for: .tabBar)
   }
 }

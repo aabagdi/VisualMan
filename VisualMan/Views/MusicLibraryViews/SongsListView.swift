@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Dependencies
 import MediaPlayer
 
 private struct SongSelection: Hashable {
@@ -16,7 +17,7 @@ struct SongsListView: View {
   @State private var searchText: String = ""
   @State private var filteredSongs: [MPMediaItem]?
   
-  @Environment(AudioEngineManager.self) private var audioManager
+  @Dependency(AudioEngineManager.self) private var audioManager
   
   let songs: [MPMediaItem]
   

@@ -59,6 +59,8 @@ extension MusicPlayerView {
       songTransitionTask = nil
       playTask?.cancel()
       playTask = nil
+      lockScreen.onPlay = nil
+      lockScreen.onPause = nil
       lockScreen.onPlayPause = nil
       lockScreen.onNext = nil
       lockScreen.onPrevious = nil
@@ -66,8 +68,21 @@ extension MusicPlayerView {
     
     func togglePlayback() {
       if audioManager.isPlaying {
-        audioManager.pause()
-      } else if audioManager.currentTime > 0 && audioManager.currentTime < audioManager.duration {
+        pause()
+      } else {
+        play()
+      }
+    }
+
+    private func pause() {
+      guard audioManager.isPlaying else { return }
+      audioManager.pause()
+      updateNowPlayingInfo()
+    }
+
+    private func play() {
+      guard !audioManager.isPlaying else { return }
+      if audioManager.currentTime > 0 && audioManager.currentTime < audioManager.duration {
         Task { [weak self] in
           await self?.audioManager.resume()
           self?.updateNowPlayingInfo()
@@ -79,7 +94,6 @@ extension MusicPlayerView {
           self?.updateNowPlayingInfo()
         }
       }
-      updateNowPlayingInfo()
     }
     
     func skipBackwards() {
@@ -140,6 +154,14 @@ extension MusicPlayerView {
     private func setupLockScreenControls() {
       lockScreen.activate()
       
+      lockScreen.onPlay = { [weak self] in
+        self?.play()
+      }
+
+      lockScreen.onPause = { [weak self] in
+        self?.pause()
+      }
+
       lockScreen.onPlayPause = { [weak self] in
         self?.togglePlayback()
       }

@@ -8,17 +8,17 @@
 import Dependencies
 
 extension AudioEngineManager: DependencyKey {
-  @MainActor static let liveValue = AudioEngineManager()
+  static var liveValue: AudioEngineManager { AudioEngineManager() }
 }
 
 extension LockScreenControlManager: DependencyKey {
-  @MainActor static let liveValue = LockScreenControlManager()
+  static var liveValue: LockScreenControlManager { LockScreenControlManager() }
 }
 
 extension AudioPlaylistManager: DependencyKey {
-  @MainActor static let liveValue = AudioPlaylistManager()
+  static var liveValue: AudioPlaylistManager { AudioPlaylistManager() }
 }
 
 extension MusicLibraryAccessManager: DependencyKey {
-  @MainActor static let liveValue = MusicLibraryAccessManager()
+  static var liveValue: MusicLibraryAccessManager { MusicLibraryAccessManager() }
 }

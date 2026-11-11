@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Dependencies
 
 struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
@@ -15,9 +16,10 @@ struct MusicPlayerView: View {
   @State private var toastDismissTask: Task<Void, Never>?
 
   @Environment(VisualizerSelection.self) private var visualizerSelection
-  @Environment(AudioEngineManager.self) private var audioManager
-  @Environment(AudioPlaylistManager.self) private var playlistManager
+  @Dependency(AudioEngineManager.self) private var audioManager
+  @Dependency(AudioPlaylistManager.self) private var playlistManager
   @Environment(VisualizerRendererCache.self) private var rendererCache
+  @Dependency(\.continuousClock) private var clock
   
   private let _audioSources: [any AudioSource]
   private let _startingIndex: Int
@@ -166,7 +168,7 @@ struct MusicPlayerView: View {
       toastDismissTask?.cancel()
       showScreenshotToast = true
       toastDismissTask = Task { @MainActor in
-        try? await Task.sleep(for: .seconds(2))
+        try? await clock.sleep(for: .seconds(2))
         guard !Task.isCancelled else { return }
         showScreenshotToast = false
       }
@@ -191,7 +193,7 @@ private struct AudioReactiveVisualizerLayer: View {
   let currentVisualizer: VMVisualizer
   let albumArt: UIImage?
 
-  @Environment(AudioEngineManager.self) private var audioManager
+  @Dependency(AudioEngineManager.self) private var audioManager
 
   var body: some View {
     VisualizerContainerView(
@@ -209,8 +211,8 @@ private struct PlayerControlsLayer: View {
   let viewModel: MusicPlayerView.MusicPlayerViewModel
   @Binding var isTapped: Bool
 
-  @Environment(AudioEngineManager.self) private var audioManager
-  @Environment(AudioPlaylistManager.self) private var playlistManager
+  @Dependency(AudioEngineManager.self) private var audioManager
+  @Dependency(AudioPlaylistManager.self) private var playlistManager
 
   private let sliderColor: Color = .white
 

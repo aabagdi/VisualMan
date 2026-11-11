@@ -8,10 +8,6 @@
 import SwiftUI
 import MediaPlayer
 
-private struct ArtistSelection: Hashable {
-  let artistName: String
-}
-
 struct ArtistListView: View {
   @State private var searchText: String = ""
   @State private var filteredArtists: [MPMediaItemCollection]?
@@ -27,14 +23,11 @@ struct ArtistListView: View {
     Group {
       if !artists.isEmpty {
         List(displayedArtists, id: \.representativeItem?.persistentID) { artist in
-          NavigationLink(value: ArtistSelection(artistName: artist.representativeItem?.artist ?? "")) {
-            Text(artist.representativeItem?.artist ?? "Unknown")
+          let artistName = artist.representativeItem?.artist ?? "Unknown"
+          NavigationLink(destination: ArtistDetailView(artistName: artistName,
+                                                       albums: albums(for: artist))) {
+            Text(artistName)
           }
-        }
-        .navigationDestination(for: ArtistSelection.self) { selection in
-          ArtistDetailView(albums: albums.filter { album in
-            album.representativeItem?.artist == selection.artistName
-          })
         }
         .debouncedSearchable(text: $searchText, results: $filteredArtists, source: artists) {
           [$0.representativeItem?.artist]
@@ -46,5 +39,13 @@ struct ArtistListView: View {
     }
     .toolbarVisibility(.hidden, for: .tabBar)
     .navigationTitle("Artists")
+  }
+
+  private func albums(for artist: MPMediaItemCollection) -> [MPMediaItemCollection] {
+    let albumIDs = Set(artist.items.map(\.albumPersistentID))
+    return albums.filter { album in
+      guard let albumID = album.representativeItem?.albumPersistentID else { return false }
+      return albumIDs.contains(albumID)
+    }
   }
 }

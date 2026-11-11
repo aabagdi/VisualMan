@@ -22,6 +22,7 @@ extension AudioEngineManager {
 
   func pause() {
     player?.pause()
+    engine?.pause()
     playbackState = .paused
     stopDisplayLink()
     startPauseDecay()
@@ -29,16 +30,16 @@ extension AudioEngineManager {
 
   func resume() async {
     stopPauseDecay()
-    do {
-      try await activateAudioSession()
-    } catch {
-      audioLogger.error("Failed to activate audio session on resume: \(error.localizedDescription)")
-    }
     if let engine, !engine.isRunning {
       do {
         try engine.start()
       } catch {
-        audioLogger.error("Failed to restart audio engine on resume: \(error.localizedDescription)")
+        do {
+          try await activateAudioSession()
+          try engine.start()
+        } catch {
+          audioLogger.error("Failed to restart audio engine on resume: \(error.localizedDescription)")
+        }
       }
     }
     player?.play()
@@ -77,9 +78,10 @@ extension AudioEngineManager {
 
   func startNowPlayingTimer(updateHandler: @escaping @MainActor () -> Void) {
     stopNowPlayingTimer()
+    @Dependency(\.continuousClock) var clock
     nowPlayingTask = Task { @MainActor [weak self] in
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(1))
+        try? await clock.sleep(for: .seconds(1))
         guard !Task.isCancelled, self != nil else { break }
         updateHandler()
       }
@@ -252,10 +254,7 @@ extension AudioEngineManager {
     switch type {
     case .began:
       if playbackState == .playing {
-        player?.pause()
-        playbackState = .paused
-        stopDisplayLink()
-        startPauseDecay()
+        pause()
       }
     case .ended:
       Task { [weak self] in
@@ -291,10 +290,7 @@ extension AudioEngineManager {
     switch reason {
     case .oldDeviceUnavailable:
       if playbackState == .playing {
-        player?.pause()
-        playbackState = .paused
-        stopDisplayLink()
-        startPauseDecay()
+        pause()
       }
     case .newDeviceAvailable:
       break
@@ -305,23 +301,19 @@ extension AudioEngineManager {
 
   private func handleEngineConfigChange() {
     guard let engine else { return }
-    let wasPlaying = playbackState == .playing
-    if wasPlaying {
-      player?.pause()
-      stopDisplayLink()
-    }
+    guard playbackState == .playing else { return }
+    player?.pause()
+    stopDisplayLink()
     do {
       try engine.start()
     } catch {
       audioLogger.error("Failed to restart engine after config change: \(error.localizedDescription)")
     }
-    if wasPlaying {
-      engine.mainMixerNode.removeTap(onBus: 0)
-      installAudioTap(on: engine)
-      player?.play()
-      playbackState = .playing
-      startDisplayLink()
-    }
+    engine.mainMixerNode.removeTap(onBus: 0)
+    installAudioTap(on: engine)
+    player?.play()
+    playbackState = .playing
+    startDisplayLink()
   }
 
   func seek(to time: TimeInterval) {
