@@ -286,7 +286,7 @@ private struct PlayerControlsLayer: View {
       LinearGradient(
         stops: [
           .init(color: .clear, location: 0.4),
-          .init(color: .black.opacity(0.7), location: 1.0)
+          .init(color: .black.opacity(0.7), location: 1.0),
         ],
         startPoint: .top,
         endPoint: .bottom

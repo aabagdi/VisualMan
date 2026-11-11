@@ -272,7 +272,13 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
       shading: Self.renderShading,
       detail: Self.renderDetail,
       jitter: Self.renderJitter,
-      thinFade: Self.renderThinFade
+      thinFade: Self.renderThinFade,
+      technicolorPrintDensity: Self.renderTechnicolorPrintDensity,
+      technicolorSharpen: Self.renderTechnicolorSharpen,
+      technicolorPresence: Self.renderTechnicolorPresence,
+      technicolorTheme: SIMD4<Float>(technicolorThemeDye, 0),
+      technicolorNeutralReach: Self.renderTechnicolorNeutralReach,
+      technicolorLampGain: Self.renderTechnicolorLampGain
     )
   }
 

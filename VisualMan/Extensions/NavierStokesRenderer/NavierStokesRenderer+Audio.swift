@@ -9,16 +9,40 @@
 import Metal
 import simd
 
-private func hsv2rgb(h: Float, s: Float, v: Float) -> SIMD3<Float> {
-  let hh = h - floor(h)
-  let p = SIMD3<Float>(
-    abs(hh * 6.0 - 3.0) - 1.0,
-    2.0 - abs(hh * 6.0 - 2.0),
-    2.0 - abs(hh * 6.0 - 4.0)
-  )
-  let clamped = simd_clamp(p, SIMD3<Float>(repeating: 0.0), SIMD3<Float>(repeating: 1.0))
-  return v * simd_mix(SIMD3<Float>(repeating: 1.0), clamped, SIMD3<Float>(repeating: s))
+private struct GasPalette {
+  let dyes: [SIMD3<Float>]
+
+  func dye(_ h: Float) -> SIMD3<Float> {
+    let x = (h - floor(h)) * Float(dyes.count)
+    let i = Int(x) % dyes.count
+    let j = (i + 1) % dyes.count
+    let f = x - floor(x)
+    let t = f * f * (3.0 - 2.0 * f)
+    return simd_mix(dyes[i], dyes[j], SIMD3<Float>(repeating: t))
+  }
+
+  func color(h: Float, amount: Float) -> SIMD3<Float> {
+    dye(h) * amount
+  }
 }
+
+private let bassPalette = GasPalette(dyes: [
+  SIMD3<Float>(0.00, 1.00, 1.00),
+  SIMD3<Float>(0.00, 1.00, 0.75),
+  SIMD3<Float>(0.30, 1.00, 0.80),
+])
+
+private let midPalette = GasPalette(dyes: [
+  SIMD3<Float>(0.00, 0.75, 1.00),
+  SIMD3<Float>(0.00, 0.55, 1.00),
+  SIMD3<Float>(0.00, 0.35, 1.00),
+])
+
+private let highPalette = GasPalette(dyes: [
+  SIMD3<Float>(1.00, 0.80, 0.00),
+  SIMD3<Float>(1.00, 0.20, 0.45),
+  SIMD3<Float>(1.00, 0.00, 0.90),
+])
 
 private func rotate(_ v: SIMD2<Float>, by angle: Float) -> SIMD2<Float> {
   let c = cos(angle)
@@ -37,14 +61,14 @@ private let bassNozzles: [Nozzle] = [
   Nozzle(anchor: SIMD2(0.20, 0.04), direction: simd_normalize(SIMD2(0.30, 0.51)),
          slide: SIMD2(1, 0), phase: 0.0),
   Nozzle(anchor: SIMD2(0.80, 0.04), direction: simd_normalize(SIMD2(-0.30, 0.51)),
-         slide: SIMD2(1, 0), phase: 2.1)
+         slide: SIMD2(1, 0), phase: 2.1),
 ]
 
 private let midNozzles: [Nozzle] = [
   Nozzle(anchor: SIMD2(0.03, 0.58), direction: simd_normalize(SIMD2(0.47, -0.08)),
          slide: SIMD2(0, 1), phase: 0.7),
   Nozzle(anchor: SIMD2(0.97, 0.42), direction: simd_normalize(SIMD2(-0.47, 0.08)),
-         slide: SIMD2(0, 1), phase: 3.3)
+         slide: SIMD2(0, 1), phase: 3.3),
 ]
 
 private let highNozzles: [Nozzle] = [
@@ -53,8 +77,14 @@ private let highNozzles: [Nozzle] = [
   Nozzle(anchor: SIMD2(0.50, 0.96), direction: SIMD2(0.0, -1.0),
          slide: SIMD2(1, 0), phase: 4.2),
   Nozzle(anchor: SIMD2(0.70, 0.96), direction: simd_normalize(SIMD2(-0.20, -0.46)),
-         slide: SIMD2(1, 0), phase: 5.6)
+         slide: SIMD2(1, 0), phase: 5.6),
 ]
+
+extension NavierStokesRenderer {
+  var technicolorThemeDye: SIMD3<Float> {
+    bassPalette.dye(fmod(time * 0.05, 1.0))
+  }
+}
 
 extension NavierStokesRenderer {
   func injectAudioSplats(encoder: any MTL4ComputeCommandEncoder,
@@ -207,13 +237,12 @@ extension NavierStokesRenderer {
     let strength = min((0.3 + bass * 0.3 + hit * 0.8) * dyn.drive, 1.0)
     let hue = fmod(time * 0.05, 1.0)
     let brightness = (0.35 + bass * 0.9) * dyn.dye * (1.0 + hit * 0.5)
-    let color = hsv2rgb(h: hue, s: 0.85, v: brightness)
     let density = Self.bassGasWeight * brightness
 
     for (i, nozzle) in bassNozzles.enumerated() {
-      let tint = hsv2rgb(h: hue + Float(i) * 0.08, s: 0.85, v: 1.0)
+      let nozzleColor = bassPalette.color(h: hue + Float(i) * 0.08, amount: brightness)
       emitJet(nozzle, speed: speed, radius: radius, strength: strength,
-              wobble: 0.30, slideAmount: 0.05, color: color * tint, density: density)
+              wobble: 0.30, slideAmount: 0.05, color: nozzleColor, density: density)
     }
   }
 
@@ -229,7 +258,7 @@ extension NavierStokesRenderer {
     for (i, nozzle) in midNozzles.enumerated() {
       let hue = fmod(time * 0.07 + Float(i) * 0.45, 1.0)
       let brightness = (0.3 + mid * 0.9) * dyn.dye * (1.0 + hit * 0.5)
-      let color = hsv2rgb(h: hue, s: 0.8, v: brightness)
+      let color = midPalette.color(h: hue, amount: brightness)
       emitJet(nozzle, speed: speed, radius: radius, strength: strength,
               wobble: 0.45, slideAmount: 0.08, color: color,
               density: Self.midGasWeight * brightness)
@@ -248,7 +277,7 @@ extension NavierStokesRenderer {
     for (i, nozzle) in highNozzles.enumerated() {
       let hue = fmod(time * 0.09 + Float(i) * 0.3, 1.0)
       let brightness = (0.35 + high * 1.0) * dyn.dye * (1.0 + hit * 0.6)
-      let color = hsv2rgb(h: hue, s: 0.9, v: brightness)
+      let color = highPalette.color(h: hue, amount: brightness)
       emitJet(nozzle, speed: speed, radius: radius, strength: strength,
               wobble: 0.6, slideAmount: 0.04, color: color,
               density: Self.highGasWeight * brightness)

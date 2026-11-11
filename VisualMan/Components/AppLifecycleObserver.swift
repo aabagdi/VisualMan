@@ -22,7 +22,7 @@ final class AppLifecycleObserver {
       center.addObserver(forName: UIApplication.willEnterForegroundNotification,
                          object: nil, queue: .main) { _ in
         MainActor.assumeIsolated { onForeground() }
-      }
+      },
     ]
   }
 

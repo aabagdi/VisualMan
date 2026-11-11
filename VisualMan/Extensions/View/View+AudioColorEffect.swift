@@ -21,7 +21,7 @@ struct AudioColorEffectShader: ViewModifier {
             .float(audio.mid),
             .float(audio.high),
             .float3(audio.bandTime.x, audio.bandTime.y, audio.bandTime.z),
-            .float2(proxy.size)
+            .float2(proxy.size),
           ])
         )
     }

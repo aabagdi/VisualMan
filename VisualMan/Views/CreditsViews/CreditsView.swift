@@ -31,6 +31,19 @@ struct CreditsView: View {
             Integrated into the rendering pipeline. \
             Provided as-is, without warranty of any kind.
             """)
+
+          Text("""
+            The Technicolor No. IV print in the Navier-Stokes visualizer uses \
+            dye spectra digitized by Jan Lohse in \
+            [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) \
+            (Copyright © 2026 Jan Lohse, MIT License) from measurements in the \
+            [Timeline of Historical Film Colors](https://filmcolors.org/) by \
+            Barbara Flueckiger, licensed under \
+            [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/). \
+            Quote as Flueckiger, Barbara (2012 ff.): Timeline of Historical \
+            Film Colors. (https://filmcolors.org/). Resampled and normalized \
+            for the rendering pipeline.
+            """)
         }
 
         Divider()
@@ -43,7 +56,9 @@ struct CreditsView: View {
           Text("""
             VisualMan, except where otherwise noted, is licensed under the \
             MIT License. The Mixbox component is separately licensed under \
-            CC BY-NC 4.0; full text of both licenses follows.
+            CC BY-NC 4.0. The Technicolor dye spectra come from \
+            spectral_film_lut (MIT) and the Timeline of Historical Film \
+            Colors (CC BY-NC-ND 4.0). These licenses follow.
             """)
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -55,6 +70,35 @@ struct CreditsView: View {
 
           Text("""
             Copyright © 2025 Aadit Bagdi
+
+            Permission is hereby granted, free of charge, to any person obtaining a copy \
+            of this software and associated documentation files (the "Software"), to deal \
+            in the Software without restriction, including without limitation the rights \
+            to use, copy, modify, merge, publish, distribute, sublicense, and/or sell \
+            copies of the Software, and to permit persons to whom the Software is \
+            furnished to do so, subject to the following conditions:
+
+            The above copyright notice and this permission notice shall be included in all \
+            copies or substantial portions of the Software.
+
+            THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR \
+            IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, \
+            FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE \
+            AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER \
+            LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, \
+            OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE \
+            SOFTWARE.
+            """)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+          Text("spectral_film_lut — MIT License")
+            .font(.headline)
+
+          Text("""
+            Copyright © 2026 Jan Lohse
 
             Permission is hereby granted, free of charge, to any person obtaining a copy \
             of this software and associated documentation files (the "Software"), to deal \
@@ -110,6 +154,62 @@ struct CreditsView: View {
                 link to the license, and indicate if changes were made.
               • NonCommercial — You may not use the material for \
                 commercial purposes.
+              • No additional restrictions — You may not apply legal \
+                terms or technological measures that legally restrict \
+                others from doing anything the license permits.
+
+            UNLESS OTHERWISE SEPARATELY UNDERTAKEN BY THE LICENSOR, TO THE \
+            EXTENT POSSIBLE, THE LICENSOR OFFERS THE LICENSED MATERIAL \
+            AS-IS AND AS-AVAILABLE, AND MAKES NO REPRESENTATIONS OR \
+            WARRANTIES OF ANY KIND CONCERNING THE LICENSED MATERIAL, \
+            WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHER.
+
+            TO THE EXTENT POSSIBLE, IN NO EVENT WILL THE LICENSOR BE \
+            LIABLE TO YOU ON ANY LEGAL THEORY (INCLUDING, WITHOUT \
+            LIMITATION, NEGLIGENCE) OR OTHERWISE FOR ANY DIRECT, SPECIAL, \
+            INDIRECT, INCIDENTAL, CONSEQUENTIAL, PUNITIVE, EXEMPLARY, OR \
+            OTHER LOSSES, COSTS, EXPENSES, OR DAMAGES ARISING OUT OF THIS \
+            PUBLIC LICENSE OR USE OF THE LICENSED MATERIAL.
+            """)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Timeline of Historical Film Colors — CC BY-NC-ND 4.0")
+            .font(.headline)
+
+          Text("""
+            Timeline of Historical Film Colors by Barbara Flueckiger. \
+            [filmcolors.org](https://filmcolors.org/)
+
+            Data used in this project:
+              • Technicolor No. IV dye spectral densities (Samson and \
+                Delilah, C. B. DeMille), as digitized in spectral_film_lut, \
+                resampled to 400–720 nm and normalized. No images or text \
+                from the Timeline are included.
+
+            This material is licensed under the Creative Commons \
+            Attribution-NonCommercial-NoDerivatives 4.0 International \
+            Public License ("CC BY-NC-ND 4.0"). The full license text is \
+            available at \
+            [creativecommons.org/licenses/by-nc-nd/4.0/legalcode]\
+            (https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode).
+
+            Summary of terms (this summary is not a substitute for the \
+            license):
+
+            You are free to:
+              • Share — copy and redistribute the material in any medium \
+                or format
+
+            Under the following terms:
+              • Attribution — You must give appropriate credit, provide a \
+                link to the license, and indicate if changes were made.
+              • NonCommercial — You may not use the material for \
+                commercial purposes.
+              • NoDerivatives — If you remix, transform, or build upon the \
+                material, you may not distribute the modified material.
               • No additional restrictions — You may not apply legal \
                 terms or technological measures that legally restrict \
                 others from doing anything the license permits.

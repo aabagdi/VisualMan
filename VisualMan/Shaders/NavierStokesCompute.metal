@@ -30,6 +30,12 @@ struct FrameUniforms {
   float detail;
   float jitter;
   float thinFade;
+  float technicolorPrintDensity;
+  float technicolorSharpen;
+  float technicolorPresence;
+  float4 technicolorTheme;
+  float technicolorNeutralReach;
+  float technicolorLampGain;
 };
 
 kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture(0)]],
@@ -354,6 +360,77 @@ inline float2 curlNoiseOffset(float2 uv, float t) {
   return float2(a, b);
 }
 
+constant float3 kTechnicolorDyeLog2[21] = {
+  float3(0.7114, 0.5479, 2.3460),
+  float3(0.6127, 0.4088, 2.7693),
+  float3(0.5796, 0.1305, 3.1959),
+  float3(0.5117, 0.2252, 3.3219),
+  float3(0.4427, 0.5841, 3.2574),
+  float3(0.3936, 0.9562, 2.8600),
+  float3(0.3019, 1.7906, 2.1148),
+  float3(0.2062, 2.7957, 1.1378),
+  float3(0.2858, 3.3096, 0.5772),
+  float3(0.3924, 3.3219, 0.5105),
+  float3(0.6276, 3.1963, 0.3752),
+  float3(0.9070, 2.8517, 0.4832),
+  float3(1.3943, 2.4036, 0.4872),
+  float3(2.2467, 1.4193, 0.3509),
+  float3(2.8356, 0.6648, 0.4257),
+  float3(3.2310, 0.2384, 0.5945),
+  float3(3.3219, 0.2369, 0.7049),
+  float3(3.1765, 0.5014, 0.5535),
+  float3(3.0278, 0.6866, 0.3952),
+  float3(2.8898, 0.7339, 0.4236),
+  float3(2.7375, 0.7200, 0.5311),
+};
+
+constant float3 kTechnicolorProjectorRGB[21] = {
+  float3(0.00110, -0.00137, 0.01469),
+  float3(0.01053, -0.01012, 0.08254),
+  float3(0.02313, -0.02679, 0.24036),
+  float3(0.02156, -0.02836, 0.30933),
+  float3(-0.00851, -0.00604, 0.27081),
+  float3(-0.03830, 0.03098, 0.15098),
+  float3(-0.07281, 0.08263, 0.05712),
+  float3(-0.10573, 0.15555, 0.00839),
+  float3(-0.10832, 0.22092, -0.01860),
+  float3(-0.04915, 0.23161, -0.02895),
+  float3(0.05788, 0.19676, -0.02925),
+  float3(0.18164, 0.13308, -0.02413),
+  float3(0.27991, 0.06012, -0.01645),
+  float3(0.30870, 0.00350, -0.00910),
+  float3(0.24955, -0.01872, -0.00424),
+  float3(0.15024, -0.01597, -0.00187),
+  float3(0.06817, -0.00699, -0.00089),
+  float3(0.02329, -0.00146, -0.00044),
+  float3(0.00592, 0.00021, -0.00020),
+  float3(0.00107, 0.00029, -0.00007),
+  float3(0.00012, 0.00017, -0.00003),
+};
+
+inline float3 srgbEncode(float3 c) {
+  return select(1.055 * pow(c, 1.0 / 2.4) - 0.055, c * 12.92, c <= 0.0031308);
+}
+
+inline float3 technicolorIV(float3 dyeAmounts, float printDensity, float sharpen, float presence,
+                            float3 themeDye, float neutralReach, float lampGain) {
+  float3 a = max(dyeAmounts, float3(0.0));
+  float amount = max(a.x, max(a.y, a.z));
+  if (amount < 1e-5) return float3(0.0);
+  float3 ratio = a / amount;
+  float chroma = 1.0 - min(ratio.x, min(ratio.y, ratio.z));
+  ratio = mix(themeDye, ratio, smoothstep(0.0, neutralReach, chroma));
+  ratio = pow(ratio, sharpen);
+  float3 dye = ratio * printDensity * float3(0.83131, 0.77458, 0.82158);
+
+  float3 rgb = float3(0.0);
+  for (int i = 0; i < 21; ++i) {
+    rgb += fast::exp2(-dot(dye, kTechnicolorDyeLog2[i])) * kTechnicolorProjectorRGB[i];
+  }
+  rgb *= (1.0 - exp(-amount * presence)) * lampGain;
+  return srgbEncode(saturate(rgb));
+}
+
 kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::sample> bloomHi [[texture(2)]],
                         texture2d<float, access::sample> bloomMid [[texture(3)]],
@@ -428,16 +505,10 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
     c *= shade;
   }
 
-  float lum0 = dot(c, float3(0.299, 0.587, 0.114));
-  float saturation = 1.8 + mid * 0.4;
-  c = mix(float3(lum0), c, saturation);
-  c = max(c, float3(0.0));
-
-  float lum = dot(c, float3(0.299, 0.587, 0.114));
-  float whitePoint = 4.0;
-  float scaledLum = (lum * (1.0 + lum / (whitePoint * whitePoint))) / (1.0 + lum);
-  c = c * (scaledLum / max(lum, 1e-4));
-  c = clamp(c, 0.0, 1.0);
+  c = technicolorIV(c, frame.technicolorPrintDensity,
+                    frame.technicolorSharpen, frame.technicolorPresence,
+                    frame.technicolorTheme.xyz, frame.technicolorNeutralReach,
+                    frame.technicolorLampGain);
 
   float vDist = fast::length(center - 0.5) * 1.414;
   float vAmount = 0.35 - frame.bass * 0.25;

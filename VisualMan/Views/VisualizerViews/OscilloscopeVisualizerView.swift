@@ -151,7 +151,7 @@ struct OscilloscopeVisualizerView: View {
           (10.0, 0.05),
           (6.0, 0.1),
           (3.0, 0.2),
-          (1.5, 0.4)
+          (1.5, 0.4),
         ]
         for layer in trailGlow {
           context.stroke(
@@ -171,7 +171,7 @@ struct OscilloscopeVisualizerView: View {
           (8.0, 0.06),
           (5.0, 0.1),
           (3.0, 0.2),
-          (1.5, 0.9)
+          (1.5, 0.9),
         ]
 
         for layer in glowLayers {

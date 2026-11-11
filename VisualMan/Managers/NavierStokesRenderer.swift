@@ -43,6 +43,12 @@ struct FrameUniforms {
   var detail: Float
   var jitter: Float
   var thinFade: Float
+  var technicolorPrintDensity: Float
+  var technicolorSharpen: Float
+  var technicolorPresence: Float
+  var technicolorTheme: SIMD4<Float>
+  var technicolorNeutralReach: Float
+  var technicolorLampGain: Float
 }
 
 @MainActor

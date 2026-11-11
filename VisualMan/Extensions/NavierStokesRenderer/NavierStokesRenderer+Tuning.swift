@@ -13,6 +13,11 @@ extension NavierStokesRenderer {
   static let renderDetail: Float = 0.3
   static let renderJitter: Float = 0.0005
   static let renderThinFade: Float = 0.18
+  static let renderTechnicolorPrintDensity: Float = 2.6
+  static let renderTechnicolorSharpen: Float = 2.0
+  static let renderTechnicolorPresence: Float = 3.0
+  static let renderTechnicolorNeutralReach: Float = 0.5
+  static let renderTechnicolorLampGain: Float = 1.4
 
   static let dyeDiffusionBase: Float = 0.045
   static let dyeEdgeFadeCells: Float = 28
