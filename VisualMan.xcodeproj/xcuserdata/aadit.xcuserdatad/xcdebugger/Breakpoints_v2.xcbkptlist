@@ -390,39 +390,102 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 9f11ade6bc10094"
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 51a5c7931945626e"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "-[BWDeferredCaptureContainer abort]"
-                  moduleName = "CMCapture"
+                  symbolName = "ModelManagerServices.ResponseIterator.abort(error: Swift.Error) async throws -&gt; ()"
+                  moduleName = "ModelManagerServices"
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 54ed0afbb535fd39"
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 17a2132d0f6a5ea2"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
+                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&lt;unsigned long long&gt;, unsigned long long&gt;)"
                   moduleName = "WebKitLegacy"
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - c98abbcaa8fe2d30"
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - c431c332a3e9fec9"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
+                  symbolName = "Gestures.AnyGestureNode.abort() throws -&gt; ()"
+                  moduleName = "Gestures"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - b0f5fc3ed0de61e5"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::ApplePaySession::abort()"
                   moduleName = "WebCore"
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 145be79ee1394d13"
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - f11392a115a5e9c4"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "WebCore::JSWritableStreamDefaultWriter::abort(JSC::JSGlobalObject&amp;, JSC::CallFrame&amp;)"
+                  symbolName = "WebCore::IDBServer::SQLiteIDBTransaction::abort()"
                   moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 8ac5a21c12a18eab"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&lt;unsigned long long&gt;, unsigned long long&gt;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 99ff04c85e9dcc39"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::BackgroundFetchLoad::abort()"
+                  moduleName = "WebKit"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 581d22aabc29f88a"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::NetworkResourceLoader::abort()"
+                  moduleName = "WebKit"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 290c02e489600b79"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::SOAuthorizationSession::abort()"
+                  moduleName = "WebKit"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - e6d6948cedc93222"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::SpeechRecognitionServer::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&lt;unsigned long long&gt;, unsigned long long&gt;)"
+                  moduleName = "WebKit"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 5ab2c12480f4f9c5"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::WebSpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&lt;unsigned long long&gt;, unsigned long long&gt;)"
+                  moduleName = "WebKit"
                   usesParentBreakpointCondition = "Yes">
                </Location>
             </Locations>

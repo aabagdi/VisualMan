@@ -6,56 +6,92 @@
 //
 
 import SwiftUI
+internal import UniformTypeIdentifiers
 
 private struct NowPlayingDestination: Hashable {}
 
 struct HomeScreenView: View {
-  @State private var selectedTab: VMTab = .musicLibrary
   @State private var visualizerSelection = VisualizerSelection()
+  @State private var isShowingFileImporter = false
+  @State private var selectedAudioSource: FileAudioSource?
+  @State private var isShowingFilePlayer = false
+  @State private var fileLoadingFailed = false
+  @State private var fileError: VMError?
   
   @Environment(AudioEngineManager.self) private var audioManager
   @Environment(MusicLibraryAccessManager.self) private var library
   @Environment(AudioPlaylistManager.self) private var playlistManager
   
-  private enum VMTab {
-    case musicLibrary
-    case files
-  }
-  
   var body: some View {
-    TabView(selection: $selectedTab) {
-      Tab("Music Library", systemImage: "music.note.list", value: .musicLibrary) {
-        NavigationStack {
-          AlbumListView(albums: library.albums)
-            .navigationDestination(for: NowPlayingDestination.self) { _ in
-              MusicPlayerView(playlistManager.audioSources,
-                              startingIndex: playlistManager.currentIndex)
-            }
-            .toolbar {
-              ToolbarItem(placement: .topBarLeading) {
-                NavigationLink("Credits", destination: CreditsView())
-              }
-              ToolbarItem(placement: .topBarTrailing) {
-                if audioManager.isPlaying || audioManager.currentTime > 0 {
-                  NavigationLink(value: NowPlayingDestination()) {
-                    Image(systemName: "play.fill")
-                  }
-                }
-              }
-            }
+    NavigationStack {
+      AlbumListView(albums: library.albums)
+        .navigationDestination(for: NowPlayingDestination.self) { _ in
+          MusicPlayerView(playlistManager.audioSources,
+                          startingIndex: playlistManager.currentIndex)
         }
-      }
-      
-      Tab("Files", systemImage: "folder.fill", value: .files) {
-        NavigationStack {
-          FilesTabView()
-            .ignoresSafeArea()
-            .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $isShowingFilePlayer) {
+          if let audioSource = selectedAudioSource {
+            MusicPlayerView(fileAudioSource: audioSource)
+          }
         }
+        .toolbar {
+          ToolbarItem(placement: .topBarLeading) {
+            NavigationLink("Credits", destination: CreditsView())
+          }
+          ToolbarItemGroup(placement: .topBarTrailing) {
+            Button("Files", systemImage: "folder.fill") {
+              isShowingFileImporter = true
+            }
+            if audioManager.isPlaying || audioManager.currentTime > 0 {
+              NavigationLink(value: NowPlayingDestination()) {
+                Label("Now Playing", systemImage: "play.fill")
+              }
+            }
+          }
+        }
+    }
+    .fileImporter(
+      isPresented: $isShowingFileImporter,
+      allowedContentTypes: [.aiff, .mp3, .wav, .mpeg4Audio, .audio]
+    ) { result in
+      switch result {
+      case .success(let url):
+        openFile(at: url)
+      case .failure:
+        fileError = VMError.failedToCreateFile
+        fileLoadingFailed = true
       }
     }
-    .hingeToolbarOrientation()
-    .tabBarMinimizeBehavior(.onScrollDown)
+    .alert(
+      fileError?.errorDescription ?? "An unknown error occurred while loading the file.",
+      isPresented: $fileLoadingFailed
+    ) {
+      Button("Okay", role: .cancel) {
+        fileLoadingFailed = false
+        fileError = nil
+      }
+    }
     .environment(visualizerSelection)
+  }
+  
+  private func openFile(at url: URL) {
+    Task { @MainActor in
+      let isSecurityScoped = url.startAccessingSecurityScopedResource()
+      do {
+        selectedAudioSource = try await FileAudioSource.from(
+          url: url,
+          isSecurityScoped: isSecurityScoped
+        )
+        isShowingFilePlayer = true
+      } catch let error as VMError {
+        if isSecurityScoped { url.stopAccessingSecurityScopedResource() }
+        fileError = error
+        fileLoadingFailed = true
+      } catch {
+        if isSecurityScoped { url.stopAccessingSecurityScopedResource() }
+        fileError = VMError.failedToCreateFile
+        fileLoadingFailed = true
+      }
+    }
   }
 }
