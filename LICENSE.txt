@@ -6,13 +6,6 @@ follow.
 
 ===============================================================================
 
-ACKNOWLEDGEMENTS
-
-Special thanks to Point-Free (https://www.pointfree.co) for their
-Dependencies library (https://github.com/pointfreeco/swift-dependencies).
-
-===============================================================================
-
 MIXBOX
 Pigment mixing in the Abstract Expressionism visualizer is powered by
 Mixbox by Secret Weapons.
