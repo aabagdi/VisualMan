@@ -51,7 +51,7 @@ https://creativecommons.org/licenses/by-nc-nd/4.0/
 
 No images or text from the Timeline are included in this project.
 
-Data used in this project:
+Data used in the Technicolor No. IV emulation in this project:
   - Technicolor No. IV dye spectral densities measured from Samson and
     Delilah (C. B. DeMille) in the Timeline of Historical Film Colors
   - Coefficients in spectral_film_lut (TECHNICOLOR_IV_ALT_2 in
