@@ -36,7 +36,7 @@ struct CreditsView: View {
             The Technicolor No. IV print in the Navier-Stokes visualizer uses \
             dye spectra digitized by Jan Lohse in \
             [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) \
-            (Copyright © 2026 Jan Lohse, MIT License) from measurements in the \
+            (Copyright © 2026 Jan Lohse, MIT License) and measurements in the \
             [Timeline of Historical Film Colors](https://filmcolors.org/) by \
             Barbara Flueckiger, licensed under \
             [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/). \
@@ -185,9 +185,8 @@ struct CreditsView: View {
 
             Data used in this project:
               • Technicolor No. IV dye spectral densities (Samson and \
-                Delilah, C. B. DeMille), as digitized in spectral_film_lut, \
-                resampled to 400–720 nm and normalized. No images or text \
-                from the Timeline are included.
+                Delilah, C. B. DeMille), resampled \
+            to 400–720 nm and normalized. No images or text from the Timeline are included.
 
             This material is licensed under the Creative Commons \
             Attribution-NonCommercial-NoDerivatives 4.0 International \
