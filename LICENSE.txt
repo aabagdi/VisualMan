@@ -1,17 +1,28 @@
-This project incorporates Mixbox by Secret Weapons, which is
-licensed under CC BY-NC 4.0, and Technicolor No. IV dye spectral data
-from spectral_film_lut by Jan Lohse, which is licensed under MIT. That
-data is based on measurements from the Timeline of Historical Film
-Colors by Barbara Flueckiger (CC BY-NC-ND 4.0). The rest of the project
-is licensed under MIT.
+VisualMan, except where otherwise noted, is licensed under the MIT
+License. The Mixbox component is separately licensed under CC BY-NC 4.0.
+The Technicolor dye spectra come from spectral_film_lut (MIT) and the
+Timeline of Historical Film Colors (CC BY-NC-ND 4.0). These licenses
+follow.
+
+===============================================================================
+
+ACKNOWLEDGEMENTS
+
+Special thanks to Point-Free (https://www.pointfree.co) for their
+Dependencies library (https://github.com/pointfreeco/swift-dependencies).
 
 ===============================================================================
 
 MIXBOX
+Pigment mixing in the Abstract Expressionism visualizer is powered by
+Mixbox by Secret Weapons.
 Copyright (c) 2022 Secret Weapons
 Licensed under Creative Commons Attribution-NonCommercial 4.0
-International (CC BY-NC 4.0).
+International (CC BY-NC 4.0) (full text below).
+https://creativecommons.org/licenses/by-nc/4.0/
 Original project: https://github.com/scrtwpns/mixbox
+Integrated into the rendering pipeline. Provided as-is, without warranty
+of any kind.
 
 Files in this project licensed under CC BY-NC 4.0:
   - Mixbox.metal (Metal shader implementation)
@@ -20,7 +31,8 @@ Files in this project licensed under CC BY-NC 4.0:
 ===============================================================================
 
 TECHNICOLOR NO. IV DYE SPECTRA
-Digitized by Jan Lohse in spectral_film_lut from measurements published
+The Technicolor No. IV print in the Navier-Stokes visualizer uses
+spectral coefficients by Jan Lohse in spectral_film_lut and measurements
 in the Timeline of Historical Film Colors by Barbara Flueckiger.
 
 spectral_film_lut
@@ -32,21 +44,74 @@ Timeline of Historical Film Colors
 Measurements by Barbara Flueckiger, licensed under Creative Commons
 Attribution-NonCommercial-NoDerivatives 4.0 International
 (CC BY-NC-ND 4.0) (full text below).
-Quote as Flueckiger, Barbara (2012 ff.): Timeline of Historical Film
-Colors. (= https://filmcolors.org/).
+https://creativecommons.org/licenses/by-nc-nd/4.0/
+
+  Flueckiger, Barbara (2012 ff.): Timeline of Historical Film Colors.
+  (https://filmcolors.org/).
+
 No images or text from the Timeline are included in this project.
 
 Data used in this project:
-  - TECHNICOLOR_IV_ALT_2 spectral dye densities (Samson and Delilah,
-    C. B. DeMille) from spectral_film_lut's technicolor_iv.py, resampled
-    to 400-720 nm in 16 nm steps and normalized to unit peak density, in
+  - Technicolor No. IV dye spectral densities measured from Samson and
+    Delilah (C. B. DeMille) in the Timeline of Historical Film Colors
+  - Coefficients in spectral_film_lut (TECHNICOLOR_IV_ALT_2 in
+    technicolor_iv.py), resampled to 400-720 nm in 16 nm steps and
+    normalized to unit peak density for the rendering pipeline, in
     NavierStokesCompute.metal (kTechnicolorDyeLog2)
 
 ===============================================================================
 
 ALL OTHER FILES IN THIS PROJECT
 Copyright (c) 2025 Aadit Bagdi
-Licensed under the MIT License.
+Licensed under the MIT License (full text below).
+
+===============================================================================
+
+MIT License
+
+Copyright (c) 2025 Aadit Bagdi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+===============================================================================
+
+SPECTRAL_FILM_LUT — MIT License
+
+Copyright (c) 2026 Jan Lohse
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ===============================================================================
 
@@ -706,53 +771,5 @@ Section 8 -- Interpretation.
      as a limitation upon, or waiver of, any privileges and immunities
      that apply to the Licensor or You, including from the legal
      processes of any jurisdiction or authority.
-
-===============================================================================
-
-MIT License
-
-Copyright (c) 2025 Aadit Bagdi
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-===============================================================================
-
-SPECTRAL_FILM_LUT — MIT License
-
-Copyright (c) 2026 Jan Lohse
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 
 ===============================================================================
