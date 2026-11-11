@@ -39,9 +39,13 @@ struct CreditsView: View {
             (Copyright © 2026 Jan Lohse, MIT License) and measurements in the \
             [Timeline of Historical Film Colors](https://filmcolors.org/) by \
             Barbara Flueckiger, licensed under \
-            [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/). \
-            Quote as Flueckiger, Barbara (2012 ff.): Timeline of Historical \
-            Film Colors. (https://filmcolors.org/). Resampled and normalized \
+            [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/): \
+            
+            
+            Flueckiger, Barbara (2012 ff.): Timeline of Historical \
+            Film Colors. (https://filmcolors.org/). 
+            
+            Resampled and normalized \
             for the rendering pipeline.
             """)
         }
