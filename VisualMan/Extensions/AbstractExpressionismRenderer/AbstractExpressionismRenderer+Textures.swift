@@ -7,8 +7,16 @@
 
 #if !targetEnvironment(simulator)
 import Metal
+import CoreGraphics
 
 extension AbstractExpressionismRenderer {
+  static let outputExtendedRange = true
+  static let standardRangePixelFormat: MTLPixelFormat = .bgra8Unorm_srgb
+  static let standardRangeColorSpace = CGColorSpace(name: CGColorSpace.sRGB)
+  static let outputPixelFormat: MTLPixelFormat = outputExtendedRange ? .rgba16Float : standardRangePixelFormat
+  static let outputColorSpace = outputExtendedRange
+    ? CGColorSpace(name: CGColorSpace.extendedLinearSRGB) : standardRangeColorSpace
+
   private static func makeCanvasDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
@@ -19,7 +27,7 @@ extension AbstractExpressionismRenderer {
 
   private static func makeDisplayDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+      pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
     return desc

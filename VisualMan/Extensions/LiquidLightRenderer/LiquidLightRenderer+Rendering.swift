@@ -64,12 +64,25 @@ extension LiquidLightRenderer {
 
     detectAndEmitDrop(bass: bass, inResumeGrace: inResumeGrace)
 
+    let targetCeiling = max(1, min(displayHeadroom, Self.maxHeadroom))
+    outputCeiling += (targetCeiling - outputCeiling) * (1 - exp(-dt / 0.5))
+
     if resumeFadeIn < 1 {
       resumeFadeIn = min(1, resumeFadeIn + dt / Self.resumeFadeDuration)
     }
     let u = resumeFadeIn
     let fade = u * u * (3 - 2 * u)
     return envelope * fade
+  }
+
+  func setDisplayHeadroom(_ headroom: Float) {
+    displayHeadroom = headroom
+  }
+
+  static let maxHeadroom: Float = 2.0
+
+  private var whiteLevel: Float {
+    1.055 * pow(outputCeiling, 1 / 2.4) - 0.055
   }
 
   private var simSize: SIMD2<Float> {
@@ -185,6 +198,7 @@ extension LiquidLightRenderer {
       time: time, bass: audio.x, mid: audio.y, high: audio.z,
       simSize: simSize, eps: Self.interfaceEps,
       apertureRadius: Self.apertureRadius,
+      whiteLevel: whiteLevel,
       plate: currentPlate(),
       ripples: rippleUniforms()
     )
@@ -287,7 +301,8 @@ extension LiquidLightRenderer {
       bass: audio.x,
       mid: audio.y,
       bloomRadius: 18.0,
-      bloomStrength: 0.28 + audio.x * 0.1
+      bloomStrength: 0.28 + audio.x * 0.1,
+      whiteLevel: whiteLevel
     )
     argumentTable.setAddress(writeUniform(blurParams), index: 0)
     dispatch(encoder, width: output.width, height: output.height)

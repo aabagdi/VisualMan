@@ -43,12 +43,13 @@ struct FrameUniforms {
   var detail: Float
   var jitter: Float
   var thinFade: Float
-  var technicolorPrintDensity: Float
-  var technicolorSharpen: Float
   var technicolorPresence: Float
-  var technicolorTheme: SIMD4<Float>
   var technicolorNeutralReach: Float
   var technicolorLampGain: Float
+  var technicolorCeiling: Float
+  var technicolorTheme: SIMD4<Float>
+  var technicolorMisregistration: SIMD4<Float>
+  var technicolorDepth: SIMD4<Float>
 }
 
 @MainActor
@@ -89,6 +90,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
   var mgPressure: [MTLTexture]
   var mgRHS: [MTLTexture]
+
+  let technicolorLUT: MTLTexture
 
   let stretchStatsBuffer: MTLBuffer
   static let stretchStatsStride: Int = 16
@@ -136,6 +139,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var taaHistoryWidth: Int = 0
   var taaHistoryHeight: Int = 0
   let taaBlendFactor: Float = 0.85
+
+  var displayHeadroom: Float = 1
+  var technicolorCeiling: Float = 1
   var pendingTAAHistoryReleases = [(frame: UInt64, texture: MTLTexture)]()
 
   var frameUniformsAddress: MTLGPUAddress = 0
@@ -174,10 +180,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     guard let argumentTables = Self.createArgumentTables(device: device) else { return nil }
     let initialGrid = 1024
-    guard let textures = Self.createTextures(device: device, width: initialGrid, height: initialGrid) else {
-      return nil
-    }
-    guard let residencySet = Self.createResidencySet(device: device) else { return nil }
+    guard let textures = Self.createTextures(device: device, width: initialGrid, height: initialGrid),
+          let residencySet = Self.createResidencySet(device: device),
+          let technicolorLUT = Self.createTechnicolorLUT(device: device) else { return nil }
     guard let stretchStatsBuffer = device.makeBuffer(
       length: Self.stretchStatsStride * Int(Self.maxFramesInFlight),
       options: .storageModeShared) else { return nil }
@@ -211,6 +216,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.u0 = textures.u0
     self.mgPressure = textures.mgPressure
     self.mgRHS = textures.mgRHS
+    self.technicolorLUT = technicolorLUT
     self.stretchStatsBuffer = stretchStatsBuffer
     self.residencySet = residencySet
 
@@ -220,6 +226,10 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   func prepareForResume() {
     lastFrameTime = 0
     resumeSuppressionRemaining = 0.5
+  }
+
+  func setDisplayHeadroom(_ headroom: Float) {
+    displayHeadroom = headroom
   }
 
   func encodeFrame(bass: Float,

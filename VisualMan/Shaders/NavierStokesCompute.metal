@@ -30,12 +30,13 @@ struct FrameUniforms {
   float detail;
   float jitter;
   float thinFade;
-  float technicolorPrintDensity;
-  float technicolorSharpen;
   float technicolorPresence;
-  float4 technicolorTheme;
   float technicolorNeutralReach;
   float technicolorLampGain;
+  float technicolorCeiling;
+  float4 technicolorTheme;
+  float4 technicolorMisregistration;
+  float4 technicolorDepth;
 };
 
 kernel void fluidSplatBatch(texture2d<float, access::read_write> field [[texture(0)]],
@@ -291,9 +292,9 @@ kernel void fluidBlurV(texture2d<half, access::read> fieldIn [[texture(0)]],
 }
 
 inline half3 bloomThresholdSample(half4 color, half threshold) {
-  half brightness = dot(color.rgb, half3(0.299h, 0.587h, 0.114h));
-  half contrib = max(brightness - threshold, 0.0h);
-  half factor = contrib / max(brightness, 1e-4h);
+  half amount = max(color.r, max(color.g, color.b));
+  half contrib = max(amount - threshold, 0.0h);
+  half factor = contrib / max(amount, 1e-4h);
   return color.rgb * factor;
 }
 
@@ -361,27 +362,27 @@ inline float2 curlNoiseOffset(float2 uv, float t) {
 }
 
 constant float3 kTechnicolorDyeLog2[21] = {
-  float3(0.7114, 0.5479, 2.3460),
-  float3(0.6127, 0.4088, 2.7693),
-  float3(0.5796, 0.1305, 3.1959),
-  float3(0.5117, 0.2252, 3.3219),
-  float3(0.4427, 0.5841, 3.2574),
-  float3(0.3936, 0.9562, 2.8600),
-  float3(0.3019, 1.7906, 2.1148),
-  float3(0.2062, 2.7957, 1.1378),
-  float3(0.2858, 3.3096, 0.5772),
-  float3(0.3924, 3.3219, 0.5105),
-  float3(0.6276, 3.1963, 0.3752),
-  float3(0.9070, 2.8517, 0.4832),
-  float3(1.3943, 2.4036, 0.4872),
-  float3(2.2467, 1.4193, 0.3509),
-  float3(2.8356, 0.6648, 0.4257),
-  float3(3.2310, 0.2384, 0.5945),
-  float3(3.3219, 0.2369, 0.7049),
-  float3(3.1765, 0.5014, 0.5535),
-  float3(3.0278, 0.6866, 0.3952),
-  float3(2.8898, 0.7339, 0.4236),
-  float3(2.7375, 0.7200, 0.5311),
+  float3(0.2098, 0.0000, 1.9184),
+  float3(0.3146, 0.0737, 2.5565),
+  float3(0.4897, 0.0000, 3.1981),
+  float3(0.4092, 0.0923, 3.3219),
+  float3(0.3275, 0.4641, 3.2477),
+  float3(0.2673, 0.8500, 2.8274),
+  float3(0.1613, 1.7252, 2.0455),
+  float3(0.0511, 2.7810, 1.0228),
+  float3(0.1286, 3.3169, 0.4328),
+  float3(0.2353, 3.3219, 0.3563),
+  float3(0.4797, 3.1809, 0.2084),
+  float3(0.7716, 2.8081, 0.3135),
+  float3(1.2862, 2.3257, 0.3104),
+  float3(2.1924, 1.2758, 0.1615),
+  float3(2.8159, 0.4690, 0.2320),
+  float3(3.2321, 0.0097, 0.4003),
+  float3(3.3219, 0.0000, 0.5078),
+  float3(3.0897, 0.1999, 0.2786),
+  float3(2.8540, 0.3159, 0.0423),
+  float3(2.6298, 0.2859, 0.0000),
+  float3(2.3478, 0.1467, 0.0000),
 };
 
 constant float3 kTechnicolorProjectorRGB[21] = {
@@ -408,27 +409,48 @@ constant float3 kTechnicolorProjectorRGB[21] = {
   float3(0.00012, 0.00017, -0.00003),
 };
 
-inline float3 srgbEncode(float3 c) {
-  return select(1.055 * pow(c, 1.0 / 2.4) - 0.055, c * 12.92, c <= 0.0031308);
+constant uint kTechnicolorLUTSize = 33;
+constant float3 kTechnicolorGrayGains = float3(0.94269, 0.82916, 0.91340);
+constant float3x3 kSRGBToDisplayP3 = float3x3(float3(0.8224621, 0.0331941, 0.0170827),
+                                              float3(0.1775380, 0.9668058, 0.0723974),
+                                              float3(0.0000000, 0.0000000, 0.9105199));
+
+inline float3 technicolorSpectralPrint(float3 dye) {
+  float3 rgb = float3(0.0);
+  for (int i = 0; i < 21; ++i) {
+    rgb += fast::exp2(-dot(dye, kTechnicolorDyeLog2[i])) * kTechnicolorProjectorRGB[i];
+  }
+  return rgb;
 }
 
-inline float3 technicolorIV(float3 dyeAmounts, float printDensity, float sharpen, float presence,
-                            float3 themeDye, float neutralReach, float lampGain) {
+kernel void technicolorBakeLUT(texture3d<half, access::write> lut [[texture(0)]],
+                               constant float2 &densityAndSharpen [[buffer(0)]],
+                               uint3 gid [[thread_position_in_grid]]) {
+  if (any(gid >= kTechnicolorLUTSize)) return;
+  float3 u = float3(gid) / float(kTechnicolorLUTSize - 1);
+  float3 dye = pow(u, 0.5 * densityAndSharpen.y) * densityAndSharpen.x * kTechnicolorGrayGains;
+  float3 rgb = kSRGBToDisplayP3 * technicolorSpectralPrint(dye);
+  lut.write(half4(half3(rgb), 1.0h), gid);
+}
+
+inline float3 technicolorIV(float3 dyeAmounts, texture3d<float, access::sample> lut,
+                            float presence, float3 themeDye, float neutralReach,
+                            float depth, float lamp, float ceiling) {
   float3 a = max(dyeAmounts, float3(0.0));
   float amount = max(a.x, max(a.y, a.z));
   if (amount < 1e-5) return float3(0.0);
   float3 ratio = a / amount;
   float chroma = 1.0 - min(ratio.x, min(ratio.y, ratio.z));
   ratio = mix(themeDye, ratio, smoothstep(0.0, neutralReach, chroma));
-  ratio = pow(ratio, sharpen);
-  float3 dye = ratio * printDensity * float3(0.83131, 0.77458, 0.82158);
 
-  float3 rgb = float3(0.0);
-  for (int i = 0; i < 21; ++i) {
-    rgb += fast::exp2(-dot(dye, kTechnicolorDyeLog2[i])) * kTechnicolorProjectorRGB[i];
-  }
-  rgb *= (1.0 - exp(-amount * presence)) * lampGain;
-  return srgbEncode(saturate(rgb));
+  constexpr sampler lutSampler(filter::linear, address::clamp_to_edge);
+  const float n = float(kTechnicolorLUTSize);
+  float3 rgb = max(lut.sample(lutSampler, (ratio * ratio * depth * (n - 1.0) + 0.5) / n).rgb, float3(0.0));
+  rgb *= (1.0 - exp(-amount * presence)) * lamp;
+  float peak = max(rgb.r, max(rgb.g, rgb.b)) / ceiling;
+  float peak2 = peak * peak;
+  rgb *= rsqrt(sqrt(1.0 + peak2 * peak2));
+  return rgb;
 }
 
 kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
@@ -437,6 +459,7 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::sample> bloomLo [[texture(4)]],
                         texture2d<float, access::read> historyIn [[texture(5)]],
                         texture2d<float, access::write> historyOut [[texture(6)]],
+                        texture3d<float, access::sample> technicolorLUT [[texture(7)]],
                         constant FrameUniforms &frame [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]]) {
   float bass = frame.bass;
@@ -466,25 +489,20 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float2 detailWarp = curlNoiseOffset(center * 2.5, renderTime * 1.1)
                     * texel * frame.detail * saturate(gradMag * 3.0);
 
-  float4 color = sampleCatmullRom(dye, bilinear, sampleCenter + detailWarp, dyeSize);
-  float3 cRGB = max(color.rgb, float3(0.0));
+  float2 dyeUV = sampleCenter + detailWarp;
+  float4 color = sampleCatmullRom(dye, bilinear, dyeUV, dyeSize);
 
-  float thin = pow(saturate(dyeDensity(color) / max(frame.thinFade, 1e-3)), 0.6);
-  cRGB *= thin;
+  float2 registerScale = float(min(w, h)) / float2(w, h);
+  float2 cyanUV = dyeUV + frame.technicolorMisregistration.xy * registerScale;
+  float2 yellowUV = dyeUV + frame.technicolorMisregistration.zw * registerScale;
+  float3 cRGB = max(float3(dye.sample(bilinear, cyanUV).r, color.g, dye.sample(bilinear, yellowUV).b),
+                    float3(0.0));
 
-  float2 fromCenter = center - 0.5;
-  float radialLen = fast::length(fromCenter);
-  if (radialLen > 1e-4) {
-    float2 radialDir = fromCenter / radialLen;
-    float caStrength = (frame.bass * 0.006 + frame.high * 0.002) * radialLen;
-    if (caStrength > 1e-5) {
-      float rCh = max(dye.sample(bilinear, sampleCenter + radialDir * caStrength).r, 0.0);
-      float bCh = max(dye.sample(bilinear, sampleCenter - radialDir * caStrength).b, 0.0);
-      cRGB.r = rCh * thin;
-      cRGB.b = bCh * thin;
-    }
-  }
-  float3 c = cRGB;
+  float amount = dyeDensity(float4(cRGB, 0.0));
+  float thin = pow(saturate(amount / max(frame.thinFade, 1e-3)), 0.6);
+  float3 c = cRGB * thin;
+  float depth = mix(frame.technicolorDepth.x, 1.0,
+                    smoothstep(frame.technicolorDepth.y, frame.technicolorDepth.z, amount));
 
   float3 bHi  = bloomHi.sample(bilinear, sampleCenter).rgb;
   float3 bMid = bloomMid.sample(bilinear, sampleCenter).rgb;
@@ -493,32 +511,36 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float hiW  = 0.08 + frame.high * 0.40;
   float midW = 0.08 + frame.mid  * 0.40;
   float loW  = 0.08 + frame.bass * 0.55;
-  c += bHi * hiW + bMid * midW + bLo * loW;
+  float3 bloom = bHi * hiW + bMid * midW + bLo * loW;
+  c += bloom;
 
-  c *= 1.0 + bass * 0.4 + mid * 0.25;
+  float ceiling = frame.technicolorCeiling;
+  float lamp = frame.technicolorLampGain
+             * (1.0 + (bass * 0.4 + mid * 0.25) * ceiling
+                + dyeDensity(float4(bloom, 0.0)) * (ceiling - 1.0));
 
   {
     float3 n = normalize(float3(-grad * 6.0, 1.0));
     const float3 lightDir = normalize(float3(-0.45, -0.6, 0.65));
     float diffuse = max(dot(n, lightDir), 0.0);
     float shade = mix(1.0, 0.5 + 0.8 * diffuse, frame.shading);
-    c *= shade;
+    lamp *= shade;
   }
 
-  c = technicolorIV(c, frame.technicolorPrintDensity,
-                    frame.technicolorSharpen, frame.technicolorPresence,
+  c = technicolorIV(c, technicolorLUT, frame.technicolorPresence,
                     frame.technicolorTheme.xyz, frame.technicolorNeutralReach,
-                    frame.technicolorLampGain);
+                    depth, lamp, ceiling);
 
   float vDist = fast::length(center - 0.5) * 1.414;
   float vAmount = 0.35 - frame.bass * 0.25;
-  c *= 1.0 - vDist * vDist * vAmount;
-  c = max(c, float3(0.0));
+  float vignette = max(1.0 - vDist * vDist * vAmount, 0.0);
+  c *= vignette * vignette * sqrt(vignette);
 
   float3 finalColor = c;
   if (historyValid != 0u) {
-    float3 prev = historyIn.read(gid).rgb;
-    finalColor = mix(c, prev, taaBlend);
+    float3 prev = sqrt(max(historyIn.read(gid).rgb, float3(0.0)));
+    float3 blended = mix(sqrt(c), prev, taaBlend);
+    finalColor = blended * blended;
   }
 
   historyOut.write(float4(finalColor, 1.0), gid);

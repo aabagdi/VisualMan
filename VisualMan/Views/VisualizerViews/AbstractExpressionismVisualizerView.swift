@@ -15,13 +15,23 @@ struct AbstractExpressionismVisualizerView: View {
 
   @Environment(VisualizerRendererCache.self) private var cache
 
+  private static let clearColor: MTLClearColor = {
+    let canvas = AbstractExpressionismRenderer.canvasColor
+    return MTLClearColor(red: Double(canvas.x), green: Double(canvas.y), blue: Double(canvas.z), alpha: 1)
+  }()
+
   var body: some View {
     MetalVisualizerContainerView<AbstractExpressionismRenderer>(
       audioLevels: audioLevels,
       config: MetalViewConfig(
-        clearColor: MTLClearColor(red: 0.95, green: 0.92, blue: 0.87, alpha: 1),
+        clearColor: Self.clearColor,
         backgroundColor: UIColor(red: 0.95, green: 0.92, blue: 0.87, alpha: 1),
-        maxFramesPerSecond: 60),
+        maxFramesPerSecond: 60,
+        colorSpace: AbstractExpressionismRenderer.outputColorSpace,
+        pixelFormat: AbstractExpressionismRenderer.outputPixelFormat,
+        wantsExtendedDynamicRange: AbstractExpressionismRenderer.outputExtendedRange,
+        standardRangeColorSpace: AbstractExpressionismRenderer.standardRangeColorSpace,
+        standardRangePixelFormat: AbstractExpressionismRenderer.standardRangePixelFormat),
       factory: { [isPlaying] device in
         let renderer = await AbstractExpressionismRenderer.create(device: device)
         renderer?.isPlaying = isPlaying

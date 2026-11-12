@@ -17,7 +17,12 @@ struct LiquidLightVisualizerView: View {
       audioLevels: audioLevels,
       config: MetalViewConfig(
         clearColor: MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1),
-        backgroundColor: .black),
+        backgroundColor: .black,
+        colorSpace: LiquidLightRenderer.outputColorSpace,
+        pixelFormat: LiquidLightRenderer.outputPixelFormat,
+        wantsExtendedDynamicRange: LiquidLightRenderer.outputExtendedRange,
+        standardRangeColorSpace: LiquidLightRenderer.standardRangeColorSpace,
+        standardRangePixelFormat: LiquidLightRenderer.standardRangePixelFormat),
       factory: { device in await LiquidLightRenderer.create(device: device) })
   }
 }

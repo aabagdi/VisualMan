@@ -90,6 +90,9 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
   var simWidth: Int = 0
   var simHeight: Int = 0
 
+  var displayHeadroom: Float = 1
+  var outputCeiling: Float = 1
+
   var resumeSuppressionRemaining: Float = 0
 
   var resumeFadeIn: Float = 1.0

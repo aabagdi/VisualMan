@@ -22,7 +22,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     let view = CAMetalHostView()
     let layer = view.metalLayer
     layer.device = renderer.device
-    layer.pixelFormat = .bgra8Unorm
+    layer.pixelFormat = config.pixelFormat
     layer.framebufferOnly = true
     layer.maximumDrawableCount = 3
     layer.isOpaque = true
@@ -49,7 +49,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   }
 
   func makeCoordinator() -> Coordinator {
-    Coordinator(renderer: renderer)
+    Coordinator(renderer: renderer, config: config)
   }
 
   @MainActor
@@ -58,7 +58,9 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     var audioLevels: [1024 of Float] = .init(repeating: 0.0)
     var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
     private var lastFrameTime: CFTimeInterval = 0
-    private let blitPipeline: (any MTLRenderPipelineState)?
+    private let config: MetalViewConfig
+    private var tracksDisplayHeadroom = false
+    private var blitPipeline: (any MTLRenderPipelineState)?
     private let blitArgumentTables: [any MTL4ArgumentTable]
     private let presentCommandBuffer: (any MTL4CommandBuffer)?
     private let presentAllocators: [any MTL4CommandAllocator]
@@ -86,11 +88,12 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var consecutiveSkippedFrames = 0
     private let stalledGPUFrameThreshold = 120
 
-    init(renderer: R) {
+    init(renderer: R, config: MetalViewConfig) {
       self.renderer = renderer
+      self.config = config
 
       let device = renderer.device
-      let blit = Self.makeBlitResources(device: device)
+      let blit = Self.makeBlitResources(device: device, pixelFormat: config.pixelFormat)
       self.blitPipeline = blit.pipeline
       self.blitArgumentTables = blit.tables
       self.presentAllocators = Self.makePresentAllocators(device: device)
@@ -133,10 +136,30 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       self.hostView = view
       renderer.commandQueue.addResidencySet(view.metalLayer.residencySet)
       view.onWindowAttach = { [weak self] in
+        self?.configureDrawable()
         self?.startDisplayLinkIfNeeded()
       }
       if view.window != nil {
+        configureDrawable()
         startDisplayLinkIfNeeded()
+      }
+    }
+
+    private func configureDrawable() {
+      guard let layer = hostView?.metalLayer else { return }
+      let screen = hostView?.window?.windowScene?.screen
+      let extended = config.wantsExtendedDynamicRange && (screen.map { $0.potentialEDRHeadroom > 1 } ?? true)
+      let fallsBack = config.wantsExtendedDynamicRange && !extended
+      let pixelFormat = fallsBack ? config.standardRangePixelFormat : config.pixelFormat
+      if pixelFormat != layer.pixelFormat {
+        blitPipeline = Self.makeBlitResources(device: renderer.device, pixelFormat: pixelFormat).pipeline
+      }
+      layer.pixelFormat = pixelFormat
+      layer.colorspace = fallsBack ? config.standardRangeColorSpace : config.colorSpace
+      layer.wantsExtendedDynamicRangeContent = extended
+      tracksDisplayHeadroom = extended
+      if !extended {
+        renderer.setDisplayHeadroom(1)
       }
     }
 
@@ -198,6 +221,10 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
             !presentAllocators.isEmpty,
             presentCommandBuffer != nil,
             presentEvent != nil else { return }
+
+      if tracksDisplayHeadroom, let screen = view.window?.windowScene?.screen {
+        renderer.setDisplayHeadroom(Float(screen.currentEDRHeadroom))
+      }
 
       let intermediateTex = renderer.encodeFrame(
         bass: audioLevels.bassLevel,
@@ -261,10 +288,8 @@ extension AudioCAMetalLayerView.Coordinator {
   }
 }
 
-// MARK: - Present pass
-
 extension AudioCAMetalLayerView.Coordinator {
-  private static func makeBlitResources(device: MTLDevice)
+  private static func makeBlitResources(device: MTLDevice, pixelFormat: MTLPixelFormat)
   -> (pipeline: (any MTLRenderPipelineState)?, tables: [any MTL4ArgumentTable]) {
     guard let library = device.makeDefaultLibrary() else {
       blitLogger.error("Failed to create default Metal library for blit pipeline")
@@ -284,7 +309,7 @@ extension AudioCAMetalLayerView.Coordinator {
       let pipelineDesc = MTL4RenderPipelineDescriptor()
       pipelineDesc.vertexFunctionDescriptor = vertexDesc
       pipelineDesc.fragmentFunctionDescriptor = fragmentDesc
-      pipelineDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
+      pipelineDesc.colorAttachments[0].pixelFormat = pixelFormat
       let pipeline = try compiler.makeRenderPipelineState(descriptor: pipelineDesc)
 
       let tableDesc = MTL4ArgumentTableDescriptor()

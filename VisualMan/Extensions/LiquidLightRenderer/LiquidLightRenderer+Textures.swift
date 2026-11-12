@@ -7,6 +7,7 @@
 
 #if !targetEnvironment(simulator)
 import Metal
+import CoreGraphics
 
 extension LiquidLightRenderer {
   struct FrameTextures {
@@ -18,9 +19,16 @@ extension LiquidLightRenderer {
     var all: [MTLTexture] { [intermediate] + history + final + phase }
   }
 
+  static let outputExtendedRange = true
+  static let standardRangePixelFormat: MTLPixelFormat = .bgra8Unorm_srgb
+  static let standardRangeColorSpace = CGColorSpace(name: CGColorSpace.sRGB)
+  static let outputPixelFormat: MTLPixelFormat = outputExtendedRange ? .rgba16Float : standardRangePixelFormat
+  static let outputColorSpace = outputExtendedRange
+    ? CGColorSpace(name: CGColorSpace.extendedLinearSRGB) : standardRangeColorSpace
+
   static func colorTextureDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm,
+      pixelFormat: .rgba16Float,
       width: width,
       height: height,
       mipmapped: false

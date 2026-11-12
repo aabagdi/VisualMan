@@ -7,6 +7,7 @@
 
 #if !targetEnvironment(simulator)
 import Metal
+import CoreGraphics
 import os
 
 extension NavierStokesRenderer {
@@ -37,6 +38,7 @@ extension NavierStokesRenderer {
     let mgCoarseSolve: MTLComputePipelineState
     let viscosity: MTLComputePipelineState
     let resample: MTLComputePipelineState
+    let technicolorBakeLUT: MTLComputePipelineState
   }
 
   struct Textures {
@@ -88,7 +90,8 @@ extension NavierStokesRenderer {
           let mgProlong = make("fluidMGProlong"),
           let mgCoarseSolve = make("fluidMGCoarseSolve"),
           let viscosity = make("fluidViscosity"),
-          let resample = make("fluidResample") else {
+          let resample = make("fluidResample"),
+          let technicolorBakeLUT = make("technicolorBakeLUT") else {
       return nil
     }
 
@@ -108,12 +111,13 @@ extension NavierStokesRenderer {
                      mgSmooth: mgSmooth,
                      mgRestrict: mgRestrict, mgProlong: mgProlong,
                      mgCoarseSolve: mgCoarseSolve,
-                     viscosity: viscosity, resample: resample)
+                     viscosity: viscosity, resample: resample,
+                     technicolorBakeLUT: technicolorBakeLUT)
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
     let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 7
+    desc.maxTextureBindCount = 8
     desc.maxBufferBindCount = 4
     var tables = [any MTL4ArgumentTable]()
     for _ in 0..<maxFramesInFlight {
@@ -136,6 +140,28 @@ extension NavierStokesRenderer {
       logger.error("Failed to create residency set: \(error.localizedDescription)")
       return nil
     }
+  }
+
+  static let technicolorLUTSize: Int = 33
+  static let outputExtendedRange = true
+  static let standardRangePixelFormat: MTLPixelFormat = .bgra8Unorm_srgb
+  static let standardRangeColorSpace = CGColorSpace(name: CGColorSpace.displayP3)
+  static let outputPixelFormat: MTLPixelFormat = outputExtendedRange ? .rgba16Float : standardRangePixelFormat
+  static let outputColorSpace = outputExtendedRange
+    ? CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3) : standardRangeColorSpace
+
+  static func createTechnicolorLUT(device: MTLDevice) -> MTLTexture? {
+    let desc = MTLTextureDescriptor()
+    desc.textureType = .type3D
+    desc.pixelFormat = .rgba16Float
+    desc.width = technicolorLUTSize
+    desc.height = technicolorLUTSize
+    desc.depth = technicolorLUTSize
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+    let texture = device.makeTexture(descriptor: desc)
+    texture?.label = "Technicolor IV print LUT"
+    return texture
   }
 
   static let bloomSize: Int = 256
@@ -249,6 +275,15 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(psiA.gpuResourceID, index: 0)
     dispatchGrid(encoder: encoder)
 
+    encoder.setComputePipelineState(pipelines.technicolorBakeLUT)
+    argumentTable.setTexture(technicolorLUT.gpuResourceID, index: 0)
+    let densityAndSharpen = SIMD2<Float>(Self.renderTechnicolorPrintDensity, Self.renderTechnicolorSharpen)
+    argumentTable.setAddress(writeUniform(densityAndSharpen), index: 0)
+    encoder.dispatchThreads(
+      threadsPerGrid: MTLSize(width: Self.technicolorLUTSize, height: Self.technicolorLUTSize,
+                              depth: Self.technicolorLUTSize),
+      threadsPerThreadgroup: MTLSize(width: 8, height: 8, depth: 4))
+
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
     commandQueue.commit([commandBuffer])
@@ -276,7 +311,7 @@ extension NavierStokesRenderer {
     }
 
     let desc = MTLTextureDescriptor.texture2DDescriptor(
-      pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+      pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
 
@@ -303,6 +338,7 @@ extension NavierStokesRenderer {
 
   func configureResidencySet() {
     for tex in allSimulationTextures { residencySet.addAllocation(tex) }
+    residencySet.addAllocation(technicolorLUT)
     residencySet.addAllocation(stretchStatsBuffer)
     for buf in uniformBuffers { residencySet.addAllocation(buf) }
 

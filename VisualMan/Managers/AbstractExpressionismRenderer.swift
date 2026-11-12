@@ -181,6 +181,9 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
   var isPlaying: Bool = true
 
+  var displayHeadroom: Float = 1
+  var outputCeiling: Float = 1
+
   var pendingClearFrames: Int = 0
 
   struct AnimatingStroke {

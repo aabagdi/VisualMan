@@ -32,6 +32,7 @@ protocol MetalVisualizerRenderer: AnyObject {
   func commitCompute()
   func reset()
   func prepareForResume()
+  func setDisplayHeadroom(_ headroom: Float)
 }
 
 extension MetalVisualizerRenderer {
@@ -41,6 +42,7 @@ extension MetalVisualizerRenderer {
   
   func reset() {}
   func prepareForResume() {}
+  func setDisplayHeadroom(_ headroom: Float) {}
   
   static func createAllocatorsAndBuffers(device: MTLDevice)
   -> (allocators: [any MTL4CommandAllocator], buffers: [MTLBuffer])? {

@@ -212,7 +212,7 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
     encoder.setComputePipelineState(pipelines.bloomThresholdBlurH)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(dst.gpuResourceID, index: 1)
-    let threshold: Float = max(0.35, 0.85 - bass * 0.40 - mid * 0.15)
+    let threshold: Float = max(0.50, 1.21 - bass * 0.57 - mid * 0.21)
     argumentTable.setAddress(writeUniform(threshold), index: 0)
     dispatchGrid(encoder: encoder, width: size, height: size)
   }
@@ -247,6 +247,7 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
     argumentTable.setTexture(bloomLoA.gpuResourceID, index: 4)
     argumentTable.setTexture(historyIn.gpuResourceID, index: 5)
     argumentTable.setTexture(historyOut.gpuResourceID, index: 6)
+    argumentTable.setTexture(technicolorLUT.gpuResourceID, index: 7)
     argumentTable.setAddress(frameUniformsAddress, index: 0)
 
     dispatchGrid(encoder: encoder, width: historyOut.width, height: historyOut.height)
@@ -264,6 +265,8 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
   func makeFrameUniforms(bass: Float, mid: Float, high: Float, audioEnergy: Float) -> FrameUniforms {
     let blendPerFrame60 = max(0.55, taaBlendFactor - audioEnergy * 0.30)
     let blend = dt > 0 ? pow(blendPerFrame60, dt * 60.0) : blendPerFrame60
+    let targetCeiling = max(1, min(displayHeadroom, Self.renderTechnicolorMaxHeadroom))
+    technicolorCeiling += (targetCeiling - technicolorCeiling) * (1 - exp(-dt / 0.5))
     return FrameUniforms(
       bass: bass, mid: mid, high: high,
       time: time, dt: dt,
@@ -273,12 +276,16 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
       detail: Self.renderDetail,
       jitter: Self.renderJitter,
       thinFade: Self.renderThinFade,
-      technicolorPrintDensity: Self.renderTechnicolorPrintDensity,
-      technicolorSharpen: Self.renderTechnicolorSharpen,
       technicolorPresence: Self.renderTechnicolorPresence,
-      technicolorTheme: SIMD4<Float>(technicolorThemeDye, 0),
       technicolorNeutralReach: Self.renderTechnicolorNeutralReach,
       technicolorLampGain: Self.renderTechnicolorLampGain
+        * (1 + (technicolorCeiling - 1) * Self.renderTechnicolorHeadroomLamp),
+      technicolorCeiling: technicolorCeiling,
+      technicolorTheme: SIMD4<Float>(technicolorThemeDye, 0),
+      technicolorMisregistration: technicolorMisregistration(bass: bass, high: high),
+      technicolorDepth: SIMD4<Float>(Self.renderTechnicolorThinDepth,
+                                     Self.renderTechnicolorDepthStart,
+                                     Self.renderTechnicolorDepthEnd, 0)
     )
   }
 

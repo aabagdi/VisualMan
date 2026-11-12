@@ -88,7 +88,7 @@ extension AbstractExpressionismRenderer {
   }
 
   static let splatterInterval: Float = 0.3
-  static let pearlescentChance: Float = 1 / 8192.0
+  static let pearlescentChance: Float = 1 / 8192
 
   func rollPearlescent(_ stroke: inout AbExStroke) {
     splatCounter &+= 1

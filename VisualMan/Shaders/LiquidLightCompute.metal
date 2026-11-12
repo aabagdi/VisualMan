@@ -17,6 +17,7 @@ struct LiquidLightParams {
   float2 simSize;
   float eps;
   float apertureRadius;
+  float whiteLevel;
   float4 plate[6];
   float4 ripples[4];
 };
@@ -69,6 +70,7 @@ struct BlurParams {
   float mid;
   float bloomRadius;
   float bloomStrength;
+  float whiteLevel;
 };
 
 struct FeedbackParams {
@@ -460,14 +462,19 @@ inline float vnoise(float2 p) {
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y) * 2.0 - 1.0;
 }
 
-inline float3 agedFilm(float3 c) {
+inline float3 highlightRolloff(float3 c, float white) {
+  float range = max(white - 1.0, 1e-4);
+  return saturate(c) + range * (1.0 - exp(-max(c - 1.0, 0.0) / range));
+}
+
+inline float3 agedFilm(float3 c, float white) {
   c *= float3(1.05, 0.98, 0.80);
   c = c * (1.0 + c * (1.0 / 1.44)) / (1.0 + c);
   float l = dot(c, float3(0.299, 0.587, 0.114));
   c = mix(c, float3(l), 0.1);
   c = c * 0.94 + float3(0.055, 0.04, 0.018);
   c += (l - 0.5) * float3(0.03, 0.015, -0.03);
-  return saturate(c);
+  return highlightRolloff(c, white);
 }
 
 inline float glassDust(float2 pxPos) {
@@ -603,7 +610,7 @@ kernel void liquidLightRender(texture2d<float, access::write>  output [[texture(
   result *= 1.0 + weave;
   result += params.plate[5].rgb * 0.03;
   
-  result = agedFilm(result);
+  result = agedFilm(result, params.whiteLevel);
   
   float grain = shaderHash21(float2(gid) + fract(time * 13.7) * 97.0) - 0.5;
   result += grain * 0.02;
@@ -611,7 +618,7 @@ kernel void liquidLightRender(texture2d<float, access::write>  output [[texture(
   float flare = fast::exp(-max(circ - R, 0.0) * 60.0) * (1.0 - beam) * 0.05;
   result = result * beam + params.plate[5].rgb * flare;
   
-  output.write(float4(saturate(result), 1.0), gid);
+  output.write(float4(clamp(result, 0.0, params.whiteLevel), 1.0), gid);
 }
 
 kernel void liquidLightFeedback(texture2d<float, access::read>   render     [[texture(0)]],
@@ -671,7 +678,7 @@ kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)
   if (int(gid.x) >= w || int(gid.y) >= h) return;
   
   const int2 maxXY = int2(w - 1, h - 1);
-  const half4 sharp_h = half4(saturate(input.read(gid)));
+  const half4 sharp_h = half4(clamp(input.read(gid), 0.0, params.whiteLevel));
   
   float2 uv = (float2(gid) + 0.5) / float2(w, h);
   float2 norm = (uv - 0.5) * 2.0;
@@ -728,5 +735,7 @@ kernel void liquidGlassBlur(texture2d<float, access::read>  input   [[texture(0)
   half desatAmount = half(blurStrength * max(0.12 - params.mid * 0.1, 0.03));
   result_h.rgb = mix(result_h.rgb, half3(luma), desatAmount);
   
-  output.write(float4(saturate(result_h)), gid);
+  float3 encoded = highlightRolloff(float3(result_h.rgb), params.whiteLevel);
+  float3 linear = mix(encoded / 12.92, pow((encoded + 0.055) / 1.055, 2.4), step(0.04045, encoded));
+  output.write(float4(linear, 1.0), gid);
 }

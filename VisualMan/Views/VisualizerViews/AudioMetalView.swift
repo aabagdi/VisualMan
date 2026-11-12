@@ -15,6 +15,11 @@ struct MetalViewConfig {
   var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
   var backgroundColor: UIColor?
   var maxFramesPerSecond: Int = 120
+  var colorSpace: CGColorSpace?
+  var pixelFormat: MTLPixelFormat = .bgra8Unorm
+  var wantsExtendedDynamicRange: Bool = false
+  var standardRangeColorSpace: CGColorSpace?
+  var standardRangePixelFormat: MTLPixelFormat = .bgra8Unorm
 }
 
 struct AudioMetalView<R: MetalVisualizerRenderer>: View {

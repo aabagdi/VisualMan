@@ -180,7 +180,7 @@ extension AbstractExpressionismRenderer {
       canvas: SIMD4(cc.x, cc.y, cc.z, dryRate),
       config: SIMD4(paintDt, isFirstFrame ? 1.0 : 0.0, Float(strokeCount), bumpStrength),
       camera: SIMD4(camPanX, camPanY, camZoom, Float(Self.paintTestDebugMode)),
-      atmosphere: SIMD4(time, songSeed, 0, 0))
+      atmosphere: SIMD4(time, songSeed, outputCeiling, 0))
   }
 
   struct SplitStrokes {

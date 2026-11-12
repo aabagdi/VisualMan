@@ -1,8 +1,9 @@
 VisualMan, except where otherwise noted, is licensed under the MIT
 License. The Mixbox component is separately licensed under CC BY-NC 4.0.
 The Technicolor dye spectra come from spectral_film_lut (MIT) and the
-Timeline of Historical Film Colors (CC BY-NC-ND 4.0). These licenses
-follow.
+Timeline of Historical Film Colors (CC BY-NC-ND 4.0), used with the
+written permission of Prof. Dr. Barbara Flückiger for this
+non-commercial project. These licenses follow.
 
 ===============================================================================
 
@@ -26,7 +27,7 @@ Files in this project licensed under CC BY-NC 4.0:
 TECHNICOLOR NO. IV DYE SPECTRA
 The Technicolor No. IV print in the Navier-Stokes visualizer uses
 spectral coefficients by Jan Lohse in spectral_film_lut and measurements
-in the Timeline of Historical Film Colors by Barbara Flueckiger.
+in the Timeline of Historical Film Colors by Barbara Flückiger.
 
 spectral_film_lut
 Copyright (c) 2026 Jan Lohse
@@ -34,7 +35,7 @@ Licensed under the MIT License (full text below).
 Original project: https://github.com/JanLohse/spectral_film_lut
 
 Timeline of Historical Film Colors
-Measurements by Barbara Flueckiger, licensed under Creative Commons
+Measurements by Barbara Flückiger, licensed under Creative Commons
 Attribution-NonCommercial-NoDerivatives 4.0 International
 (CC BY-NC-ND 4.0) (full text below).
 https://creativecommons.org/licenses/by-nc-nd/4.0/
@@ -42,14 +43,19 @@ https://creativecommons.org/licenses/by-nc-nd/4.0/
   Flueckiger, Barbara (2012 ff.): Timeline of Historical Film Colors.
   (https://filmcolors.org/).
 
+Used, including the resampled and normalized data below, with the
+written permission of Prof. Dr. Barbara Flückiger for this
+non-commercial project.
+
 No images or text from the Timeline are included in this project.
 
 Data used in the Technicolor No. IV emulation in this project:
   - Technicolor No. IV dye spectral densities measured from Samson and
     Delilah (C. B. DeMille) in the Timeline of Historical Film Colors
   - Coefficients in spectral_film_lut (TECHNICOLOR_IV_ALT_2 in
-    technicolor_iv.py), resampled to 400-720 nm in 16 nm steps and
-    normalized to unit peak density for the rendering pipeline, in
+    technicolor_iv.py), resampled to 400-720 nm in 16 nm steps, with
+    the shared base density removed, and normalized to unit peak
+    density for the rendering pipeline, in
     NavierStokesCompute.metal (kTechnicolorDyeLog2)
 
 ===============================================================================

@@ -36,6 +36,9 @@ extension AbstractExpressionismRenderer {
     time += dt
     resumeSuppressionRemaining = max(0, resumeSuppressionRemaining - dt)
 
+    let targetCeiling = max(1, min(displayHeadroom, Self.maxHeadroom))
+    outputCeiling += (targetCeiling - outputCeiling) * (1 - exp(-dt / 0.5))
+
     let input = SIMD3<Float>(bass, mid, high)
     let fastA = 1 - exp(-dt / 0.015)
     let fastD = 1 - exp(-dt / 0.15)
@@ -56,6 +59,12 @@ extension AbstractExpressionismRenderer {
     let fade = u * u * (3 - 2 * u)
     return envelope * fade
   }
+
+  func setDisplayHeadroom(_ headroom: Float) {
+    displayHeadroom = headroom
+  }
+
+  static let maxHeadroom: Float = 3.0
 }
 
 #endif

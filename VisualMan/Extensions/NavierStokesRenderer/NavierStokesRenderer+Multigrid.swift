@@ -61,8 +61,10 @@ extension NavierStokesRenderer {
     encoder.setComputePipelineState(pipelines.mgSmooth)
     argumentTable.setTexture(pressure.gpuResourceID, index: 0)
     argumentTable.setTexture(mgRHS[level].gpuResourceID, index: 1)
+    let groups = MTLSize(width: (pressure.width + 15) / 16, height: (pressure.height + 15) / 16, depth: 1)
+    let groupSize = MTLSize(width: 16, height: 16, depth: 1)
     for _ in 0..<sweeps {
-      dispatchGrid(encoder: encoder, width: pressure.width, height: pressure.height)
+      encoder.dispatchThreadgroups(threadgroupsPerGrid: groups, threadsPerThreadgroup: groupSize)
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     }
   }

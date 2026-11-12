@@ -39,6 +39,7 @@ struct LiquidLightParams {
   var simSize: SIMD2<Float>
   var eps: Float
   var apertureRadius: Float
+  var whiteLevel: Float
   var plate: LiquidLightPlate
   var ripples: LiquidLightDrops
 }
@@ -91,6 +92,7 @@ struct BlurParams {
   var mid: Float
   var bloomRadius: Float
   var bloomStrength: Float
+  var whiteLevel: Float
 }
 
 struct FeedbackParams {

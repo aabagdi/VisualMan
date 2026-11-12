@@ -38,15 +38,16 @@ struct CreditsView: View {
             [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) \
             (Copyright © 2026 Jan Lohse, MIT License) and measurements in the \
             [Timeline of Historical Film Colors](https://filmcolors.org/) by \
-            Barbara Flueckiger, licensed under \
+            Barbara Flückiger, licensed under \
             [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/): \
             
             
             Flueckiger, Barbara (2012 ff.): Timeline of Historical \
             Film Colors. (https://filmcolors.org/). 
             
-            Resampled and normalized \
-            for the rendering pipeline.
+            Used with the written permission of Prof. Dr. Barbara \
+            Flückiger for this non-commercial project. Resampled and \
+            normalized for the rendering pipeline.
             """)
         }
 
@@ -62,7 +63,9 @@ struct CreditsView: View {
             MIT License. The Mixbox component is separately licensed under \
             CC BY-NC 4.0. The Technicolor dye spectra come from \
             spectral_film_lut (MIT) and the Timeline of Historical Film \
-            Colors (CC BY-NC-ND 4.0). These licenses follow.
+            Colors (CC BY-NC-ND 4.0), used with the written permission \
+            of Prof. Dr. Barbara Flückiger for this non-commercial \
+            project. These licenses follow.
             """)
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -184,13 +187,17 @@ struct CreditsView: View {
             .font(.headline)
 
           Text("""
-            Timeline of Historical Film Colors by Barbara Flueckiger. \
+            Timeline of Historical Film Colors by Barbara Flückiger. \
             [filmcolors.org](https://filmcolors.org/)
 
             Data used in this project:
               • Technicolor No. IV dye spectral densities (Samson and \
                 Delilah, C. B. DeMille), resampled \
             to 400–720 nm and normalized. No images or text from the Timeline are included.
+
+            Used, including the resampled and normalized data, with the \
+            written permission of Prof. Dr. Barbara Flückiger for this \
+            non-commercial project.
 
             This material is licensed under the Creative Commons \
             Attribution-NonCommercial-NoDerivatives 4.0 International \

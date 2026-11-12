@@ -84,6 +84,15 @@ extension NavierStokesRenderer {
   var technicolorThemeDye: SIMD3<Float> {
     bassPalette.dye(fmod(time * 0.05, 1.0))
   }
+
+  func technicolorMisregistration(bass: Float, high: Float) -> SIMD4<Float> {
+    let strength = Self.renderTechnicolorMisregistrationBase
+      + bass * Self.renderTechnicolorMisregistrationBass
+      + high * Self.renderTechnicolorMisregistrationHigh
+    let cyan = SIMD2<Float>(cos(time * 0.31), sin(time * 0.23 + 1.3))
+    let yellow = SIMD2<Float>(cos(time * 0.19 + 2.1), sin(time * 0.37 + 0.5))
+    return SIMD4<Float>(lowHalf: cyan * strength, highHalf: yellow * strength)
+  }
 }
 
 extension NavierStokesRenderer {

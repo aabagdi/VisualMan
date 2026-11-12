@@ -54,17 +54,14 @@ extension AbstractExpressionismRenderer {
       x -= x.rounded(.down)
       return x
     }
-    var weights = mixboxPigments.map { p -> Float in
-      p.hue >= 0 ? 0.25 : 0
-    }
-    for i in weights.indices where weights[i] > 0 {
-      weights[i] += 0.75 * hash(i)
-    }
-    let stars = weights.indices
-      .filter { weights[$0] > 0 }
+    let ranked = mixboxPigments.indices
+      .filter { mixboxPigments[$0].hue >= 0 }
       .sorted { hash($0 + 100) > hash($1 + 100) }
-      .prefix(3)
-    for i in stars { weights[i] *= 2.2 }
+    let paletteSize = 5 + min(Int(hash(200) * 3), 2)
+    var weights = [Float](repeating: 0, count: mixboxPigments.count)
+    for (rank, i) in ranked.prefix(paletteSize).enumerated() {
+      weights[i] = (0.25 + 0.75 * hash(i)) * (rank < 3 ? 2.2 : 1)
+    }
     return weights
   }
 
