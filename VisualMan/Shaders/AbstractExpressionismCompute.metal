@@ -1433,7 +1433,8 @@ kernel void abexPaint(
         float dragSeed = strokes[i].sizeOpacity.z;
         float drag = shaderSimplex2D(float2(dragPx.x * 0.20 + dragSeed * 3.1,
                                             dragPx.y * 0.030 + dragSeed * 1.7));
-        sr.coverage *= 1.0 + drag * 0.22;
+        float tooth = shaderNoise(p * 400.0 + float2(dragSeed * 0.39, dragSeed * 0.21)) - 0.5;
+        sr.coverage *= 1.0 + drag * 0.16 + tooth * 0.24;
       }
     }
 
