@@ -43,14 +43,10 @@ struct VisualizerContainerView: View {
       return AnyView(AuroraBorealisVisualizerView(audioLevels: audioLevels))
     case .oscilloscope:
       return AnyView(OscilloscopeVisualizerView(audioLevels: audioLevels, waveform: waveform))
-    case .sphereMesh:
-      return AnyView(SphereMeshVisualizerView(audioLevels: audioLevels))
     case .plasma:
       return AnyView(PlasmaVisualizerView(audioLevels: audioLevels))
     case .metaball:
       return AnyView(MetaballVisualizerView(audioLevels: audioLevels))
-    case .ink:
-      return AnyView(InkVisualizerView(audioLevels: audioLevels))
     #if targetEnvironment(simulator)
     case .navierStokes, .liquidLight, .gameOfLife, .abstractExpressionism:
       return AnyView(
