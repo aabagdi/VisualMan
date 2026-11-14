@@ -48,19 +48,25 @@ extension AbstractExpressionismRenderer {
   static let brushWhiteChance: Float = 0.10
   static let knifeWhiteChance: Float = 0.22
 
+  static let offPaletteWeight: Float = 0.12
+  static let paletteMixChance: Float = 0.35
+  static let paletteMixShares: [Float] = [0.2, 0.35, 0.5]
+
   static func makePigmentWeights(seed: Float) -> [Float] {
     func hash(_ i: Int) -> Float {
       var x = sin(seed * 12.9898 + Float(i) * 78.233) * 43758.5453
       x -= x.rounded(.down)
       return x
     }
+
     let ranked = mixboxPigments.indices
       .filter { mixboxPigments[$0].hue >= 0 }
       .sorted { hash($0 + 100) > hash($1 + 100) }
     let paletteSize = 5 + min(Int(hash(200) * 3), 2)
     var weights = [Float](repeating: 0, count: mixboxPigments.count)
-    for (rank, i) in ranked.prefix(paletteSize).enumerated() {
-      weights[i] = (0.25 + 0.75 * hash(i)) * (rank < 3 ? 2.2 : 1)
+    for (rank, i) in ranked.enumerated() {
+      let scale: Float = rank < 3 ? 2.2 : (rank < paletteSize ? 1 : offPaletteWeight)
+      weights[i] = (0.25 + 0.75 * hash(i)) * scale
     }
     return weights
   }
@@ -73,7 +79,7 @@ extension AbstractExpressionismRenderer {
     return pigmentWeights
   }
 
-  func weightedPigment(nearHue targetHue: Float, valueBias: Float = 0.0) -> Pigment {
+  func weightedPigmentIndex(nearHue targetHue: Float, valueBias: Float = 0.0) -> Int {
     let weights = currentPigmentWeights()
     var odds = [Float](repeating: 0, count: weights.count)
     var total: Float = 0
@@ -87,9 +93,68 @@ extension AbstractExpressionismRenderer {
     var roll = nextSeed() * total
     for idx in odds.indices where odds[idx] > 0 {
       roll -= odds[idx]
-      if roll <= 0 { return Self.mixboxPigments[idx] }
+      if roll <= 0 { return idx }
     }
-    return Self.mixboxPigments[0]
+    return 0
+  }
+
+  func paletteColor(nearHue hue: Float, valueBias: Float = 0.0) -> SIMD3<Float> {
+    let first = weightedPigmentIndex(nearHue: hue, valueBias: valueBias)
+    guard !paletteMixes.isEmpty, nextSeed() < Self.paletteMixChance else {
+      return Self.mixboxPigments[first].linearRgb
+    }
+    let weights = currentPigmentWeights()
+    var total: Float = 0
+    for idx in weights.indices where idx != first { total += weights[idx] }
+    var roll = nextSeed() * total
+    var second = first
+    for idx in weights.indices where idx != first && weights[idx] > 0 {
+      second = idx
+      roll -= weights[idx]
+      if roll <= 0 { break }
+    }
+    let shares = Self.paletteMixShares.count
+    let share = min(Int(nextSeed() * Float(shares)), shares - 1)
+    return paletteMixes[Self.paletteMixIndex(first, second, share)]
+  }
+
+  static func paletteMixIndex(_ first: Int, _ second: Int, _ share: Int) -> Int {
+    (first * mixboxPigments.count + second) * paletteMixShares.count + share
+  }
+
+  static var paletteMixCount: Int {
+    mixboxPigments.count * mixboxPigments.count * paletteMixShares.count
+  }
+
+  func makePaletteMixBuffer() -> MTLBuffer? {
+    device.makeBuffer(length: MemoryLayout<SIMD4<Float>>.stride * Self.paletteMixCount,
+                      options: .storageModeShared)
+  }
+
+  func encodePaletteMixes(encoder: any MTL4ComputeCommandEncoder, results: MTLBuffer) {
+    guard let lut = mixboxLUT else { return }
+    var inputs = [SIMD4<Float>]()
+    inputs.reserveCapacity(Self.paletteMixCount * 2)
+    for a in Self.mixboxPigments {
+      for b in Self.mixboxPigments {
+        for share in Self.paletteMixShares {
+          inputs.append(SIMD4(a.linearRgb, share))
+          inputs.append(SIMD4(b.linearRgb, 0))
+        }
+      }
+    }
+    encoder.setComputePipelineState(paletteMixPipeline)
+    argumentTable.setTexture(lut.gpuResourceID, index: 0)
+    argumentTable.setAddress(writeUniformArray(inputs), index: 0)
+    argumentTable.setAddress(results.gpuAddress, index: 1)
+    encoder.dispatchThreads(threadsPerGrid: MTLSize(width: Self.paletteMixCount, height: 1, depth: 1),
+                            threadsPerThreadgroup: MTLSize(width: 32, height: 1, depth: 1))
+  }
+
+  func readPaletteMixes(results: MTLBuffer) {
+    let ptr = results.contents().bindMemory(to: SIMD4<Float>.self,
+                                            capacity: Self.paletteMixCount)
+    paletteMixes = (0..<Self.paletteMixCount).map { SIMD3(ptr[$0].x, ptr[$0].y, ptr[$0].z) }
   }
 
   func pickColorBiased(at pos: SIMD2<Float>) -> SIMD3<Float> {
@@ -117,7 +182,7 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    return weightedPigment(nearHue: hue).linearRgb
+    return paletteColor(nearHue: hue)
   }
 
   func pickKnifeColor(at pos: SIMD2<Float>) -> SIMD3<Float> {
@@ -145,7 +210,7 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    return weightedPigment(nearHue: hue, valueBias: 0.4).linearRgb
+    return paletteColor(nearHue: hue, valueBias: 0.4)
   }
 
   func pickStainColor() -> SIMD3<Float> {
@@ -167,7 +232,7 @@ extension AbstractExpressionismRenderer {
     var hue = (baseHue + offset).truncatingRemainder(dividingBy: 1.0)
     if hue < 0 { hue += 1 }
 
-    return weightedPigment(nearHue: hue).linearRgb
+    return paletteColor(nearHue: hue)
   }
 
 }

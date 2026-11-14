@@ -66,6 +66,10 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "-AbExPaintTest colors"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "-AbExPaintTestDebug black"
             isEnabled = "NO">
          </CommandLineArgument>

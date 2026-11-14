@@ -301,7 +301,6 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
     let suppress = resumeSuppressionRemaining > 0
     let injBass  = suppress ? 0 : bass
     let injMid   = suppress ? 0 : mid
-    let injHigh  = suppress ? 0 : high
 
     let (dissipation, viscosity) = energyBudget(audioEnergy: audioEnergy)
 
@@ -312,7 +311,7 @@ argumentTable.setAddress(writeUniform(dissipation), index: 1)
     swap(&velocityA, &velocityB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
-    injectAudioSplats(encoder: encoder, bass: injBass, mid: injMid, high: injHigh)
+    injectAudioSplats(encoder: encoder, bass: bass, mid: mid, high: high, suppressed: suppress)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     applyVorticityConfinement(encoder: encoder, bass: injBass, mid: injMid)

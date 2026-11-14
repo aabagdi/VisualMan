@@ -184,7 +184,6 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
     private func makeFrameRateRange() -> CAFrameRateRange {
       let preferred = Float(min(targetFPS, maxFPS))
-      
       if preferred >= 120 {
         return CAFrameRateRange(minimum: 60, maximum: preferred, preferred: preferred)
       }
@@ -254,7 +253,6 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
                    drawable: drawable)
       hasEverPresented = true
     }
-
   }
 }
 
@@ -385,11 +383,17 @@ extension AudioCAMetalLayerView.Coordinator {
     }
     presentCommandBuffer.endCommandBuffer()
 
+    nonisolated(unsafe) let drawable = drawable
+    let commitOptions = MTL4CommitOptions()
+    commitOptions.addFeedbackHandler { @Sendable feedback in
+      guard feedback.error == nil else { return }
+      drawable.present()
+    }
+
     queue.waitForDrawable(drawable)
-    queue.commit([presentCommandBuffer])
+    queue.commit([presentCommandBuffer], options: commitOptions)
     queue.signalDrawable(drawable)
     queue.signalEvent(presentEvent, value: presentCount)
-    drawable.present()
   }
 }
 

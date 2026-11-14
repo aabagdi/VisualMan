@@ -99,9 +99,11 @@ extension NavierStokesRenderer {
   func injectAudioSplats(encoder: any MTL4ComputeCommandEncoder,
                          bass: Float,
                          mid: Float,
-                         high: Float) {
+                         high: Float,
+                         suppressed: Bool) {
     let high = min(high * Self.highBandGain, 1.0)
     updateDynamics(bass: bass, mid: mid, high: high)
+    if suppressed { return }
 
     if bass > 0.01 {
       collectBassJets(bass: bass)

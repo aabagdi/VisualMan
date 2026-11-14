@@ -17,6 +17,7 @@ extension AbstractExpressionismRenderer {
     let resample: MTLComputePipelineState
     let pigment: MTLComputePipelineState
     let mixboxSelfTest: MTLComputePipelineState
+    let paletteMixes: MTLComputePipelineState
   }
 
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
@@ -32,9 +33,11 @@ extension AbstractExpressionismRenderer {
           let velocity     = makePipeline("abexVelocityDeposit"),
           let resample     = makePipeline("abexResample"),
           let pigment      = makePipeline("abexPigment"),
-          let selfTest     = makePipeline("abexMixboxSelfTest") else { return nil }
+          let selfTest     = makePipeline("abexMixboxSelfTest"),
+          let mixes        = makePipeline("abexPaletteMixes") else { return nil }
     return Pipelines(paint: paint, compose: compose, velocity: velocity,
-                     resample: resample, pigment: pigment, mixboxSelfTest: selfTest)
+                     resample: resample, pigment: pigment, mixboxSelfTest: selfTest,
+                     paletteMixes: mixes)
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {

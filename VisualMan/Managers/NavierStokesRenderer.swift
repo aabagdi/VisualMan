@@ -272,6 +272,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
           let historyA = taaHistoryA,
           let historyB = taaHistoryB else { return nil }
 
+    encoder.barrier(afterQueueStages: [.dispatch, .fragment], beforeStages: .dispatch)
+
     let writeB = (frameNumber & 1) == 0
     let historyIn = writeB ? historyA : historyB
     let historyOut = writeB ? historyB : historyA

@@ -36,6 +36,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var resamplePipeline: MTLComputePipelineState
   var pigmentPipeline: MTLComputePipelineState
   var mixboxSelfTestPipeline: MTLComputePipelineState
+  var paletteMixPipeline: MTLComputePipelineState
 
   var pendingResample: Bool = false
   var resampleColorSrc: MTLTexture?
@@ -72,6 +73,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var songSeed: Float = Float.random(in: 0..<1000)
   var pigmentWeights: [Float] = []
   var pigmentWeightsSeed: Float = -1
+  var paletteMixes: [SIMD3<Float>] = []
 
   var cameraPhase: Float = 0
 
@@ -266,6 +268,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     self.resamplePipeline = pipelines.resample
     self.pigmentPipeline = pipelines.pigment
     self.mixboxSelfTestPipeline = pipelines.mixboxSelfTest
+    self.paletteMixPipeline = pipelines.paletteMixes
     self.residencySet = residencySet
 
     guard let lut = Self.makeMixboxLUT(device: device, pixels: textureData.mixboxLUT) else { return nil }

@@ -260,7 +260,8 @@ extension AbstractExpressionismRenderer {
   }
 
   private func encodeWarmUpPasses(encoder: any MTL4ComputeCommandEncoder,
-                                  tex: WarmUpTextures, selfTestResults: MTLBuffer?) {
+                                  tex: WarmUpTextures, selfTestResults: MTLBuffer?,
+                                  paletteMixResults: MTLBuffer?) {
     let cc = Self.canvasColor
     let params = AbExParams(
       canvas: SIMD4(cc.x, cc.y, cc.z, 0),
@@ -287,6 +288,10 @@ extension AbstractExpressionismRenderer {
       encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
       encodeMixboxSelfTest(encoder: encoder, results: b)
     }
+    if let b = paletteMixResults {
+      encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+      encodePaletteMixes(encoder: encoder, results: b)
+    }
   }
 
   func warmUpGPU() {
@@ -296,6 +301,8 @@ extension AbstractExpressionismRenderer {
     for t in dummies { residencySet.addAllocation(t) }
     let selfTestResults = makeMixboxSelfTestBuffer()
     if let b = selfTestResults { residencySet.addAllocation(b) }
+    let paletteMixResults = makePaletteMixBuffer()
+    if let b = paletteMixResults { residencySet.addAllocation(b) }
     residencySet.commit()
 
     let warmupFrame: UInt64 = 1
@@ -310,7 +317,8 @@ extension AbstractExpressionismRenderer {
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
     encoder.setArgumentTable(argumentTable)
 
-    encodeWarmUpPasses(encoder: encoder, tex: tex, selfTestResults: selfTestResults)
+    encodeWarmUpPasses(encoder: encoder, tex: tex, selfTestResults: selfTestResults,
+                       paletteMixResults: paletteMixResults)
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
@@ -321,6 +329,10 @@ extension AbstractExpressionismRenderer {
     let completed = sharedEvent.wait(untilSignaledValue: warmupFrame, timeoutMS: 1000)
     if let b = selfTestResults {
       if completed { reportMixboxSelfTest(results: b) }
+      residencySet.removeAllocation(b)
+    }
+    if let b = paletteMixResults {
+      if completed { readPaletteMixes(results: b) }
       residencySet.removeAllocation(b)
     }
     for t in dummies { residencySet.removeAllocation(t) }

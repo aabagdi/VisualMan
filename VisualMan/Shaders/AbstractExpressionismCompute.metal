@@ -173,6 +173,7 @@ struct StrokeResult {
   float impastoPermanence;
   float radialNorm;
   float laneFill;
+  float filmCov;
 };
 
 inline float bristleProfileArea(float x) {
@@ -210,7 +211,7 @@ inline float bristleLaneAmount(float phase, float span, float seed, float dryCoo
 
 inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s, float texel,
                                      bool blockOwner) {
-  StrokeResult r; r.coverage = 0; r.heightDelta = 0; r.laneFill = 1.0;
+  StrokeResult r; r.coverage = 0; r.heightDelta = 0; r.laneFill = 1.0; r.filmCov = 0;
   r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0; r.radialNorm = 0;
   r.strokeWetness = 1.0; r.impastoPermanence = 0.0;
 
@@ -309,6 +310,7 @@ inline StrokeResult evaluateGestural(float2 p, constant AbExStroke &s, float tex
   }
 
   r.coverage          = coverage;
+  r.filmCov           = core;
   r.alongNorm         = sAlong;
   r.acrossT           = acrossT;
   r.bristleTone       = (bStrength - 0.65) * 1.4;
@@ -1435,6 +1437,14 @@ kernel void abexPaint(
                                             dragPx.y * 0.030 + dragSeed * 1.7));
         float tooth = shaderNoise(p * 400.0 + float2(dragSeed * 0.39, dragSeed * 0.21)) - 0.5;
         sr.coverage *= 1.0 + drag * 0.16 + tooth * 0.24;
+
+        if (fract(strokes[i].color.w) > 0.01) {
+          float streak = shaderSimplex2D(float2(dragPx.x * 0.10 + dragSeed * 5.3,
+                                                dragPx.y * 0.005 + dragSeed * 2.9))
+                       + shaderSimplex2D(float2(dragPx.x * 0.23 + dragSeed * 1.9,
+                                                dragPx.y * 0.0115 + dragSeed * 4.1)) * 0.375;
+          sr.filmCov *= adhesion * float(drawnMask) * (1.0 + streak * 0.40);
+        }
       }
     }
 
@@ -1468,16 +1478,17 @@ kernel void abexPaint(
     }
 
     float durability = (isGestural || isSplatter) ? fract(strokes[i].color.w) : 0.0;
-    if (durability > 0.01 && sr.coverage > 0.15) {
-      sr.coverage    = max(sr.coverage,    durability * 0.92);
-      sr.heightDelta = max(sr.heightDelta, durability * 0.55);
+    if (durability > 0.01) {
+      float hold = smoothstep(0.11, 0.21, isGestural ? sr.filmCov : sr.coverage);
+      sr.coverage    = mix(sr.coverage,    max(sr.coverage,    durability * 0.92), hold);
+      sr.heightDelta = mix(sr.heightDelta, max(sr.heightDelta, durability * 0.55), hold);
     }
 
     half3 tint = strokeTint(strokes[i], sr);
     half  cov  = half(sr.coverage);
     half  hd   = half(max(sr.heightDelta, 0.0));
 
-    if (!isGestural && !isKnife && permHeight > 0.05h) {
+    if (!isGestural && !isKnife && !isSplatter && permHeight > 0.05h) {
       float texNoise = shaderNoise(p * 320.0 + permHeight * 11.0);
       half textureModulation = 0.65h + half(texNoise) * 0.5h;
       half permInfluence = smoothstep(0.05h, 0.50h, permHeight);
@@ -1588,6 +1599,7 @@ kernel void abexPaint(
                                     carriedPearl * cov * newness);
 
     color.a = newAlpha;
+    if (isGestural) hd *= smoothstep(0.30h, 0.60h, newAlpha);
     height = min(height + hd, HEIGHT_MAX);
 
     half thicknessGate = smoothstep(0.08h, 0.45h, hd);
@@ -1819,6 +1831,16 @@ kernel void abexMixboxSelfTest(texture2d<float, access::sample> mixboxLUT [[text
     if (tid == 13) results[13] = float4(mixboxLUT.sample(lutS, float2(0.5, 0.5) / 512.0).rgb, 1.0);
     if (tid == 14) results[14] = float4(float(mixboxLUT.get_width()), float(mixboxLUT.get_height()), 0, 0);
   }
+}
+
+kernel void abexPaletteMixes(texture2d<float, access::sample> mixboxLUT [[texture(0)]],
+                             constant float4 *inputs  [[buffer(0)]],
+                             device float4 *results   [[buffer(1)]],
+                             uint tid [[thread_position_in_grid]])
+{
+  float4 a = inputs[tid * 2];
+  float3 b = inputs[tid * 2 + 1].xyz;
+  results[tid] = float4(mixbox_lerp(mixboxLUT, a.xyz, b, a.w), 1.0);
 }
 
 kernel void abexResample(

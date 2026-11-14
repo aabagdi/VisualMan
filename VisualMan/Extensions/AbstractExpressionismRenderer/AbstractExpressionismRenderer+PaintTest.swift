@@ -12,7 +12,7 @@ import simd
 #if DEBUG
 extension AbstractExpressionismRenderer {
   enum PaintTestScenario {
-    case mixing, cracks, smear
+    case mixing, cracks, smear, colors
   }
 
   static let paintTestScenario: PaintTestScenario? = {
@@ -22,6 +22,7 @@ extension AbstractExpressionismRenderer {
     switch raw {
     case "cracks": return .cracks
     case "smear":  return .smear
+    case "colors", "colours": return .colors
     default:       return .mixing
     }
   }()
@@ -29,19 +30,27 @@ extension AbstractExpressionismRenderer {
   static let paintTestEnabled: Bool = paintTestScenario != nil
 
   static var paintTestLoopDuration: Float {
-    paintTestScenario == .mixing ? 20 : 45
+    switch paintTestScenario {
+    case .cracks, .smear: return 45
+    case .colors:         return 30
+    default:              return 20
+    }
   }
 
-  static var paintTestScript: [PaintTestEvent] {
-    switch paintTestScenario {
-    case .cracks: return crackScript
-    case .smear:  return smearScript
-    default:      return mixingScript
+  var paintTestScript: [PaintTestEvent] {
+    switch Self.paintTestScenario {
+    case .cracks: return Self.crackScript
+    case .smear:  return Self.smearScript
+    case .colors: return Self.colorScript(mixes: paletteMixes)
+    default:      return Self.mixingScript
     }
   }
 
   static var paintTestDryMultiplier: Float {
-    paintTestScenario == .mixing ? 1 : 3
+    switch paintTestScenario {
+    case .cracks, .smear: return 3
+    default:              return 1
+    }
   }
 
   struct PaintTestEvent {
@@ -322,7 +331,7 @@ extension AbstractExpressionismRenderer {
 
     var instant = [AbExStroke]()
     var animated = [AbExStroke]()
-    let script = Self.paintTestScript
+    let script = paintTestScript
     while paintTestEventIndex < script.count,
           script[paintTestEventIndex].time <= paintTestClock {
       let event = script[paintTestEventIndex]
