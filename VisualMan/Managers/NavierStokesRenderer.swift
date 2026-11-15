@@ -6,8 +6,8 @@
 //
 
 enum NavierStokesSolver: String, CaseIterable {
-  case pressureMultigrid = "V-grid solver (slightly more realistic)"
-  case jacobi = "Jacobi solver (slightly faster)"
+  case pressureMultigrid = "V-grid solver (more realistic)"
+  case jacobi = "Jacobi solver (more efficient)"
 }
 
 #if !targetEnvironment(simulator)

@@ -273,123 +273,6 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 5d01d7daa091fc52"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[FTCinematicHighPriorityTrackerState abort]"
-                  moduleName = "FusionTracker"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - f19a2497b1cf249b"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSPublisher abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 61d8ac7cb096f802"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSSubscriber abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 384676d0b5331b56"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSPublishStreamsProtocol abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - c3fe313b70423aaf"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSSubscribeStreamsProtocol abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - a697112635063eb2"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSMMCSProtocol abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - bde873e9dce65c40"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSServerSideConfigProtocol abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - f4ef268f353a2378"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSServerSideConfigManager abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - c2a8cec46637c043"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSResetServerProtocol abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 1a7e9a0f21a96fb9"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSReauthorizationProtocol abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - a4b5c28c772b5070"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSDeleter abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 4d2ec97c3bb31626"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSDeleteStreamsProtocol abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - fcefdda57b8dd8ec"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[MSStreamsProtocol abort]"
-                  moduleName = "CoreMediaStream"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 9f11ade6bc10094"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
@@ -423,6 +306,168 @@
                   continueAfterRunningActions = "No"
                   symbolName = "WebCore::JSWritableStreamDefaultWriter::abort(JSC::JSGlobalObject&amp;, JSC::CallFrame&amp;)"
                   moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 5d01d7daa091fc52"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[FTCinematicHighPriorityTrackerState abort]"
+                  moduleName = "FusionTracker"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 4d2ec97c3bb31626"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSDeleteStreamsProtocol abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - a4b5c28c772b5070"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSDeleter abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - a697112635063eb2"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSMMCSProtocol abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 384676d0b5331b56"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSPublishStreamsProtocol abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - f19a2497b1cf249b"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSPublisher abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 1a7e9a0f21a96fb9"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSReauthorizationProtocol abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - c2a8cec46637c043"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSResetServerProtocol abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - f4ef268f353a2378"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSServerSideConfigManager abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - bde873e9dce65c40"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSServerSideConfigProtocol abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - c3fe313b70423aaf"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSSubscribeStreamsProtocol abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 61d8ac7cb096f802"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSSubscriber abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - fcefdda57b8dd8ec"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MSStreamsProtocol abort]"
+                  moduleName = "CoreMediaStream"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 99ff04c85e9dcc39"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::BackgroundFetchLoad::abort()"
+                  moduleName = "WebKit"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 581d22aabc29f88a"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::NetworkResourceLoader::abort()"
+                  moduleName = "WebKit"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 290c02e489600b79"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::SOAuthorizationSession::abort()"
+                  moduleName = "WebKit"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 413f0640142450f5"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::SpeechRecognitionServer::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
+                  moduleName = "WebKit"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 555f70221a006439"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebKit::WebSpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
+                  moduleName = "WebKit"
                   usesParentBreakpointCondition = "Yes">
                </Location>
             </Locations>
