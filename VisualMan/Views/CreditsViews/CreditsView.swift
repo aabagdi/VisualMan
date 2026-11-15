@@ -9,243 +9,301 @@ import SwiftUI
 
 struct CreditsView: View {
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 24) {
-        VStack(alignment: .leading, spacing: 12) {
-          Text("Acknowledgements")
-            .font(.title2)
-            .fontWeight(.bold)
+    List {
+      Section("Abstract Expressionism") {
+        CreditRow(
+          title: "Mixbox",
+          role: "Pigment mixing",
+          attribution: "© 2022 Secret Weapons",
+          license: "CC BY-NC 4.0",
+          url: URL(string: "https://github.com/scrtwpns/mixbox"),
+          note: """
+            By Šárka Sochorová and Ondřej Jamriška. The Mixbox shader and \
+            its lookup table are integrated into the rendering pipeline. \
+            Provided as-is, \
+            without warranty of any kind.
+            """
+        )
+      }
 
-          Text("""
-            Special thanks to \
-            [Point-Free](https://www.pointfree.co) for their \
-            [Dependencies](https://github.com/pointfreeco/swift-dependencies) \
-            library.
-            """)
+      Section("Navier-Stokes") {
+        CreditRow(
+          title: "Covector Fluids",
+          role: "Fluid solver method",
+          attribution: "Nabizadeh, Wang, Ramamoorthi & Chern, 2022",
+          license: nil,
+          url: URL(string: "https://doi.org/10.1145/3528223.3530120"),
+          note: """
+            Mohammad Sina Nabizadeh, Stephanie Wang, Ravi Ramamoorthi, and \
+            Albert Chern. 2022. Covector fluids. ACM Transactions on \
+            Graphics (TOG), 41, 4, 113:1–113:15.
+            """
+        )
 
-          Text("""
-            Pigment mixing in the Abstract Expressionism visualizer is \
-            powered by [Mixbox](https://github.com/scrtwpns/mixbox) by \
-            Secret Weapons. Copyright © 2022 Secret Weapons. Licensed under \
-            [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). \
-            Integrated into the rendering pipeline. \
-            Provided as-is, without warranty of any kind.
-            """)
+        CreditRow(
+          title: "spectral_film_lut",
+          role: "Technicolor No. IV dye spectra, digitized by Jan Lohse",
+          attribution: "© 2026 Jan Lohse",
+          license: "MIT",
+          url: URL(string: "https://github.com/JanLohse/spectral_film_lut"),
+          note: nil
+        )
 
-          Text("""
-            The Technicolor No. IV print in the Navier-Stokes visualizer uses \
-            dye spectra digitized by Jan Lohse in \
-            [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) \
-            (Copyright © 2026 Jan Lohse, MIT License) and measurements in the \
-            [Timeline of Historical Film Colors](https://filmcolors.org/) by \
-            Barbara Flückiger, licensed under \
-            [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/): \
-            
-            
-            Flueckiger, Barbara (2012 ff.): Timeline of Historical \
-            Film Colors. (https://filmcolors.org/). 
-            
+        CreditRow(
+          title: "Timeline of Historical Film Colors",
+          role: "Technicolor No. IV dye measurements",
+          attribution: "Barbara Flückiger",
+          license: "CC BY-NC-ND 4.0",
+          url: URL(string: "https://filmcolors.org/"),
+          note: """
+            Flueckiger, Barbara (2012 ff.): Timeline of Historical Film \
+            Colors. (https://filmcolors.org/).
+
             Used with the written permission of Prof. Dr. Barbara \
             Flückiger for this non-commercial project. Resampled and \
             normalized for the rendering pipeline.
-            """)
-        }
-
-        Divider()
-
-        VStack(alignment: .leading, spacing: 12) {
-          Text("License")
-            .font(.title2)
-            .fontWeight(.bold)
-
-          Text("""
-            VisualMan, except where otherwise noted, is licensed under the \
-            MIT License. The Mixbox component is separately licensed under \
-            CC BY-NC 4.0. The Technicolor dye spectra come from \
-            spectral_film_lut (MIT) and the Timeline of Historical Film \
-            Colors (CC BY-NC-ND 4.0), used with the written permission \
-            of Prof. Dr. Barbara Flückiger for this non-commercial \
-            project. These licenses follow.
-            """)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-
-        VStack(alignment: .leading, spacing: 8) {
-          Text("MIT License")
-            .font(.headline)
-
-          Text("""
-            Copyright © 2025 Aadit Bagdi
-
-            Permission is hereby granted, free of charge, to any person obtaining a copy \
-            of this software and associated documentation files (the "Software"), to deal \
-            in the Software without restriction, including without limitation the rights \
-            to use, copy, modify, merge, publish, distribute, sublicense, and/or sell \
-            copies of the Software, and to permit persons to whom the Software is \
-            furnished to do so, subject to the following conditions:
-
-            The above copyright notice and this permission notice shall be included in all \
-            copies or substantial portions of the Software.
-
-            THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR \
-            IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, \
-            FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE \
-            AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER \
-            LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, \
-            OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE \
-            SOFTWARE.
-            """)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-
-        VStack(alignment: .leading, spacing: 8) {
-          Text("spectral_film_lut — MIT License")
-            .font(.headline)
-
-          Text("""
-            Copyright © 2026 Jan Lohse
-
-            Permission is hereby granted, free of charge, to any person obtaining a copy \
-            of this software and associated documentation files (the "Software"), to deal \
-            in the Software without restriction, including without limitation the rights \
-            to use, copy, modify, merge, publish, distribute, sublicense, and/or sell \
-            copies of the Software, and to permit persons to whom the Software is \
-            furnished to do so, subject to the following conditions:
-
-            The above copyright notice and this permission notice shall be included in all \
-            copies or substantial portions of the Software.
-
-            THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR \
-            IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, \
-            FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE \
-            AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER \
-            LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, \
-            OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE \
-            SOFTWARE.
-            """)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-
-        VStack(alignment: .leading, spacing: 8) {
-          Text("Mixbox — CC BY-NC 4.0")
-            .font(.headline)
-
-          Text("""
-            Mixbox by Secret Weapons. Copyright © 2022 Secret Weapons. \
-            Original project: \
-            [github.com/scrtwpns/mixbox](https://github.com/scrtwpns/mixbox)
-
-            Files in this project licensed under CC BY-NC 4.0:
-              • Mixbox.metal (Metal shader implementation)
-              • mixbox_lut.png (lookup table data)
-
-            This software is licensed under the Creative Commons \
-            Attribution-NonCommercial 4.0 International Public License \
-            ("CC BY-NC 4.0"). The full license text is available at \
-            [creativecommons.org/licenses/by-nc/4.0/legalcode]\
-            (https://creativecommons.org/licenses/by-nc/4.0/legalcode).
-
-            Summary of terms (this summary is not a substitute for the \
-            license):
-
-            You are free to:
-              • Share — copy and redistribute the material in any medium \
-                or format
-              • Adapt — remix, transform, and build upon the material
-
-            Under the following terms:
-              • Attribution — You must give appropriate credit, provide a \
-                link to the license, and indicate if changes were made.
-              • NonCommercial — You may not use the material for \
-                commercial purposes.
-              • No additional restrictions — You may not apply legal \
-                terms or technological measures that legally restrict \
-                others from doing anything the license permits.
-
-            UNLESS OTHERWISE SEPARATELY UNDERTAKEN BY THE LICENSOR, TO THE \
-            EXTENT POSSIBLE, THE LICENSOR OFFERS THE LICENSED MATERIAL \
-            AS-IS AND AS-AVAILABLE, AND MAKES NO REPRESENTATIONS OR \
-            WARRANTIES OF ANY KIND CONCERNING THE LICENSED MATERIAL, \
-            WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHER.
-
-            TO THE EXTENT POSSIBLE, IN NO EVENT WILL THE LICENSOR BE \
-            LIABLE TO YOU ON ANY LEGAL THEORY (INCLUDING, WITHOUT \
-            LIMITATION, NEGLIGENCE) OR OTHERWISE FOR ANY DIRECT, SPECIAL, \
-            INDIRECT, INCIDENTAL, CONSEQUENTIAL, PUNITIVE, EXEMPLARY, OR \
-            OTHER LOSSES, COSTS, EXPENSES, OR DAMAGES ARISING OUT OF THIS \
-            PUBLIC LICENSE OR USE OF THE LICENSED MATERIAL.
-            """)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-
-        VStack(alignment: .leading, spacing: 8) {
-          Text("Timeline of Historical Film Colors — CC BY-NC-ND 4.0")
-            .font(.headline)
-
-          Text("""
-            Timeline of Historical Film Colors by Barbara Flückiger. \
-            [filmcolors.org](https://filmcolors.org/)
-
-            Data used in this project:
-              • Technicolor No. IV dye spectral densities (Samson and \
-                Delilah, C. B. DeMille), resampled \
-            to 400–720 nm and normalized. No images or text from the Timeline are included.
-
-            Used, including the resampled and normalized data, with the \
-            written permission of Prof. Dr. Barbara Flückiger for this \
-            non-commercial project.
-
-            This material is licensed under the Creative Commons \
-            Attribution-NonCommercial-NoDerivatives 4.0 International \
-            Public License ("CC BY-NC-ND 4.0"). The full license text is \
-            available at \
-            [creativecommons.org/licenses/by-nc-nd/4.0/legalcode]\
-            (https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode).
-
-            Summary of terms (this summary is not a substitute for the \
-            license):
-
-            You are free to:
-              • Share — copy and redistribute the material in any medium \
-                or format
-
-            Under the following terms:
-              • Attribution — You must give appropriate credit, provide a \
-                link to the license, and indicate if changes were made.
-              • NonCommercial — You may not use the material for \
-                commercial purposes.
-              • NoDerivatives — If you remix, transform, or build upon the \
-                material, you may not distribute the modified material.
-              • No additional restrictions — You may not apply legal \
-                terms or technological measures that legally restrict \
-                others from doing anything the license permits.
-
-            UNLESS OTHERWISE SEPARATELY UNDERTAKEN BY THE LICENSOR, TO THE \
-            EXTENT POSSIBLE, THE LICENSOR OFFERS THE LICENSED MATERIAL \
-            AS-IS AND AS-AVAILABLE, AND MAKES NO REPRESENTATIONS OR \
-            WARRANTIES OF ANY KIND CONCERNING THE LICENSED MATERIAL, \
-            WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHER.
-
-            TO THE EXTENT POSSIBLE, IN NO EVENT WILL THE LICENSOR BE \
-            LIABLE TO YOU ON ANY LEGAL THEORY (INCLUDING, WITHOUT \
-            LIMITATION, NEGLIGENCE) OR OTHERWISE FOR ANY DIRECT, SPECIAL, \
-            INDIRECT, INCIDENTAL, CONSEQUENTIAL, PUNITIVE, EXEMPLARY, OR \
-            OTHER LOSSES, COSTS, EXPENSES, OR DAMAGES ARISING OUT OF THIS \
-            PUBLIC LICENSE OR USE OF THE LICENSED MATERIAL.
-            """)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
+            """
+        )
       }
-      .padding()
+
+      Section("Libraries") {
+        CreditRow(
+          title: "Dependencies",
+          role: "Dependency management library",
+          attribution: "Special thanks to Point-Free",
+          license: nil,
+          url: URL(string: "https://github.com/pointfreeco/swift-dependencies"),
+          note: nil
+        )
+      }
+
+      Section {
+        LicenseLink(title: "VisualMan", license: "MIT License", text: LicenseText.visualMan)
+        LicenseLink(title: "spectral_film_lut", license: "MIT License", text: LicenseText.spectralFilmLUT)
+        LicenseLink(title: "Mixbox", license: "CC BY-NC 4.0", text: LicenseText.mixbox)
+        LicenseLink(
+          title: "Timeline of Historical Film Colors",
+          license: "CC BY-NC-ND 4.0",
+          text: LicenseText.filmColors
+        )
+      } header: {
+        Text("Licenses")
+      } footer: {
+        Text("""
+          VisualMan, except where otherwise noted, is licensed under the \
+          MIT License. The Mixbox component is separately licensed under \
+          CC BY-NC 4.0. The Technicolor dye spectra come from \
+          spectral_film_lut (MIT) and the Timeline of Historical Film \
+          Colors (CC BY-NC-ND 4.0), used with the written permission \
+          of Prof. Dr. Barbara Flückiger for this non-commercial \
+          project.
+          """)
+      }
     }
+    .listStyle(.insetGrouped)
     .navigationTitle("Credits")
     .toolbar(.hidden, for: .tabBar)
   }
+}
+
+private struct CreditRow: View {
+  let title: String
+  let role: String
+  let attribution: String
+  let license: String?
+  let url: URL?
+  let note: String?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .firstTextBaseline) {
+        Text(title)
+          .font(.headline)
+
+        Spacer()
+
+        if let url {
+          Link(destination: url) {
+            Image(systemName: "arrow.up.right.square")
+              .imageScale(.medium)
+          }
+          .buttonStyle(.borderless)
+          .accessibilityLabel("Open \(title) website")
+        }
+      }
+
+      Text(role)
+        .font(.subheadline)
+
+      HStack(spacing: 6) {
+        Text(attribution)
+        if let license {
+          Text(license)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.quaternary, in: .capsule)
+        }
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+
+      if let note {
+        Text(note)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .padding(.top, 2)
+      }
+    }
+    .padding(.vertical, 4)
+  }
+}
+
+private struct LicenseLink: View {
+  let title: String
+  let license: String
+  let text: LocalizedStringKey
+
+  var body: some View {
+    NavigationLink {
+      ScrollView {
+        Text(text)
+          .font(.footnote)
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding()
+      }
+      .navigationTitle(title)
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar(.hidden, for: .tabBar)
+    } label: {
+      LabeledContent(title, value: license)
+    }
+  }
+}
+
+private enum LicenseText {
+  static let visualMan: LocalizedStringKey = """
+    Copyright © 2025 Aadit Bagdi
+
+    \(mitBody)
+    """
+
+  static let spectralFilmLUT: LocalizedStringKey = """
+    Copyright © 2026 Jan Lohse
+
+    \(mitBody)
+    """
+
+  private static let mitBody = """
+    Permission is hereby granted, free of charge, to any person obtaining a copy \
+    of this software and associated documentation files (the "Software"), to deal \
+    in the Software without restriction, including without limitation the rights \
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell \
+    copies of the Software, and to permit persons to whom the Software is \
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all \
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR \
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, \
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE \
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER \
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, \
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE \
+    SOFTWARE.
+    """
+
+  static let mixbox: LocalizedStringKey = """
+    Mixbox by Šárka Sochorová and Ondřej Jamriška (Secret Weapons). \
+    Copyright © 2022 Secret Weapons. Original project: \
+    [github.com/scrtwpns/mixbox](https://github.com/scrtwpns/mixbox)
+
+    The Mixbox shader and its lookup table are used in this app \
+    under CC BY-NC 4.0.
+
+    This software is licensed under the Creative Commons \
+    Attribution-NonCommercial 4.0 International Public License \
+    ("CC BY-NC 4.0"). The full license text is available at \
+    [creativecommons.org/licenses/by-nc/4.0/legalcode]\
+    (https://creativecommons.org/licenses/by-nc/4.0/legalcode).
+
+    Summary of terms (this summary is not a substitute for the \
+    license):
+
+    You are free to:
+      • Share — copy and redistribute the material in any medium \
+    or format
+      • Adapt — remix, transform, and build upon the material
+
+    Under the following terms:
+      • Attribution — You must give appropriate credit, provide a \
+    link to the license, and indicate if changes were made.
+      • NonCommercial — You may not use the material for \
+    commercial purposes.
+      • No additional restrictions — You may not apply legal \
+    terms or technological measures that legally restrict \
+    others from doing anything the license permits.
+
+    \(ccDisclaimer)
+    """
+
+  static let filmColors: LocalizedStringKey = """
+    Timeline of Historical Film Colors by Barbara Flückiger. \
+    [filmcolors.org](https://filmcolors.org/)
+
+    Data used in this project:
+      • Technicolor No. IV dye spectral densities (Samson and \
+    Delilah, C. B. DeMille), resampled to 400–720 nm and \
+    normalized. No images or text from the Timeline are included.
+
+    Used, including the resampled and normalized data, with the \
+    written permission of Prof. Dr. Barbara Flückiger for this \
+    non-commercial project.
+
+    This material is licensed under the Creative Commons \
+    Attribution-NonCommercial-NoDerivatives 4.0 International \
+    Public License ("CC BY-NC-ND 4.0"). The full license text is \
+    available at \
+    [creativecommons.org/licenses/by-nc-nd/4.0/legalcode]\
+    (https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode).
+
+    Summary of terms (this summary is not a substitute for the \
+    license):
+
+    You are free to:
+      • Share — copy and redistribute the material in any medium \
+    or format
+
+    Under the following terms:
+      • Attribution — You must give appropriate credit, provide a \
+    link to the license, and indicate if changes were made.
+      • NonCommercial — You may not use the material for \
+    commercial purposes.
+      • NoDerivatives — If you remix, transform, or build upon the \
+    material, you may not distribute the modified material.
+      • No additional restrictions — You may not apply legal \
+    terms or technological measures that legally restrict \
+    others from doing anything the license permits.
+
+    \(ccDisclaimer)
+    """
+
+  private static let ccDisclaimer = """
+    UNLESS OTHERWISE SEPARATELY UNDERTAKEN BY THE LICENSOR, TO THE \
+    EXTENT POSSIBLE, THE LICENSOR OFFERS THE LICENSED MATERIAL \
+    AS-IS AND AS-AVAILABLE, AND MAKES NO REPRESENTATIONS OR \
+    WARRANTIES OF ANY KIND CONCERNING THE LICENSED MATERIAL, \
+    WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHER.
+
+    TO THE EXTENT POSSIBLE, IN NO EVENT WILL THE LICENSOR BE \
+    LIABLE TO YOU ON ANY LEGAL THEORY (INCLUDING, WITHOUT \
+    LIMITATION, NEGLIGENCE) OR OTHERWISE FOR ANY DIRECT, SPECIAL, \
+    INDIRECT, INCIDENTAL, CONSEQUENTIAL, PUNITIVE, EXEMPLARY, OR \
+    OTHER LOSSES, COSTS, EXPENSES, OR DAMAGES ARISING OUT OF THIS \
+    PUBLIC LICENSE OR USE OF THE LICENSED MATERIAL.
+    """
 }
 
 #Preview {

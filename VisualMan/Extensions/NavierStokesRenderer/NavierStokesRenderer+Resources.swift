@@ -7,7 +7,6 @@
 import Metal
 
 extension NavierStokesRenderer {
-  /// GPU objects the initializer needs, created up front so `init` only assigns stored properties.
   struct Resources {
     let commandQueue: any MTL4CommandQueue
     let commandBuffer: any MTL4CommandBuffer

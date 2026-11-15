@@ -9,7 +9,7 @@ non-commercial project. These licenses follow.
 
 MIXBOX
 Pigment mixing in the Abstract Expressionism visualizer is powered by
-Mixbox by Secret Weapons.
+Mixbox by Šárka Sochorová and Ondřej Jamriška (Secret Weapons).
 Copyright (c) 2022 Secret Weapons
 Licensed under Creative Commons Attribution-NonCommercial 4.0
 International (CC BY-NC 4.0) (full text below).
@@ -57,6 +57,19 @@ Data used in the Technicolor No. IV emulation in this project:
     the shared base density removed, and normalized to unit peak
     density for the rendering pipeline, in
     NavierStokesCompute.metal (kTechnicolorDyeLog2)
+
+===============================================================================
+
+COVECTOR FLUIDS
+The fluid solver in the Navier-Stokes visualizer implements the method
+described in:
+
+  Mohammad Sina Nabizadeh, Stephanie Wang, Ravi Ramamoorthi, and Albert
+  Chern. 2022. Covector fluids. ACM Transactions on Graphics (TOG), 41,
+  4, 113:1-113:15. https://doi.org/10.1145/3528223.3530120
+
+The method was implemented independently in Metal for this project; no
+source code from the authors' reference implementation is included.
 
 ===============================================================================
 
