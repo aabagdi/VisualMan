@@ -75,6 +75,8 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var displayLink: CADisplayLink?
     private var isInBackground = false
     private var targetFPS: Int = 120
+    private let pacer = FramePacer()
+    private var pacedFPS: Int = 120
     var maxFPS: Int = 120 {
       didSet {
         guard maxFPS != oldValue else { return }
@@ -127,6 +129,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       isInBackground = background
       displayLink?.isPaused = background
       if !background {
+        pacer.reset()
         renderer.recoverFromStalledGPU()
         recoverFromStalledPresents()
       }
@@ -183,7 +186,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     }
 
     private func makeFrameRateRange() -> CAFrameRateRange {
-      let preferred = Float(min(targetFPS, maxFPS))
+      let preferred = Float(min(targetFPS, maxFPS, pacedFPS))
       if preferred >= 120 {
         return CAFrameRateRange(minimum: 60, maximum: preferred, preferred: preferred)
       }
@@ -225,6 +228,8 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         renderer.setDisplayHeadroom(Float(screen.currentEDRHeadroom))
       }
 
+      updatePacing()
+
       let intermediateTex = renderer.encodeFrame(
         bass: audioLevels.bassLevel,
         mid: audioLevels.midLevel,
@@ -233,6 +238,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         drawableHeight: scaledHeight
       )
 
+      let submitted = CACurrentMediaTime()
       if intermediateTex != nil {
         renderer.commitCompute()
         consecutiveSkippedFrames = 0
@@ -250,7 +256,8 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
       presentFrame(pipeline: blitPipeline,
                    intermediateTex: intermediateTex,
-                   drawable: drawable)
+                   drawable: drawable,
+                   submitted: submitted)
       hasEverPresented = true
     }
   }
@@ -284,57 +291,22 @@ extension AudioCAMetalLayerView.Coordinator {
     }
     displayLink?.preferredFrameRateRange = makeFrameRateRange()
   }
+
+  private func updatePacing() {
+    guard config.pacesFrameRate, let link = displayLink, let cost = pacer.takeFrameCost() else { return }
+    let rate = FramePacer.rate(current: pacedFPS, cost: cost,
+                               displayPeriod: link.targetTimestamp - link.timestamp)
+    guard rate != pacedFPS else { return }
+    let costMS = cost * 1000
+    blitLogger.info(
+      "Display rate \(self.pacedFPS) -> \(rate) Hz, frames cost \(costMS, format: .fixed(precision: 2)) ms")
+    pacedFPS = rate
+    link.preferredFrameRateRange = makeFrameRateRange()
+    pacer.reset()
+  }
 }
 
 extension AudioCAMetalLayerView.Coordinator {
-  private static func makeBlitResources(device: MTLDevice, pixelFormat: MTLPixelFormat)
-  -> (pipeline: (any MTLRenderPipelineState)?, tables: [any MTL4ArgumentTable]) {
-    guard let library = device.makeDefaultLibrary() else {
-      blitLogger.error("Failed to create default Metal library for blit pipeline")
-      return (nil, [])
-    }
-    do {
-      let compiler = try device.makeCompiler(descriptor: MTL4CompilerDescriptor())
-
-      let vertexDesc = MTL4LibraryFunctionDescriptor()
-      vertexDesc.name = "blitVertex"
-      vertexDesc.library = library
-
-      let fragmentDesc = MTL4LibraryFunctionDescriptor()
-      fragmentDesc.name = "blitFragment"
-      fragmentDesc.library = library
-
-      let pipelineDesc = MTL4RenderPipelineDescriptor()
-      pipelineDesc.vertexFunctionDescriptor = vertexDesc
-      pipelineDesc.fragmentFunctionDescriptor = fragmentDesc
-      pipelineDesc.colorAttachments[0].pixelFormat = pixelFormat
-      let pipeline = try compiler.makeRenderPipelineState(descriptor: pipelineDesc)
-
-      let tableDesc = MTL4ArgumentTableDescriptor()
-      tableDesc.maxTextureBindCount = 1
-      var tables = [any MTL4ArgumentTable]()
-      for _ in 0..<R.maxFramesInFlight {
-        tables.append(try device.makeArgumentTable(descriptor: tableDesc))
-      }
-      return (pipeline, tables)
-    } catch {
-      blitLogger.error("Failed to create blit pipeline: \(error.localizedDescription)")
-      return (nil, [])
-    }
-  }
-
-  private static func makePresentAllocators(device: MTLDevice) -> [any MTL4CommandAllocator] {
-    var allocators = [any MTL4CommandAllocator]()
-    for _ in 0..<R.maxFramesInFlight {
-      guard let allocator = device.makeCommandAllocator() else {
-        blitLogger.error("Failed to create present command allocators")
-        return []
-      }
-      allocators.append(allocator)
-    }
-    return allocators
-  }
-
   private func recoverFromStalledPresents() {
     guard let presentEvent, presentEvent.signaledValue < presentCount else { return }
     presentEvent.wait(untilSignaledValue: presentCount, timeoutMS: 250)
@@ -345,7 +317,8 @@ extension AudioCAMetalLayerView.Coordinator {
 
   private func presentFrame(pipeline: any MTLRenderPipelineState,
                             intermediateTex: MTLTexture?,
-                            drawable: CAMetalDrawable) {
+                            drawable: CAMetalDrawable,
+                            submitted: CFTimeInterval) {
     guard let presentCommandBuffer, let presentEvent else { return }
     let queue = renderer.commandQueue
     let inFlight = R.maxFramesInFlight
@@ -384,10 +357,12 @@ extension AudioCAMetalLayerView.Coordinator {
     presentCommandBuffer.endCommandBuffer()
 
     nonisolated(unsafe) let drawable = drawable
+    let pacer = config.pacesFrameRate ? pacer : nil
     let commitOptions = MTL4CommitOptions()
     commitOptions.addFeedbackHandler { @Sendable feedback in
       guard feedback.error == nil else { return }
       drawable.present()
+      pacer?.frameCompleted(submitted: submitted)
     }
 
     queue.waitForDrawable(drawable)

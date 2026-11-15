@@ -11,12 +11,15 @@ import CoreGraphics
 import os
 
 extension NavierStokesRenderer {
+  struct MissingResource: Error { let name: String }
+
   struct Pipelines {
     let splatBatch: MTLComputePipelineState
-    let advect: MTLComputePipelineState
+    let tentFilter: MTLComputePipelineState
+    let cloudDensity: MTLComputePipelineState
+    let cloudLight: MTLComputePipelineState
     let psiInit: MTLComputePipelineState
     let psiAdvect: MTLComputePipelineState
-    let psiMacCormackCorrect: MTLComputePipelineState
     let covectorPullback: MTLComputePipelineState
     let copyRG: MTLComputePipelineState
     let divergence: MTLComputePipelineState
@@ -28,17 +31,67 @@ extension NavierStokesRenderer {
     let bloomDownsample: MTLComputePipelineState
     let render: MTLComputePipelineState
     let clearRGBA: MTLComputePipelineState
-    let vorticityConfinementMerged: MTLComputePipelineState
-    let macCormackCorrect: MTLComputePipelineState
+    let buoyancy: MTLComputePipelineState
+    let vortexField: MTLComputePipelineState
+    let dyeMapReset: MTLComputePipelineState
+    let dyeMapAccumulate: MTLComputePipelineState
+    let dyeMapAdvance: MTLComputePipelineState
+    let dyeMapLookup: MTLComputePipelineState
+    let dyeMapError: MTLComputePipelineState
+    let dyeMapCorrect: MTLComputePipelineState
     let dyeDiffuse: MTLComputePipelineState
     let divergenceRHS: MTLComputePipelineState
-    let mgSmooth: MTLComputePipelineState
-    let mgRestrict: MTLComputePipelineState
-    let mgProlong: MTLComputePipelineState
+    let mgDescendDivergence: MTLComputePipelineState
+    let mgDescendZero: MTLComputePipelineState
+    let mgDescend: MTLComputePipelineState
+    let mgAscend: MTLComputePipelineState
+    let mgAscendProject: MTLComputePipelineState
     let mgCoarseSolve: MTLComputePipelineState
-    let viscosity: MTLComputePipelineState
     let resample: MTLComputePipelineState
     let technicolorBakeLUT: MTLComputePipelineState
+
+    nonisolated init(make: (String) -> MTLComputePipelineState?) throws(MissingResource) {
+      func load(_ name: String) throws(MissingResource) -> MTLComputePipelineState {
+        guard let pipeline = make(name) else { throw MissingResource(name: name) }
+        return pipeline
+      }
+
+      splatBatch = try load("fluidSplatBatch")
+      tentFilter = try load("fluidTentFilter")
+      cloudDensity = try load("fluidCloudDensity")
+      cloudLight = try load("fluidCloudLight")
+      psiInit = try load("fluidPsiInit")
+      psiAdvect = try load("fluidPsiAdvect")
+      covectorPullback = try load("fluidCovectorPullback")
+      copyRG = try load("fluidCopyRG")
+      divergence = try load("fluidDivergence")
+      jacobiMerged = try load("fluidJacobiMerged")
+      gradientSubtract = try load("fluidGradientSubtract")
+      blurH = try load("fluidBlurH")
+      blurV = try load("fluidBlurV")
+      bloomThresholdBlurH = try load("fluidBloomThresholdBlurH")
+      bloomDownsample = try load("fluidBloomDownsample")
+      render = try load("fluidRender")
+      clearRGBA = try load("fluidClearRGBA")
+      buoyancy = try load("fluidBuoyancy")
+      vortexField = try load("fluidVortexField")
+      dyeMapReset = try load("fluidDyeMapReset")
+      dyeMapAccumulate = try load("fluidDyeMapAccumulate")
+      dyeMapAdvance = try load("fluidDyeMapAdvance")
+      dyeMapLookup = try load("fluidDyeMapLookup")
+      dyeMapError = try load("fluidDyeMapError")
+      dyeMapCorrect = try load("fluidDyeMapCorrect")
+      dyeDiffuse = try load("fluidDyeDiffuse")
+      divergenceRHS = try load("fluidDivergenceRHS")
+      mgDescendDivergence = try load("fluidMGDescendDivergence")
+      mgDescendZero = try load("fluidMGDescendZero")
+      mgDescend = try load("fluidMGDescend")
+      mgAscend = try load("fluidMGAscend")
+      mgAscendProject = try load("fluidMGAscendProject")
+      mgCoarseSolve = try load("fluidMGCoarseSolve")
+      resample = try load("fluidResample")
+      technicolorBakeLUT = try load("technicolorBakeLUT")
+    }
   }
 
   struct Textures {
@@ -49,16 +102,80 @@ extension NavierStokesRenderer {
     let dyeA: MTLTexture
     let dyeB: MTLTexture
     let dyeC: MTLTexture
+    let dye0: MTLTexture
+    let dyePsiA: MTLTexture
+    let dyePsiB: MTLTexture
+    let dyePhiA: MTLTexture
+    let dyePhiB: MTLTexture
     let bloomA: MTLTexture
     let bloomB: MTLTexture
     let bloomMidA: MTLTexture
     let bloomLoA: MTLTexture
     let psiA: MTLTexture
     let psiB: MTLTexture
-    let psiC: MTLTexture
     let u0: MTLTexture
+    let dyeVelocityA: MTLTexture
+    let dyeVelocityB: MTLTexture
+    let vortexFlowA: MTLTexture
+    let vortexFlowB: MTLTexture
+    let vortexField: MTLTexture
+    let cloudBillowA: MTLTexture
+    let cloudBillowB: MTLTexture
+    let cloudDensity: [MTLTexture]
+    let cloudLight: MTLTexture
     let mgPressure: [MTLTexture]
+    let mgCorrected: [MTLTexture]
     let mgRHS: [MTLTexture]
+
+    init(width: Int, height: Int, levels: MultigridLevels,
+         make: (MTLPixelFormat, String, Int, Int) -> MTLTexture?) throws(MissingResource) {
+      func load(_ format: MTLPixelFormat, _ label: String,
+                _ w: Int = width, _ h: Int = height) throws(MissingResource) -> MTLTexture {
+        guard let texture = make(format, label, w, h) else { throw MissingResource(name: label) }
+        return texture
+      }
+
+      let dyeMapWidth = max(width / dyeMapDivisor, 1), dyeMapHeight = max(height / dyeMapDivisor, 1)
+
+      velocityA = try load(.rg16Float, "velocityA")
+      velocityB = try load(.rg16Float, "velocityB")
+      pressure = try load(.r16Float, "pressure")
+      divergence = try load(.r16Float, "divergence")
+      dyeA = try load(.rgba16Float, "dyeA")
+      dyeB = try load(.rgba16Float, "dyeB")
+      dyeC = try load(.rgba16Float, "dyeC")
+      dye0 = try load(.rgba16Float, "dye0")
+      dyePsiA = try load(.rg32Float, "dyePsiA", dyeMapWidth, dyeMapHeight)
+      dyePsiB = try load(.rg32Float, "dyePsiB", dyeMapWidth, dyeMapHeight)
+      dyePhiA = try load(.rg32Float, "dyePhiA", dyeMapWidth, dyeMapHeight)
+      dyePhiB = try load(.rg32Float, "dyePhiB", dyeMapWidth, dyeMapHeight)
+      bloomA = try load(.rgba16Float, "bloomA", bloomSize, bloomSize)
+      bloomB = try load(.rgba16Float, "bloomB", bloomSize, bloomSize)
+      bloomMidA = try load(.rgba16Float, "bloomMidA", bloomSizeMid, bloomSizeMid)
+      bloomLoA = try load(.rgba16Float, "bloomLoA", bloomSizeLo, bloomSizeLo)
+      psiA = try load(.rg32Float, "psiA")
+      psiB = try load(.rg32Float, "psiB")
+      u0 = try load(.rg16Float, "u0")
+      dyeVelocityA = try load(.rg16Float, "dyeVelocityA", width / 4, height / 4)
+      dyeVelocityB = try load(.rg16Float, "dyeVelocityB", width / 4, height / 4)
+      vortexFlowA = try load(.rg16Float, "vortexFlowA", max(width / 8, 1), max(height / 8, 1))
+      vortexFlowB = try load(.rg16Float, "vortexFlowB", max(width / 16, 1), max(height / 16, 1))
+      vortexField = try load(.rgba16Float, "vortexField", max(width / 16, 1), max(height / 16, 1))
+      cloudBillowA = try load(.r16Float, "cloudBillowA", width / 4, height / 4)
+      cloudBillowB = try load(.r16Float, "cloudBillowB", width / 4, height / 4)
+      cloudLight = try load(.r16Float, "cloudLight", width / 4, height / 4)
+
+      var cloudDensity = [MTLTexture]()
+      for level in 0..<cloudLevels {
+        let w = max(width / (4 << level), 1), h = max(height / (4 << level), 1)
+        cloudDensity.append(try load(.r16Float, "cloudDensity\(level)", w, h))
+      }
+      self.cloudDensity = cloudDensity
+
+      mgPressure = levels.pressure
+      mgCorrected = levels.corrected
+      mgRHS = levels.rhs
+    }
   }
 
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
@@ -66,53 +183,7 @@ extension NavierStokesRenderer {
       logger.error("Failed to create default Metal library")
       return nil
     }
-
-    let make = { (name: String) in Self.makePipeline(name, library: library, compiler: compiler) }
-
-    guard let splatBatch = make("fluidSplatBatch"), let advect = make("fluidAdvect"),
-          let psiInit = make("fluidPsiInit"), let psiAdvect = make("fluidPsiAdvect"),
-          let psiMacCormackCorrect = make("fluidPsiMacCormackCorrect"),
-          let covectorPullback = make("fluidCovectorPullback"),
-          let copyRG = make("fluidCopyRG"), let divergence = make("fluidDivergence"),
-          let jacobiMerged = make("fluidJacobiMerged"),
-          let gradientSubtract = make("fluidGradientSubtract"),
-          let blurH = make("fluidBlurH"), let blurV = make("fluidBlurV"),
-          let bloomThresholdBlurH = make("fluidBloomThresholdBlurH"),
-          let bloomDownsample = make("fluidBloomDownsample"),
-          let render = make("fluidRender"),
-          let clearRGBA = make("fluidClearRGBA"),
-          let vorticityConfinementMerged = make("fluidVorticityConfinementMerged"),
-          let macCormackCorrect = make("fluidMacCormackCorrect"),
-          let dyeDiffuse = make("fluidDyeDiffuse"),
-          let divergenceRHS = make("fluidDivergenceRHS"),
-          let mgSmooth = make("fluidMGSmooth"),
-          let mgRestrict = make("fluidMGRestrict"),
-          let mgProlong = make("fluidMGProlong"),
-          let mgCoarseSolve = make("fluidMGCoarseSolve"),
-          let viscosity = make("fluidViscosity"),
-          let resample = make("fluidResample"),
-          let technicolorBakeLUT = make("technicolorBakeLUT") else {
-      return nil
-    }
-
-    return Pipelines(splatBatch: splatBatch, advect: advect,
-                     psiInit: psiInit, psiAdvect: psiAdvect,
-                     psiMacCormackCorrect: psiMacCormackCorrect,
-                     covectorPullback: covectorPullback, copyRG: copyRG,
-                     divergence: divergence, jacobiMerged: jacobiMerged,
-                     gradientSubtract: gradientSubtract, blurH: blurH,
-                     blurV: blurV, bloomThresholdBlurH: bloomThresholdBlurH,
-                     bloomDownsample: bloomDownsample,
-                     render: render, clearRGBA: clearRGBA,
-                     vorticityConfinementMerged: vorticityConfinementMerged,
-                     macCormackCorrect: macCormackCorrect,
-                     dyeDiffuse: dyeDiffuse,
-                     divergenceRHS: divergenceRHS,
-                     mgSmooth: mgSmooth,
-                     mgRestrict: mgRestrict, mgProlong: mgProlong,
-                     mgCoarseSolve: mgCoarseSolve,
-                     viscosity: viscosity, resample: resample,
-                     technicolorBakeLUT: technicolorBakeLUT)
+    return try? Pipelines { name in Self.makePipeline(name, library: library, compiler: compiler) }
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
@@ -167,16 +238,18 @@ extension NavierStokesRenderer {
   static let bloomSize: Int = 256
   static let bloomSizeMid: Int = 128
   static let bloomSizeLo: Int = 64
+  static let cloudLevels: Int = 6
 
   static func createTextures(device: MTLDevice, width: Int, height: Int) -> Textures? {
-    func makeTexture(format: MTLPixelFormat, label: String,
-                     width: Int = width,
-                     height: Int = height,
-                     usage: MTLTextureUsage = [.shaderRead, .shaderWrite]) -> MTLTexture? {
+    guard let levels = createMultigridLevels(device: device, width: width, height: height) else {
+      return nil
+    }
+
+    return try? Textures(width: width, height: height, levels: levels) { format, label, w, h in
       let desc = MTLTextureDescriptor.texture2DDescriptor(
-        pixelFormat: format, width: width, height: height, mipmapped: false
+        pixelFormat: format, width: w, height: h, mipmapped: false
       )
-      desc.usage = usage
+      desc.usage = [.shaderRead, .shaderWrite]
       desc.storageMode = .private
       guard let texture = device.makeTexture(descriptor: desc) else {
         logger.error("Failed to create texture '\(label)'")
@@ -185,47 +258,18 @@ extension NavierStokesRenderer {
       texture.label = label
       return texture
     }
+  }
 
-    guard let velocityA = makeTexture(format: .rg16Float, label: "velocityA"),
-          let velocityB = makeTexture(format: .rg16Float, label: "velocityB"),
-          let pressure = makeTexture(format: .r16Float, label: "pressure"),
-          let divergence = makeTexture(format: .r16Float, label: "divergence"),
-          let dyeA = makeTexture(format: .rgba16Float, label: "dyeA"),
-          let dyeB = makeTexture(format: .rgba16Float, label: "dyeB"),
-          let dyeC = makeTexture(format: .rgba16Float, label: "dyeC"),
-          let bloomA = makeTexture(format: .rgba16Float, label: "bloomA",
-                                   width: bloomSize, height: bloomSize),
-          let bloomB = makeTexture(format: .rgba16Float, label: "bloomB",
-                                   width: bloomSize, height: bloomSize),
-          let bloomMidA = makeTexture(format: .rgba16Float, label: "bloomMidA",
-                                      width: bloomSizeMid, height: bloomSizeMid),
-          let bloomLoA = makeTexture(format: .rgba16Float, label: "bloomLoA",
-                                     width: bloomSizeLo, height: bloomSizeLo),
-          let psiA = makeTexture(format: .rg32Float, label: "psiA"),
-          let psiB = makeTexture(format: .rg32Float, label: "psiB"),
-          let psiC = makeTexture(format: .rg32Float, label: "psiC"),
-          let u0 = makeTexture(format: .rg16Float, label: "u0") else {
-      return nil
-    }
-
-    guard let (mgPressure, mgRHS) = createMultigridLevels(device: device, width: width, height: height) else {
-      return nil
-    }
-
-    return Textures(velocityA: velocityA, velocityB: velocityB,
-                    pressure: pressure,
-                    divergence: divergence, dyeA: dyeA, dyeB: dyeB, dyeC: dyeC,
-                    bloomA: bloomA, bloomB: bloomB,
-                    bloomMidA: bloomMidA, bloomLoA: bloomLoA,
-                    psiA: psiA, psiB: psiB, psiC: psiC, u0: u0,
-                    mgPressure: mgPressure, mgRHS: mgRHS)
+  struct MultigridLevels {
+    var pressure = [MTLTexture]()
+    var corrected = [MTLTexture]()
+    var rhs = [MTLTexture]()
   }
 
   static func createMultigridLevels(device: MTLDevice,
                                     width: Int,
-                                    height: Int) -> (pressure: [MTLTexture], rhs: [MTLTexture])? {
-    var mgPressure = [MTLTexture]()
-    var mgRHS = [MTLTexture]()
+                                    height: Int) -> MultigridLevels? {
+    var levels = MultigridLevels()
     var w = width
     var h = height
     while true {
@@ -235,19 +279,22 @@ extension NavierStokesRenderer {
       desc.usage = [.shaderRead, .shaderWrite]
       desc.storageMode = .private
       guard let pressure = device.makeTexture(descriptor: desc),
+            let corrected = device.makeTexture(descriptor: desc),
             let rhs = device.makeTexture(descriptor: desc) else {
         logger.error("Failed to create multigrid level \(w)x\(h)")
         return nil
       }
       pressure.label = "mgPressure\(w)x\(h)"
+      corrected.label = "mgCorrected\(w)x\(h)"
       rhs.label = "mgRHS\(w)x\(h)"
-      mgPressure.append(pressure)
-      mgRHS.append(rhs)
+      levels.pressure.append(pressure)
+      levels.corrected.append(corrected)
+      levels.rhs.append(rhs)
       if w * h <= multigridCoarseCells || (w <= 2 && h <= 2) { break }
       w = (w + 1) / 2
       h = (h + 1) / 2
     }
-    return (mgPressure, mgRHS)
+    return levels
   }
 
   func warmUpGPU() {

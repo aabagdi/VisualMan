@@ -81,6 +81,8 @@ private let highNozzles: [Nozzle] = [
 ]
 
 extension NavierStokesRenderer {
+  static var jetCount: Int { bassNozzles.count + midNozzles.count + highNozzles.count }
+
   var technicolorThemeDye: SIMD3<Float> {
     bassPalette.dye(fmod(time * 0.05, 1.0))
   }
@@ -166,7 +168,11 @@ extension NavierStokesRenderer {
     argumentTable.setAddress(writeUniform(count), index: 1)
     let origin = SIMD2<UInt32>(UInt32(ox), UInt32(oy))
     argumentTable.setAddress(writeUniform(origin), index: 2)
-    argumentTable.setAddress(writeUniform(UInt32(isVelocity ? 1 : 0)), index: 3)
+    let batch = SplatBatchParams(velocityMode: isVelocity ? 1 : 0,
+                                 clumping: Self.emitterClumping,
+                                 clumpScale: 1 / (gridScale * Self.emitterClumpSize),
+                                 clumpHue: Self.emitterClumpHue)
+    argumentTable.setAddress(writeUniform(batch), index: 3)
     dispatchGrid(encoder: encoder, width: regionW, height: regionH)
   }
 
@@ -215,12 +221,14 @@ extension NavierStokesRenderer {
   }
 
   private func emitJet(_ nozzle: Nozzle,
+                       slot: Int,
                        speed: Float,
                        radius: Float,
                        strength: Float,
                        wobble: Float,
                        slideAmount: Float,
                        color: SIMD3<Float>,
+                       clumpColor: SIMD3<Float>,
                        density: Float) {
     let flap = 1.0 + Self.excitementWobbleGain * lastExcitement
     let angle = (sin(wobblePhase * 0.9 + nozzle.phase)
@@ -229,13 +237,19 @@ extension NavierStokesRenderer {
     let slide = nozzle.slide * sin(time * 0.37 + nozzle.phase * 1.7) * slideAmount
     let pos = (nozzle.anchor + slide) * SIMD2<Float>(Float(gridWidth), Float(gridHeight))
 
+    var travel = jetTravel[slot] + dir * speed * dt * Self.advectionTimeScale
+    travel -= 4096 * (travel / 4096).rounded(.towardZero)
+    jetTravel[slot] = travel
+
     forceSplats.append(SplatParams(position: pos,
                                    value: SIMD3<Float>(dir.x * speed, dir.y * speed, strength),
                                    radius: radius))
     dyeSplats.append(SplatParams(position: pos + dir * radius * 0.8,
                                  value: color * Self.dyeInjectionScale,
                                  radius: radius * 1.4,
-                                 weight: density * Self.dyeInjectionScale))
+                                 weight: density * Self.dyeInjectionScale,
+                                 clumpOffset: travel,
+                                 clumpValue: clumpColor * Self.dyeInjectionScale))
   }
 
   private func collectBassJets(bass: Float) {
@@ -251,9 +265,12 @@ extension NavierStokesRenderer {
     let density = Self.bassGasWeight * brightness
 
     for (i, nozzle) in bassNozzles.enumerated() {
-      let nozzleColor = bassPalette.color(h: hue + Float(i) * 0.08, amount: brightness)
-      emitJet(nozzle, speed: speed, radius: radius, strength: strength,
-              wobble: 0.30, slideAmount: 0.05, color: nozzleColor, density: density)
+      let nozzleHue = hue + Float(i) * 0.08
+      let nozzleColor = bassPalette.color(h: nozzleHue, amount: brightness)
+      let clumpColor = bassPalette.color(h: nozzleHue + Self.emitterClumpHueShift, amount: brightness)
+      emitJet(nozzle, slot: i, speed: speed, radius: radius, strength: strength,
+              wobble: 0.30, slideAmount: 0.05, color: nozzleColor, clumpColor: clumpColor,
+              density: density)
     }
   }
 
@@ -270,8 +287,9 @@ extension NavierStokesRenderer {
       let hue = fmod(time * 0.07 + Float(i) * 0.45, 1.0)
       let brightness = (0.3 + mid * 0.9) * dyn.dye * (1.0 + hit * 0.5)
       let color = midPalette.color(h: hue, amount: brightness)
-      emitJet(nozzle, speed: speed, radius: radius, strength: strength,
-              wobble: 0.45, slideAmount: 0.08, color: color,
+      let clumpColor = midPalette.color(h: hue + Self.emitterClumpHueShift, amount: brightness)
+      emitJet(nozzle, slot: bassNozzles.count + i, speed: speed, radius: radius, strength: strength,
+              wobble: 0.45, slideAmount: 0.08, color: color, clumpColor: clumpColor,
               density: Self.midGasWeight * brightness)
     }
   }
@@ -289,8 +307,10 @@ extension NavierStokesRenderer {
       let hue = fmod(time * 0.09 + Float(i) * 0.3, 1.0)
       let brightness = (0.35 + high * 1.0) * dyn.dye * (1.0 + hit * 0.6)
       let color = highPalette.color(h: hue, amount: brightness)
-      emitJet(nozzle, speed: speed, radius: radius, strength: strength,
-              wobble: 0.6, slideAmount: 0.04, color: color,
+      let clumpColor = highPalette.color(h: hue + Self.emitterClumpHueShift, amount: brightness)
+      emitJet(nozzle, slot: bassNozzles.count + midNozzles.count + i,
+              speed: speed, radius: radius, strength: strength,
+              wobble: 0.6, slideAmount: 0.04, color: color, clumpColor: clumpColor,
               density: Self.highGasWeight * brightness)
     }
   }

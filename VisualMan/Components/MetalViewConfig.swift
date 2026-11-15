@@ -1,5 +1,5 @@
 //
-//  AudioMetalView.swift
+//  MetalViewConfig.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 4/9/26.
@@ -15,6 +15,7 @@ struct MetalViewConfig {
   var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
   var backgroundColor: UIColor?
   var maxFramesPerSecond: Int = 120
+  var pacesFrameRate: Bool = false
   var colorSpace: CGColorSpace?
   var pixelFormat: MTLPixelFormat = .bgra8Unorm
   var wantsExtendedDynamicRange: Bool = false

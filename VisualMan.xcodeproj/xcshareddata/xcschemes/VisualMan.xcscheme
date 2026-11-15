@@ -67,7 +67,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-AbExPaintTest colors"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-AbExPaintTestDebug black"
@@ -79,6 +79,10 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-AbExGPUTiming YES"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-NavierStokesGPUTiming YES"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

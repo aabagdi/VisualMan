@@ -29,6 +29,8 @@ extension NavierStokesRenderer {
       encodeClear(encoder: encoder)
     }
     framesSinceReinit = Self.reinitMaxInterval
+    stepSinceReinit = 0
+    framesSinceDyeReinit = Self.dyeMapMaxInterval
     resetFlowStats()
   }
 
@@ -57,6 +59,8 @@ extension NavierStokesRenderer {
       dispatchGrid(encoder: encoder)
     }
     framesSinceReinit = 0
+    stepSinceReinit = 0
+    framesSinceDyeReinit = Self.dyeMapMaxInterval
     resetFlowStats()
   }
 
@@ -72,6 +76,7 @@ extension NavierStokesRenderer {
     memset(stretchStatsBuffer.contents(), 0, stretchStatsBuffer.length)
     lastStretchedFraction = 0
     lastFastFraction = 0
+    lastDyeStrayFraction = 0
   }
 
   private func runMaintenancePass(wait: Bool, _ body: (any MTL4ComputeCommandEncoder) -> Void) {

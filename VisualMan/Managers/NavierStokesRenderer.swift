@@ -21,13 +21,25 @@ struct SplatParams {
   var padding: Float = 0
   var value: SIMD3<Float>
   var weight: Float = 0
+  var clumpOffset: SIMD2<Float> = .zero
+  var clumpValue: SIMD3<Float> = .zero
 
-  init(position: SIMD2<Float>, value: SIMD3<Float>, radius: Float, weight: Float = 0) {
+  init(position: SIMD2<Float>, value: SIMD3<Float>, radius: Float, weight: Float = 0,
+       clumpOffset: SIMD2<Float> = .zero, clumpValue: SIMD3<Float> = .zero) {
     self.position = position
     self.value = value
     self.radius = radius
     self.weight = weight
+    self.clumpOffset = clumpOffset
+    self.clumpValue = clumpValue
   }
+}
+
+struct SplatBatchParams {
+  var velocityMode: UInt32
+  var clumping: Float
+  var clumpScale: Float
+  var clumpHue: Float
 }
 
 struct FrameUniforms {
@@ -50,6 +62,36 @@ struct FrameUniforms {
   var technicolorTheme: SIMD4<Float>
   var technicolorMisregistration: SIMD4<Float>
   var technicolorDepth: SIMD4<Float>
+}
+
+struct CloudUniforms {
+  var advectStep: Float
+  var regrow: Float
+  var time: Float
+  var billow: Float
+  var billowScale: Float
+  var shadow: Float
+  var relief: Float
+  var cavity: Float
+  var ambient: Float
+  var sun: Float
+  var thickness: Float
+  var vortexLift: Float
+  var vortexPresence: Float
+}
+
+struct DyeMapUniforms {
+  var gridSize: SIMD2<Float>
+  var traceLimits: SIMD2<Float>
+  var dt: Float
+  var strayCells: Float
+}
+
+struct VortexUniforms {
+  var cells: Float
+  var floor: Float
+  var cap: Float
+  var swirlScale: Float
 }
 
 @MainActor
@@ -79,24 +121,39 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var dyeA: MTLTexture
   var dyeB: MTLTexture
   var dyeC: MTLTexture
+  var dye0: MTLTexture
+  var dyePsiA: MTLTexture
+  var dyePsiB: MTLTexture
+  var dyePhiA: MTLTexture
+  var dyePhiB: MTLTexture
   var bloomA: MTLTexture
   var bloomB: MTLTexture
   var bloomMidA: MTLTexture
   var bloomLoA: MTLTexture
   var psiA: MTLTexture
   var psiB: MTLTexture
-  var psiC: MTLTexture
   var u0: MTLTexture
+  var dyeVelocityA: MTLTexture
+  var dyeVelocityB: MTLTexture
+  var vortexFlowA: MTLTexture
+  var vortexFlowB: MTLTexture
+  var vortexField: MTLTexture
+  var cloudBillowA: MTLTexture
+  var cloudBillowB: MTLTexture
+  var cloudDensity: [MTLTexture]
+  var cloudLight: MTLTexture
 
   var mgPressure: [MTLTexture]
+  var mgCorrected: [MTLTexture]
   var mgRHS: [MTLTexture]
 
   let technicolorLUT: MTLTexture
 
   let stretchStatsBuffer: MTLBuffer
-  static let stretchStatsStride: Int = 16
+  static let stretchStatsStride: Int = 32
   var lastStretchedFraction: Float = 0
   var lastFastFraction: Float = 0
+  var lastDyeStrayFraction: Float = 0
   var statsLogCountdown: Int = 0
 
   static let renderScale: Float = 0.75
@@ -118,6 +175,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var dynamicsWarm: Bool = false
   var lastExcitement: Float = 0
   var wobblePhase: Float = 0
+  var jetTravel = [SIMD2<Float>](repeating: .zero, count: NavierStokesRenderer.jetCount)
 
   var resumeSuppressionRemaining: Float = 0
   let jacobiIterations: Int = 16
@@ -146,6 +204,10 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
   var frameUniformsAddress: MTLGPUAddress = 0
   var framesSinceReinit: Int = NavierStokesRenderer.reinitMaxInterval
+  var stepSinceReinit: Float = 0
+  var framesSinceDyeReinit: Int = NavierStokesRenderer.dyeMapMaxInterval
+
+  var gpuTiming: GPUTiming?
 
   var forceSplats = [SplatParams]()
   var dyeSplats = [SplatParams]()
@@ -153,8 +215,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var currentUniformBuffer: MTLBuffer
   
   static func create(device: MTLDevice) async -> NavierStokesRenderer? {
-    guard let pipelines = await compilePipelines(device: device) else { return nil }
-    guard let renderer = NavierStokesRenderer(device: device, pipelines: pipelines) else { return nil }
+    guard let pipelines = await compilePipelines(device: device),
+          let resources = makeResources(device: device) else { return nil }
+    let renderer = NavierStokesRenderer(device: device, pipelines: pipelines, resources: resources)
     renderer.warmUpGPU()
     return renderer
   }
@@ -167,38 +230,19 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     return createPipelines(device: device, compiler: compiler)
   }
 
-  private init?(device: MTLDevice, pipelines: Pipelines) {
-    guard let commandQueue = device.makeMTL4CommandQueue(),
-          let commandBuffer = device.makeCommandBuffer(),
-          let sharedEvent = device.makeSharedEvent() else {
-      return nil
-    }
-    sharedEvent.signaledValue = 0
-
-    guard let allocatorsAndBuffers = Self.createAllocatorsAndBuffers(device: device),
-          let firstUniformBuffer = allocatorsAndBuffers.buffers.first else { return nil }
-
-    guard let argumentTables = Self.createArgumentTables(device: device) else { return nil }
-    let initialGrid = 1024
-    guard let textures = Self.createTextures(device: device, width: initialGrid, height: initialGrid),
-          let residencySet = Self.createResidencySet(device: device),
-          let technicolorLUT = Self.createTechnicolorLUT(device: device) else { return nil }
-    guard let stretchStatsBuffer = device.makeBuffer(
-      length: Self.stretchStatsStride * Int(Self.maxFramesInFlight),
-      options: .storageModeShared) else { return nil }
-    memset(stretchStatsBuffer.contents(), 0, stretchStatsBuffer.length)
-
+  private init(device: MTLDevice, pipelines: Pipelines, resources: Resources) {
+    let textures = resources.textures
     self.device = device
-    self.commandQueue = commandQueue
-    self.commandBuffer = commandBuffer
-    self.sharedEvent = sharedEvent
-    self.commandAllocators = allocatorsAndBuffers.allocators
-    self.uniformBuffers = allocatorsAndBuffers.buffers
-    self.currentUniformBuffer = firstUniformBuffer
-    self.argumentTables = argumentTables
+    self.commandQueue = resources.commandQueue
+    self.commandBuffer = resources.commandBuffer
+    self.sharedEvent = resources.sharedEvent
+    self.commandAllocators = resources.allocators
+    self.uniformBuffers = resources.uniformBuffers
+    self.currentUniformBuffer = resources.firstUniformBuffer
+    self.argumentTables = resources.argumentTables
     self.pipelines = pipelines
-    self.gridWidth = initialGrid
-    self.gridHeight = initialGrid
+    self.gridWidth = resources.gridSize
+    self.gridHeight = resources.gridSize
     self.velocityA = textures.velocityA
     self.velocityB = textures.velocityB
     self.pressure = textures.pressure
@@ -206,19 +250,34 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.dyeA = textures.dyeA
     self.dyeB = textures.dyeB
     self.dyeC = textures.dyeC
+    self.dye0 = textures.dye0
+    self.dyePsiA = textures.dyePsiA
+    self.dyePsiB = textures.dyePsiB
+    self.dyePhiA = textures.dyePhiA
+    self.dyePhiB = textures.dyePhiB
     self.bloomA = textures.bloomA
     self.bloomB = textures.bloomB
     self.bloomMidA = textures.bloomMidA
     self.bloomLoA = textures.bloomLoA
     self.psiA = textures.psiA
     self.psiB = textures.psiB
-    self.psiC = textures.psiC
     self.u0 = textures.u0
+    self.dyeVelocityA = textures.dyeVelocityA
+    self.dyeVelocityB = textures.dyeVelocityB
+    self.vortexFlowA = textures.vortexFlowA
+    self.vortexFlowB = textures.vortexFlowB
+    self.vortexField = textures.vortexField
+    self.cloudBillowA = textures.cloudBillowA
+    self.cloudBillowB = textures.cloudBillowB
+    self.cloudDensity = textures.cloudDensity
+    self.cloudLight = textures.cloudLight
     self.mgPressure = textures.mgPressure
+    self.mgCorrected = textures.mgCorrected
     self.mgRHS = textures.mgRHS
-    self.technicolorLUT = technicolorLUT
-    self.stretchStatsBuffer = stretchStatsBuffer
-    self.residencySet = residencySet
+    self.technicolorLUT = resources.technicolorLUT
+    self.stretchStatsBuffer = resources.stretchStatsBuffer
+    self.residencySet = resources.residencySet
+    self.gpuTiming = GPUTiming.makeIfRequested(device: device)
 
     configureResidencySet()
   }

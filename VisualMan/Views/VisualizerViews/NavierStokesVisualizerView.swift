@@ -20,6 +20,7 @@ struct NavierStokesVisualizerView: View {
       audioLevels: audioLevels,
       config: MetalViewConfig(
         clearColor: MTLClearColor(red: 0, green: 0, blue: 0.0015, alpha: 1),
+        pacesFrameRate: true,
         colorSpace: NavierStokesRenderer.outputColorSpace,
         pixelFormat: NavierStokesRenderer.outputPixelFormat,
         wantsExtendedDynamicRange: NavierStokesRenderer.outputExtendedRange,

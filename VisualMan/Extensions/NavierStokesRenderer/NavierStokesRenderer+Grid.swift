@@ -65,23 +65,40 @@ extension NavierStokesRenderer {
     dyeA = t.dyeA
     dyeB = t.dyeB
     dyeC = t.dyeC
+    dye0 = t.dye0
+    dyePsiA = t.dyePsiA
+    dyePsiB = t.dyePsiB
+    dyePhiA = t.dyePhiA
+    dyePhiB = t.dyePhiB
     bloomA = t.bloomA
     bloomB = t.bloomB
     bloomMidA = t.bloomMidA
     bloomLoA = t.bloomLoA
     psiA = t.psiA
     psiB = t.psiB
-    psiC = t.psiC
     u0 = t.u0
+    dyeVelocityA = t.dyeVelocityA
+    dyeVelocityB = t.dyeVelocityB
+    vortexFlowA = t.vortexFlowA
+    vortexFlowB = t.vortexFlowB
+    vortexField = t.vortexField
+    cloudBillowA = t.cloudBillowA
+    cloudBillowB = t.cloudBillowB
+    cloudDensity = t.cloudDensity
+    cloudLight = t.cloudLight
     mgPressure = t.mgPressure
+    mgCorrected = t.mgCorrected
     mgRHS = t.mgRHS
   }
 
   var allSimulationTextures: [MTLTexture] {
     [velocityA, velocityB, pressure, divergenceTexture,
-     dyeA, dyeB, dyeC,
+     dyeA, dyeB, dyeC, dye0, dyePsiA, dyePsiB, dyePhiA, dyePhiB,
      bloomA, bloomB, bloomMidA, bloomLoA,
-     psiA, psiB, psiC, u0] + mgPressure + mgRHS
+     psiA, psiB, u0,
+     dyeVelocityA, dyeVelocityB, vortexFlowA, vortexFlowB, vortexField,
+     cloudBillowA, cloudBillowB, cloudLight]
+    + cloudDensity + mgPressure + mgCorrected + mgRHS
   }
 }
 
