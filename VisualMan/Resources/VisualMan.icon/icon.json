@@ -43,7 +43,14 @@
       "layers" : [
         {
           "image-name" : "VisualMan.png",
-          "name" : "VisualMan"
+          "name" : "VisualMan",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0.5,
+              4
+            ]
+          }
         }
       ],
       "shadow" : {
