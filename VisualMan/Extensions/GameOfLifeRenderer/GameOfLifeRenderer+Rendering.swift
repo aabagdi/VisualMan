@@ -28,6 +28,7 @@ extension GameOfLifeRenderer {
     let (shouldStep, params) = updateAudioAndParams(bass: bass, mid: mid)
 
     guard let encoder = beginFrame() else { return nil }
+    encoder.barrier(afterQueueStages: [.dispatch, .fragment], beforeStages: .dispatch)
 
     if shouldStep {
       stepAccumulator = 0

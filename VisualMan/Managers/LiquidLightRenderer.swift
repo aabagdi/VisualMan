@@ -274,6 +274,8 @@ final class LiquidLightRenderer: MetalVisualizerRenderer {
     }
 
     guard let encoder = beginFrame() else { return nil }
+    encoder.barrier(afterQueueStages: [.dispatch, .fragment], beforeStages: .dispatch)
+
     let parity = Int(frameNumber & 1)
     let finalTex = textures.final[parity]
     let historyIn = textures.history[1 - parity]
