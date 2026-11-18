@@ -60,7 +60,7 @@ extension AbstractExpressionismRenderer {
     depositDensity(at: gestured.pos, weight: 0.85 + energy * 0.4)
   }
 
-  func appendRogueStroke(to strokes: inout [AbExStroke], energy: Float) {
+  func appendRogueStroke(to strokes: inout [AbExStroke]) {
     guard strokes.count < Self.maxStrokesPerFrame, nextSeed() < perFrameChance(0.0012) else { return }
     let x = (nextSeed() - 0.5) * 1.05
     let y = (nextSeed() - 0.5) * 1.10
@@ -89,9 +89,7 @@ extension AbstractExpressionismRenderer {
     }
   }
 
-  func appendPollockTrails(to strokes: inout [AbExStroke],
-                           energy: Float,
-                           focus: SIMD2<Float>) {
+  func appendPollockTrails(to strokes: inout [AbExStroke], energy: Float) {
     guard energy > 0.04, strokes.count < Self.maxStrokesPerFrame,
           (wallClock - lastPollockTime) > 3.2 else { return }
     lastPollockTime = wallClock
@@ -196,9 +194,7 @@ extension AbstractExpressionismRenderer {
     depositDensity(at: pos, weight: 0.6)
   }
 
-  func appendKnifeStroke(to strokes: inout [AbExStroke],
-                         energy: Float,
-                         focus: SIMD2<Float>) {
+  func appendKnifeStroke(to strokes: inout [AbExStroke], energy: Float) {
     guard energy > 0.05,
           (wallClock - lastKnifeTime) > 1.3,
           strokes.count < Self.maxStrokesPerFrame,

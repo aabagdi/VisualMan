@@ -94,7 +94,7 @@ extension AbstractExpressionismRenderer {
       appendAmbientWash(to: &$0, energy: energy, focus: focus)
     }
 
-    appendRogueStroke(to: &strokes, energy: energy)
+    appendRogueStroke(to: &strokes)
 
     collectAppended(after: strokes, into: &freshSmearStrokes) {
       appendScumble(to: &$0, mid: mid, energy: energy, focus: focus)
@@ -103,10 +103,10 @@ extension AbstractExpressionismRenderer {
     appendSplatters(to: &strokes, high: high)
 
     collectAppended(after: strokes, into: &freshSmearStrokes) {
-      appendKnifeStroke(to: &$0, energy: energy, focus: focus)
+      appendKnifeStroke(to: &$0, energy: energy)
     }
 
-    appendPollockTrails(to: &strokes, energy: energy, focus: focus)
+    appendPollockTrails(to: &strokes, energy: energy)
 
     let noPearl: Set<Int> = [2, 5]
     for i in strokes.indices where !noPearl.contains(Int(strokes[i].sizeOpacity.w)) {

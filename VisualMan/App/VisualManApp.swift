@@ -14,8 +14,6 @@ struct VisualManApp: App {
   @State private var showLowPowerAlert = false
   @State private var rendererCache = VisualizerRendererCache()
 
-  @Dependency(AudioEngineManager.self) private var audioEngineManager
-  @Dependency(AudioPlaylistManager.self) private var playlistManager
   @Dependency(MusicLibraryAccessManager.self) private var musicLibraryManager
 
   var body: some Scene {

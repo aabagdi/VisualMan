@@ -103,7 +103,7 @@ extension DSPProcessor {
     }
   }
 
-  func createVisualizerBars(from fftData: borrowing [1024 of Float], sampleRate: Float) -> [32 of Float] {
+  func createVisualizerBars(from fftData: borrowing [1024 of Float]) -> [32 of Float] {
     var bars = [32 of Float](repeating: 0.0)
 
     return fftData.withUnsafeBorrowedElementPointer { fft in

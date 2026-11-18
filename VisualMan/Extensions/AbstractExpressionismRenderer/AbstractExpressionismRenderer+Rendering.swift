@@ -219,7 +219,7 @@ extension AbstractExpressionismRenderer {
                                 pass2Params.config.w)
     
     if runSmearPass, let smearRegion = smearPassRegion(within: region) {
-      copyForSmearPass(encoder: encoder, tex: tex, region: smearRegion)
+      copyForSmearPass(encoder: encoder, tex: tex)
       renderPaint(encoder: encoder,
                   colorIn: tex.colorMid, colorOut: tex.colorOut,
                   hwIn: tex.hwMid, hwOut: tex.hwOut,
@@ -315,7 +315,7 @@ extension AbstractExpressionismRenderer {
     guard ensureCanvasTextures(displayWidth: drawableWidth, displayHeight: drawableHeight),
           let tex = currentPingPongTextures(),
           let encoder = beginFrame() else { return nil }
-    gpuTiming?.beginFrame(frameNumber: frameNumber, skippedPaint: false)
+    gpuTiming?.beginFrame(frameNumber: frameNumber)
 
     runPendingResample(encoder: encoder, tex: tex)
 

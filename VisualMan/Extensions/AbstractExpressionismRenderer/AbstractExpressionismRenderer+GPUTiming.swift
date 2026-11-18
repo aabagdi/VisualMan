@@ -33,7 +33,6 @@ extension AbstractExpressionismRenderer {
     private var slot = 0
     private var written: [[Bool]]
     private var slotSkipped: [Bool]
-    private var pendingSkipped = false
 
     private var passTotals = [Double](repeating: 0, count: GPUMark.allCases.count)
     private var frameTotal: Double = 0
@@ -64,7 +63,7 @@ extension AbstractExpressionismRenderer {
       self.reference = device.sampleTimestamps()
     }
 
-    func beginFrame(frameNumber: UInt64, skippedPaint: Bool) {
+    func beginFrame(frameNumber: UInt64) {
       slot = Int(frameNumber % UInt64(Self.slots))
       resolve(slot: slot)
       written[slot] = Array(repeating: false, count: Self.marksPerSlot)

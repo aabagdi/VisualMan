@@ -96,8 +96,7 @@ extension AbstractExpressionismRenderer {
     return pixelRegion(u, pad: Self.smearRegionPad, clip: region)
   }
 
-  func copyForSmearPass(encoder: any MTL4ComputeCommandEncoder,
-                        tex: PingPongTextures, region: CanvasRegion) {
+  func copyForSmearPass(encoder: any MTL4ComputeCommandEncoder, tex: PingPongTextures) {
     guard let u = smearBoundsUV() else { return }
     let whole = CanvasRegion(x: 0, y: 0, width: canvasSize, height: canvasSize)
     guard let copy = pixelRegion(u, pad: Self.smearRegionPad + Self.smearReadMargin,

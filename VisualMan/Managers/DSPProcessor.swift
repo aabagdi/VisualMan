@@ -100,7 +100,7 @@ actor DSPProcessor {
       }
     }
     
-    let newBars = createVisualizerBars(from: audioLevels, sampleRate: sampleRate)
+    let newBars = createVisualizerBars(from: audioLevels)
     let dt = sampleRate > 0 ? Float(samples.count) / sampleRate : 1.0 / 60.0
 
     updateAutomaticGainControl(bars: newBars, dt: dt)
