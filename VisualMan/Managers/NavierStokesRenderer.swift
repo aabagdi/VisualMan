@@ -106,7 +106,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   
   nonisolated static let logger = Logger(subsystem: "com.VisualMan", category: "NavierStokesRenderer")
 
-  static let simulationCellBudget: Int = 1024 * 1024
+  static let simulationCellBudget: Int = 960_000
   static let gridAlignment: Int = 32
   static let minGridDimension: Int = 128
   static let maxGridDimension: Int = 2048
@@ -207,6 +207,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
   var taaHistoryA: MTLTexture?
   var taaHistoryB: MTLTexture?
+  var taaExposure: MTLTexture?
   var taaHistoryValid: Bool = false
   var taaHistoryWidth: Int = 0
   var taaHistoryHeight: Int = 0
@@ -232,6 +233,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     guard let pipelines = await compilePipelines(device: device),
           let resources = makeResources(device: device) else { return nil }
     let renderer = NavierStokesRenderer(device: device, pipelines: pipelines, resources: resources)
+    renderer.gpuTiming = GPUTiming.makeIfRequested(device: device)
     renderer.warmUpGPU()
     return renderer
   }
@@ -294,7 +296,6 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.technicolorGrain = resources.technicolorGrain
     self.stretchStatsBuffer = resources.stretchStatsBuffer
     self.residencySet = resources.residencySet
-    self.gpuTiming = GPUTiming.makeIfRequested(device: device)
 
     configureResidencySet()
   }

@@ -204,7 +204,6 @@ inline float4 sampleCatmullRom(texture2d<float, access::sample> tex, sampler s,
   return result;
 }
 
-// sampleCatmullRom without its four corner taps (at most 1.6% of the weight), renormalised.
 inline float4 sampleCatmullRom5(texture2d<float, access::sample> tex, sampler s,
                                 float2 uv, float2 texSize) {
   float2 samplePos = uv * texSize;

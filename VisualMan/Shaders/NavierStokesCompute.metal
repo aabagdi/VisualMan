@@ -419,21 +419,18 @@ constant float3 kHalationSensitivity = float3(1.0, 0.43, 0.0);
 constant float3 kHalationNear = float3(1.0, 0.42, 0.05);
 constant float3 kHalationFar = float3(1.0, 0.06, 0.02);
 
-kernel void fluidHalationSource(texture2d<float, access::sample> history [[texture(0)]],
+kernel void fluidHalationSource(texture2d<float, access::sample> exposureIn [[texture(0)]],
                                 texture2d<float, access::write> halationOut [[texture(1)]],
                                 constant FrameUniforms &frame [[buffer(0)]],
+                                constant float2 &coverage [[buffer(1)]],
                                 uint2 gid [[thread_position_in_grid]]) {
   uint w = halationOut.get_width();
   uint h = halationOut.get_height();
   if (gid.x >= w || gid.y >= h) return;
 
   constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
-  float2 uv = (float2(gid) + 0.5) / float2(w, h);
-  float2 reach = 0.25 / float2(w, h);
-  float exposure = 0.25 * (history.sample(bilinear, uv + float2(-reach.x, -reach.y)).a
-                           + history.sample(bilinear, uv + float2( reach.x, -reach.y)).a
-                           + history.sample(bilinear, uv + float2(-reach.x,  reach.y)).a
-                           + history.sample(bilinear, uv + float2( reach.x,  reach.y)).a);
+  float2 uv = (float2(gid) + 0.5) / float2(w, h) * coverage;
+  float exposure = exposureIn.sample(bilinear, uv).r;
   float knee = frame.technicolorHalation.y * frame.technicolorLampGain;
   halationOut.write(float4(exposure * smoothstep(0.55 * knee, knee, exposure)), gid);
 }
@@ -676,8 +673,17 @@ inline float grainCell(int2 cell, uint record) {
   return (float(a >> 8) + float(b >> 8)) * (2.4494897 / 16777216.0) - 2.4494897;
 }
 
+constant int kFilmCloudReach = 5;
+constant float kFilmCloudCoverage = 0.1;
+
+inline float cloudCell(int2 cell, uint record) {
+  uint2 p = uint2(cell) & (kFilmGrainSize - 1);
+  uint a = grainHash(p.x + grainHash(p.y + grainHash(record)));
+  return float(a >> 8) < kFilmCloudCoverage * 16777216.0 ? 1.0 : 0.0;
+}
+
 kernel void technicolorBakeGrain(texture2d<half, access::write> grainOut [[texture(0)]],
-                                 constant float &strength [[buffer(0)]],
+                                 constant float4 &strength [[buffer(0)]],
                                  uint2 gid [[thread_position_in_grid]]) {
   if (any(gid >= kFilmGrainSize)) return;
   float3 n = float3(0.0);
@@ -688,7 +694,23 @@ kernel void technicolorBakeGrain(texture2d<half, access::write> grainOut [[textu
       n += weight * float3(grainCell(cell, 0u), grainCell(cell, 1u), grainCell(cell, 2u));
     }
   }
-  grainOut.write(half4(half3(exp(strength * n / 1.2592)), 1.0h), gid);
+
+  float4 cloud = float4(0.0);
+  float2 weightSum = float2(0.0);
+  for (int dy = -kFilmCloudReach; dy <= kFilmCloudReach; ++dy) {
+    for (int dx = -kFilmCloudReach; dx <= kFilmCloudReach; ++dx) {
+      float weight = exp(-0.5 * float(dx * dx + dy * dy) / (strength.w * strength.w));
+      int2 cell = int2(gid) + int2(dx, dy);
+      cloud += weight * float4(cloudCell(cell, 3u), cloudCell(cell, 4u), cloudCell(cell, 5u),
+                               cloudCell(cell, 6u));
+      weightSum += float2(weight, weight * weight);
+    }
+  }
+  cloud = (cloud - kFilmCloudCoverage * weightSum.x)
+    / sqrt(kFilmCloudCoverage * (1.0 - kFilmCloudCoverage) * weightSum.y);
+  float3 clouds = sqrt(1.0 - strength.z * strength.z) * cloud.w + strength.z * cloud.xyz;
+
+  grainOut.write(half4(half3(exp(strength.x * n / 1.2592 - strength.y * clouds)), 1.0h), gid);
 }
 
 inline float3 technicolorIV(float3 dyeAmounts, texture3d<float, access::sample> lut,
@@ -721,8 +743,10 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture3d<float, access::sample> technicolorLUT [[texture(7)]],
                         texture2d<float, access::sample> halation [[texture(8)]],
                         texture2d<float, access::read> grain [[texture(9)]],
+                        texture2d<float, access::write> exposureOut [[texture(10)]],
                         constant FrameUniforms &frame [[buffer(0)]],
-                        uint2 gid [[thread_position_in_grid]]) {
+                        uint2 gid [[thread_position_in_grid]],
+                        uint2 tid [[thread_position_in_threadgroup]]) {
   float bass = frame.bass;
   float mid = frame.mid;
   float renderTime = frame.time;
@@ -836,6 +860,20 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   finalColor *= grain.read(uint2(int2(gid) + grainShift.xy) & (kFilmGrainSize - 1)).rgb;
 
   historyOut.write(float4(finalColor, exposure), gid);
+
+  threadgroup float exposureTile[256];
+  exposureTile[tid.y * 16 + tid.x] = exposure;
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+  if (((tid.x | tid.y) & 3u) != 0u) return;
+
+  uint2 span = min(uint2(4), uint2(w, h) - gid);
+  float sum = 0.0;
+  for (uint y = 0; y < span.y; y++) {
+    for (uint x = 0; x < span.x; x++) {
+      sum += exposureTile[(tid.y + y) * 16 + tid.x + x];
+    }
+  }
+  exposureOut.write(float4(sum / float(span.x * span.y)), gid >> 2);
 }
 
 kernel void fluidPsiInit(texture2d<float, access::write> psiOut [[texture(0)]],
@@ -874,10 +912,13 @@ kernel void fluidPsiAdvect(texture2d<float, access::sample> velocity [[texture(0
 kernel void fluidCovectorPullback(texture2d<float, access::read>   psi  [[texture(0)]],
                                   texture2d<float, access::sample> u0   [[texture(1)]],
                                   texture2d<float, access::write>  uOut [[texture(2)]],
+                                  texture2d<float, access::read>   dye  [[texture(3)]],
+                                  texture2d<float, access::sample> vortexField [[texture(4)]],
                                   constant float &dissipation [[buffer(0)]],
                                   device atomic_uint *stats [[buffer(1)]],
                                   constant float &stretchThreshold [[buffer(2)]],
                                   constant float &maxSpeed [[buffer(3)]],
+                                  constant float4 &forces [[buffer(4)]],
                                   uint2 gid [[thread_position_in_grid]]) {
   int w = int(psi.get_width());
   int h = int(psi.get_height());
@@ -934,6 +975,18 @@ kernel void fluidCovectorPullback(texture2d<float, access::read>   psi  [[textur
     float sp = fast::length(u);
     fast = (sp > 0.5 * maxSpeed) ? 1u : 0u;
     if (sp > maxSpeed) u *= maxSpeed / sp;
+
+    if (forces.x != 0.0 || forces.z != 0.0) {
+      float2 vortexSize = float2(vortexField.get_width(), vortexField.get_height());
+      float2 push = forces.z * sampleBSpline(vortexField, linearSampler, (float2(gid) + 0.5) / size,
+                                             vortexSize).xy;
+      if (gid.x > 0u) u.x += push.x;
+      if (gid.y > 0u) {
+        float settle = 1.0 - saturate(fast::length(u) / forces.y);
+        float weight = 0.5 * (dye.read(gid).w + dye.read(uint2(gid.x, gid.y - 1u)).w);
+        u.y += forces.x * weight * settle + push.y;
+      }
+    }
 
     uOut.write(float4(u, 0, 0), gid);
   }
@@ -993,29 +1046,6 @@ kernel void fluidVortexField(texture2d<float, access::read> flow [[texture(0)]],
   float turn = clamp(spin[0], -uniforms.cap, uniforms.cap);
   swirl /= abs(swirl) + uniforms.swirlScale;
   fieldOut.write(float4(turn * toward.y, -turn * toward.x, swirl, 0), gid);
-}
-
-kernel void fluidBuoyancy(texture2d<float, access::read_write> velocity [[texture(0)]],
-                          texture2d<float, access::read> dye [[texture(1)]],
-                          texture2d<float, access::sample> vortexField [[texture(2)]],
-                          constant float &impulse [[buffer(0)]],
-                          constant float &settleSpeed [[buffer(1)]],
-                          constant float &vortexImpulse [[buffer(2)]],
-                          uint2 gid [[thread_position_in_grid]]) {
-  if (gid.x >= velocity.get_width() || gid.y >= velocity.get_height()) return;
-
-  constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
-  float4 vel = velocity.read(gid);
-  float2 uv = (float2(gid) + 0.5) / float2(velocity.get_width(), velocity.get_height());
-  float2 vortexSize = float2(vortexField.get_width(), vortexField.get_height());
-  float2 push = vortexImpulse * sampleBSpline(vortexField, linearSampler, uv, vortexSize).xy;
-  if (gid.x > 0u) vel.x += push.x;
-  if (gid.y > 0u) {
-    float settle = 1.0 - saturate(fast::length(vel.xy) / settleSpeed);
-    float weight = 0.5 * (dye.read(gid).w + dye.read(uint2(gid.x, gid.y - 1u)).w);
-    vel.y += impulse * weight * settle + push.y;
-  }
-  velocity.write(vel, gid);
 }
 
 kernel void fluidResample(texture2d<float, access::sample> src [[texture(0)]],

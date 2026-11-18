@@ -31,6 +31,5 @@ BlitVertexOut blitVertex(uint vid [[vertex_id]]) {
 half4 blitFragment(BlitVertexOut in [[stage_in]],
                    texture2d<half> src [[texture(0)]]) {
   constexpr sampler s(filter::linear, address::clamp_to_edge);
-  // The layer is opaque; a renderer may keep something else in its alpha channel.
   return half4(src.sample(s, in.uv).rgb, 1.0h);
 }

@@ -7,8 +7,46 @@
 
 #if !targetEnvironment(simulator)
 import Metal
+import os
 
 extension NavierStokesRenderer {
+  struct MultigridLevels {
+    var pressure = [MTLTexture]()
+    var corrected = [MTLTexture]()
+    var rhs = [MTLTexture]()
+  }
+
+  static func createMultigridLevels(device: MTLDevice,
+                                    width: Int,
+                                    height: Int) -> MultigridLevels? {
+    var levels = MultigridLevels()
+    var w = width
+    var h = height
+    while true {
+      let desc = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .r32Float, width: w, height: h, mipmapped: false
+      )
+      desc.usage = [.shaderRead, .shaderWrite]
+      desc.storageMode = .private
+      guard let pressure = device.makeTexture(descriptor: desc),
+            let corrected = device.makeTexture(descriptor: desc),
+            let rhs = device.makeTexture(descriptor: desc) else {
+        logger.error("Failed to create multigrid level \(w)x\(h)")
+        return nil
+      }
+      pressure.label = "mgPressure\(w)x\(h)"
+      corrected.label = "mgCorrected\(w)x\(h)"
+      rhs.label = "mgRHS\(w)x\(h)"
+      levels.pressure.append(pressure)
+      levels.corrected.append(corrected)
+      levels.rhs.append(rhs)
+      if w * h <= multigridCoarseCells || (w <= 2 && h <= 2) { break }
+      w = (w + 1) / 2
+      h = (h + 1) / 2
+    }
+    return levels
+  }
+
   func projectPressureMultigrid(encoder: any MTL4ComputeCommandEncoder, cycles: Int) {
     let coarsest = mgPressure.count - 1
     guard coarsest > 0 else {

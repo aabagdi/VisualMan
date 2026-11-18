@@ -10,18 +10,12 @@ import Metal
 import os
 
 extension NavierStokesRenderer {
-  func applyBuoyancy(encoder: any MTL4ComputeCommandEncoder) {
-    encoder.setComputePipelineState(pipelines.buoyancy)
-    argumentTable.setTexture(velocityA.gpuResourceID, index: 0)
-    argumentTable.setTexture(dyeA.gpuResourceID, index: 1)
-    argumentTable.setTexture(vortexField.gpuResourceID, index: 2)
+  func advanceBuoyancy() -> SIMD4<Float> {
     stepSinceReinit += dt * Self.advectionTimeScale
-    argumentTable.setAddress(writeUniform(stepSinceReinit * Self.buoyancyStrength), index: 0)
-    argumentTable.setAddress(writeUniform(Self.buoyancySettleSpeed), index: 1)
     let loudness = max(bassEnvelope, midEnvelope, highEnvelope)
     let confinement = Self.vortexConfinement * min(loudness / Self.vortexConfinementLoudness, 1)
-    argumentTable.setAddress(writeUniform(stepSinceReinit * confinement), index: 2)
-    dispatchGrid(encoder: encoder)
+    return SIMD4<Float>(stepSinceReinit * Self.buoyancyStrength, Self.buoyancySettleSpeed,
+                        stepSinceReinit * confinement, 0)
   }
 
   func tentFilter(encoder: any MTL4ComputeCommandEncoder,
@@ -114,15 +108,19 @@ extension NavierStokesRenderer {
   func covectorPullback(encoder: any MTL4ComputeCommandEncoder,
                         psi: MTLTexture,
                         dissipation: Float,
-                        statsAddress: MTLGPUAddress) {
+                        statsAddress: MTLGPUAddress,
+                        forces: SIMD4<Float> = .zero) {
     encoder.setComputePipelineState(pipelines.covectorPullback)
     argumentTable.setTexture(psi.gpuResourceID, index: 0)
     argumentTable.setTexture(u0.gpuResourceID, index: 1)
     argumentTable.setTexture(velocityB.gpuResourceID, index: 2)
+    argumentTable.setTexture(dyeA.gpuResourceID, index: 3)
+    argumentTable.setTexture(vortexField.gpuResourceID, index: 4)
     argumentTable.setAddress(writeUniform(dissipation), index: 0)
     argumentTable.setAddress(statsAddress, index: 1)
     argumentTable.setAddress(writeUniform(Self.flowMapStretchThreshold), index: 2)
     argumentTable.setAddress(writeUniform(Self.maxSpeed), index: 3)
+    argumentTable.setAddress(writeUniform(forces), index: 4)
     dispatchGrid(encoder: encoder)
   }
 
@@ -237,6 +235,7 @@ extension NavierStokesRenderer {
   func render(encoder: any MTL4ComputeCommandEncoder,
               historyIn: MTLTexture,
               historyOut: MTLTexture) {
+    guard let exposure = taaExposure else { return }
     encoder.setComputePipelineState(pipelines.render)
     argumentTable.setTexture(dyeA.gpuResourceID, index: 0)
     argumentTable.setTexture(cloudLight.gpuResourceID, index: 1)
@@ -248,6 +247,7 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(technicolorLUT.gpuResourceID, index: 7)
     argumentTable.setTexture(halationA.gpuResourceID, index: 8)
     argumentTable.setTexture(technicolorGrain.gpuResourceID, index: 9)
+    argumentTable.setTexture(exposure.gpuResourceID, index: 10)
     argumentTable.setAddress(frameUniformsAddress, index: 0)
 
     dispatchGrid(encoder: encoder, width: historyOut.width, height: historyOut.height)
@@ -307,14 +307,11 @@ extension NavierStokesRenderer {
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     covectorPullback(encoder: encoder, psi: psiA, dissipation: dissipation,
-                     statsAddress: currentStretchStatsAddress)
+                     statsAddress: currentStretchStatsAddress, forces: advanceBuoyancy())
     swap(&velocityA, &velocityB)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     injectAudioSplats(encoder: encoder, bass: bass, mid: mid, high: high, suppressed: suppress)
-    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
-
-    applyBuoyancy(encoder: encoder)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     gpuMark(encoder, .afterFlowStep)
 
@@ -344,7 +341,9 @@ extension NavierStokesRenderer {
     gpuMark(encoder, .afterDyeDiffuse)
 
     runBloomPasses(encoder: encoder, bass: bass, mid: mid)
+    gpuMark(encoder, .afterBloom)
     runHalationPasses(encoder: encoder, history: historyIn)
+    gpuMark(encoder, .afterHalation)
     lightCloud(encoder: encoder)
     gpuMark(encoder, .afterCloud)
 

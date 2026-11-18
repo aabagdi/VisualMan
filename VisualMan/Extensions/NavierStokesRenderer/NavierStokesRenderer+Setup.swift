@@ -32,7 +32,6 @@ extension NavierStokesRenderer {
     let halationSource: MTLComputePipelineState
     let render: MTLComputePipelineState
     let clearRGBA: MTLComputePipelineState
-    let buoyancy: MTLComputePipelineState
     let vortexField: MTLComputePipelineState
     let dyeMapReset: MTLComputePipelineState
     let dyeMapAccumulate: MTLComputePipelineState
@@ -76,7 +75,6 @@ extension NavierStokesRenderer {
       halationSource = try load("fluidHalationSource")
       render = try load("fluidRender")
       clearRGBA = try load("fluidClearRGBA")
-      buoyancy = try load("fluidBuoyancy")
       vortexField = try load("fluidVortexField")
       dyeMapReset = try load("fluidDyeMapReset")
       dyeMapAccumulate = try load("fluidDyeMapAccumulate")
@@ -196,8 +194,8 @@ extension NavierStokesRenderer {
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
     let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 10
-    desc.maxBufferBindCount = 4
+    desc.maxTextureBindCount = 11
+    desc.maxBufferBindCount = 5
     var tables = [any MTL4ArgumentTable]()
     for _ in 0..<maxFramesInFlight {
       do {
@@ -281,43 +279,6 @@ extension NavierStokesRenderer {
     }
   }
 
-  struct MultigridLevels {
-    var pressure = [MTLTexture]()
-    var corrected = [MTLTexture]()
-    var rhs = [MTLTexture]()
-  }
-
-  static func createMultigridLevels(device: MTLDevice,
-                                    width: Int,
-                                    height: Int) -> MultigridLevels? {
-    var levels = MultigridLevels()
-    var w = width
-    var h = height
-    while true {
-      let desc = MTLTextureDescriptor.texture2DDescriptor(
-        pixelFormat: .r32Float, width: w, height: h, mipmapped: false
-      )
-      desc.usage = [.shaderRead, .shaderWrite]
-      desc.storageMode = .private
-      guard let pressure = device.makeTexture(descriptor: desc),
-            let corrected = device.makeTexture(descriptor: desc),
-            let rhs = device.makeTexture(descriptor: desc) else {
-        logger.error("Failed to create multigrid level \(w)x\(h)")
-        return nil
-      }
-      pressure.label = "mgPressure\(w)x\(h)"
-      corrected.label = "mgCorrected\(w)x\(h)"
-      rhs.label = "mgRHS\(w)x\(h)"
-      levels.pressure.append(pressure)
-      levels.corrected.append(corrected)
-      levels.rhs.append(rhs)
-      if w * h <= multigridCoarseCells || (w <= 2 && h <= 2) { break }
-      w = (w + 1) / 2
-      h = (h + 1) / 2
-    }
-    return levels
-  }
-
   func warmUpGPU() {
     let warmupFrame: UInt64 = 1
     let frameIndex = Int(warmupFrame % Self.maxFramesInFlight)
@@ -354,7 +315,9 @@ extension NavierStokesRenderer {
 
     encoder.setComputePipelineState(pipelines.technicolorBakeGrain)
     argumentTable.setTexture(technicolorGrain.gpuResourceID, index: 0)
-    argumentTable.setAddress(writeUniform(Self.renderTechnicolorGrain), index: 0)
+    let grainStrength = SIMD4<Float>(Self.renderTechnicolorGrain, Self.renderTechnicolorGrainCloud,
+                                     Self.renderTechnicolorGrainCloudChroma, Self.renderTechnicolorGrainCloudSize)
+    argumentTable.setAddress(writeUniform(grainStrength), index: 0)
     dispatchGrid(encoder: encoder, width: Self.technicolorGrainSize, height: Self.technicolorGrainSize)
 
     encoder.endEncoding()
@@ -382,16 +345,26 @@ extension NavierStokesRenderer {
     if let b = taaHistoryB {
       pendingTAAHistoryReleases.append((frame: fenceFrame, texture: b))
     }
+    if let exposure = taaExposure {
+      pendingTAAHistoryReleases.append((frame: fenceFrame, texture: exposure))
+    }
 
     let desc = MTLTextureDescriptor.texture2DDescriptor(
       pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
     desc.usage = [.shaderRead, .shaderWrite]
     desc.storageMode = .private
 
+    let exposureDesc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .r16Float, width: (width + 3) / 4, height: (height + 3) / 4, mipmapped: false)
+    exposureDesc.usage = [.shaderRead, .shaderWrite]
+    exposureDesc.storageMode = .private
+
     guard let a = device.makeTexture(descriptor: desc),
-          let b = device.makeTexture(descriptor: desc) else {
+          let b = device.makeTexture(descriptor: desc),
+          let exposure = device.makeTexture(descriptor: exposureDesc) else {
       taaHistoryA = nil
       taaHistoryB = nil
+      taaExposure = nil
       taaHistoryValid = false
       taaHistoryWidth = 0
       taaHistoryHeight = 0
@@ -400,10 +373,12 @@ extension NavierStokesRenderer {
 
     residencySet.addAllocation(a)
     residencySet.addAllocation(b)
+    residencySet.addAllocation(exposure)
     residencySet.commit()
 
     taaHistoryA = a
     taaHistoryB = b
+    taaExposure = exposure
     taaHistoryValid = false
     taaHistoryWidth = width
     taaHistoryHeight = height

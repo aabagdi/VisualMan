@@ -50,13 +50,17 @@ extension NavierStokesRenderer {
     renderTechnicolorHalation, renderTechnicolorHalationKnee, 0, 0)
 
   func runHalationPasses(encoder: any MTL4ComputeCommandEncoder, history: MTLTexture) {
+    guard let exposure = taaExposure else { return }
     let width = (halationA.width + 15) & ~15
     let height = (halationA.height + 15) & ~15
+    let coverage = SIMD2<Float>(Float(history.width) / Float(4 * exposure.width),
+                                Float(history.height) / Float(4 * exposure.height))
 
     encoder.setComputePipelineState(pipelines.halationSource)
-    argumentTable.setTexture(history.gpuResourceID, index: 0)
+    argumentTable.setTexture(exposure.gpuResourceID, index: 0)
     argumentTable.setTexture(halationA.gpuResourceID, index: 1)
     argumentTable.setAddress(frameUniformsAddress, index: 0)
+    argumentTable.setAddress(writeUniform(coverage), index: 1)
     dispatchGrid(encoder: encoder, width: width, height: height)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 

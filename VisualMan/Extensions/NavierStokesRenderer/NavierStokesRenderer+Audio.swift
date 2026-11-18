@@ -123,51 +123,68 @@ extension NavierStokesRenderer {
   }
 
   private func flushSplats(encoder: any MTL4ComputeCommandEncoder) {
-    if !forceSplats.isEmpty {
-      dispatchBatchedSplats(encoder: encoder, texture: velocityA, splats: forceSplats,
-                            isVelocity: true)
-      dispatchBatchedSplats(encoder: encoder, texture: u0, splats: forceSplats,
-                            isVelocity: true)
+    for cluster in splatClusters(forceSplats) {
+      dispatchBatchedSplats(encoder: encoder, texture: velocityA, cluster: cluster, isVelocity: true)
+      dispatchBatchedSplats(encoder: encoder, texture: u0, cluster: cluster, isVelocity: true)
     }
-    if !dyeSplats.isEmpty {
-      dispatchBatchedSplats(encoder: encoder, texture: dyeA, splats: dyeSplats,
-                            isVelocity: false)
+    for cluster in splatClusters(dyeSplats) {
+      dispatchBatchedSplats(encoder: encoder, texture: dyeA, cluster: cluster, isVelocity: false)
     }
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     forceSplats.removeAll(keepingCapacity: true)
     dyeSplats.removeAll(keepingCapacity: true)
   }
 
+  private struct SplatCluster {
+    var minX: Int
+    var minY: Int
+    var maxX: Int
+    var maxY: Int
+    var splats: [(index: Int, params: SplatParams)]
+
+    func overlaps(_ other: SplatCluster) -> Bool {
+      minX < other.maxX && other.minX < maxX && minY < other.maxY && other.minY < maxY
+    }
+  }
+
+  private func splatClusters(_ splats: [SplatParams]) -> [SplatCluster] {
+    let rMult: Float = sqrt(6.0)
+    var clusters: [SplatCluster] = []
+    for (index, sp) in splats.enumerated() {
+      let r = sp.radius * rMult
+      var cluster = SplatCluster(minX: max(0, Int(floor(sp.position.x - r))),
+                                 minY: max(0, Int(floor(sp.position.y - r))),
+                                 maxX: min(gridWidth, Int(ceil(sp.position.x + r))),
+                                 maxY: min(gridHeight, Int(ceil(sp.position.y + r))),
+                                 splats: [(index, sp)])
+      while let hit = clusters.firstIndex(where: { $0.overlaps(cluster) }) {
+        let other = clusters.remove(at: hit)
+        cluster.minX = min(cluster.minX, other.minX)
+        cluster.minY = min(cluster.minY, other.minY)
+        cluster.maxX = max(cluster.maxX, other.maxX)
+        cluster.maxY = max(cluster.maxY, other.maxY)
+        cluster.splats += other.splats
+      }
+      cluster.splats.sort { $0.index < $1.index }
+      clusters.append(cluster)
+    }
+    return clusters
+  }
+
   private func dispatchBatchedSplats(encoder: any MTL4ComputeCommandEncoder,
                                      texture: MTLTexture,
-                                     splats: [SplatParams],
+                                     cluster: SplatCluster,
                                      isVelocity: Bool) {
-    var minX: Float = Float(gridWidth)
-    var minY: Float = Float(gridHeight)
-    var maxX: Float = 0
-    var maxY: Float = 0
-    let rMult: Float = sqrt(6.0)
-    for sp in splats {
-      let r = sp.radius * rMult
-      minX = min(minX, sp.position.x - r)
-      minY = min(minY, sp.position.y - r)
-      maxX = max(maxX, sp.position.x + r)
-      maxY = max(maxY, sp.position.y + r)
-    }
-    let ox = max(0, Int(floor(minX)))
-    let oy = max(0, Int(floor(minY)))
-    let ex = min(gridWidth, Int(ceil(maxX)))
-    let ey = min(gridHeight, Int(ceil(maxY)))
-    let regionW = ex - ox
-    let regionH = ey - oy
+    let regionW = cluster.maxX - cluster.minX
+    let regionH = cluster.maxY - cluster.minY
     if regionW <= 0 || regionH <= 0 { return }
 
     encoder.setComputePipelineState(pipelines.splatBatch)
     argumentTable.setTexture(texture.gpuResourceID, index: 0)
-    argumentTable.setAddress(writeUniformArray(splats), index: 0)
-    let count = UInt32(splats.count)
+    argumentTable.setAddress(writeUniformArray(cluster.splats.map(\.params)), index: 0)
+    let count = UInt32(cluster.splats.count)
     argumentTable.setAddress(writeUniform(count), index: 1)
-    let origin = SIMD2<UInt32>(UInt32(ox), UInt32(oy))
+    let origin = SIMD2<UInt32>(UInt32(cluster.minX), UInt32(cluster.minY))
     argumentTable.setAddress(writeUniform(origin), index: 2)
     let batch = SplatBatchParams(velocityMode: isVelocity ? 1 : 0,
                                  clumping: Self.emitterClumping,

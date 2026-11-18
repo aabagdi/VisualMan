@@ -12,7 +12,7 @@ import os
 extension NavierStokesRenderer {
   enum GPUMark: Int, CaseIterable {
     case frameStart, afterPredictorTrace, afterPredictorProjection, afterFlowStep, afterProjection,
-         afterVortices, afterDyeMap, afterDyeDiffuse, afterCloud, afterRender
+         afterVortices, afterDyeMap, afterDyeDiffuse, afterBloom, afterHalation, afterCloud, afterRender
   }
 
   func gpuMark(_ encoder: any MTL4ComputeCommandEncoder, _ mark: GPUMark) {
@@ -115,7 +115,9 @@ extension NavierStokesRenderer {
                                          (.afterVortices, "dye velocity + vortices"),
                                          (.afterDyeMap, "dye map"),
                                          (.afterDyeDiffuse, "dye diffuse"),
-                                         (.afterCloud, "bloom + cloud"),
+                                         (.afterBloom, "bloom"),
+                                         (.afterHalation, "halation"),
+                                         (.afterCloud, "cloud lighting"),
                                          (.afterRender, "render")]
       let parts = labels.map { "\($0.1) \(f(median(passSamples[$0.0.rawValue])))" }
         .joined(separator: "  ")

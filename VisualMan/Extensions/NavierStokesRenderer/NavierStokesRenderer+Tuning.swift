@@ -41,13 +41,16 @@ extension NavierStokesRenderer {
   static let renderTechnicolorMisregistrationShift: Float = 0.0014
   static let renderTechnicolorMisregistrationRotation: Float = 0.0005
   static let renderTechnicolorMisregistrationMagnification: Float = 0.0007
-  static let renderTechnicolorGateWeave: Float = 0.0056
-  static let renderTechnicolorGateWeaveRotation: Float = 0.00125
-  static let renderTechnicolorGateJump: Float = 0.0047
+  static let renderTechnicolorGateWeave: Float = 0.005
+  static let renderTechnicolorGateWeaveRotation: Float = 0.0011
+  static let renderTechnicolorGateJump: Float = 0.0042
   static let renderTechnicolorGateJumpRate: Float = 12
   static let renderTechnicolorHalation: Float = 2.4
   static let renderTechnicolorHalationKnee: Float = 0.4
   static let renderTechnicolorGrain: Float = 0.10
+  static let renderTechnicolorGrainCloud: Float = 0.09
+  static let renderTechnicolorGrainCloudChroma: Float = 0.3
+  static let renderTechnicolorGrainCloudSize: Float = 1.7
   static let renderTechnicolorGrainRate: Float = 24
 
   static let dyeVelocitySmoothing: Float = 1.0
