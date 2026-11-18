@@ -50,7 +50,7 @@ struct FrameUniforms {
   var dt: Float
   var taaBlend: Float
   var historyValid: UInt32
-  var _pad: UInt32 = 0
+  var bloom: Float
   var shading: Float
   var detail: Float
   var jitter: Float
@@ -61,6 +61,11 @@ struct FrameUniforms {
   var technicolorCeiling: Float
   var technicolorTheme: SIMD4<Float>
   var technicolorMisregistration: SIMD4<Float>
+  var technicolorMisregistrationWarp: SIMD4<Float>
+  var technicolorGateWeave: SIMD4<Float>
+  var technicolorGateJump: SIMD4<Float>
+  var technicolorHalation: SIMD4<Float>
+  var technicolorGrain: SIMD4<Float>
   var technicolorDepth: SIMD4<Float>
 }
 
@@ -130,6 +135,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var bloomB: MTLTexture
   var bloomMidA: MTLTexture
   var bloomLoA: MTLTexture
+  var halationA: MTLTexture
+  var halationB: MTLTexture
   var psiA: MTLTexture
   var psiB: MTLTexture
   var u0: MTLTexture
@@ -148,6 +155,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   var mgRHS: [MTLTexture]
 
   let technicolorLUT: MTLTexture
+  let technicolorGrain: MTLTexture
 
   let stretchStatsBuffer: MTLBuffer
   static let stretchStatsStride: Int = 32
@@ -159,6 +167,12 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
   static let renderScale: Float = 0.75
 
   var time: Float = 0
+  var projectorTime: Float = 0
+  var gateJump = SIMD2<Float>(0, 0)
+  var gateStep = SIMD2<Float>(0, 0)
+  var gateJumpIndex = -1
+  var grainShift = SIMD4<Float>(0, 0, 0, 0)
+  var grainIndex = -1
   var dt: Float = 1.0 / 60.0
   private var lastFrameTime: CFTimeInterval = 0
   private var smoothedBass: Float = 0
@@ -259,6 +273,8 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.bloomB = textures.bloomB
     self.bloomMidA = textures.bloomMidA
     self.bloomLoA = textures.bloomLoA
+    self.halationA = textures.halationA
+    self.halationB = textures.halationB
     self.psiA = textures.psiA
     self.psiB = textures.psiB
     self.u0 = textures.u0
@@ -275,6 +291,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
     self.mgCorrected = textures.mgCorrected
     self.mgRHS = textures.mgRHS
     self.technicolorLUT = resources.technicolorLUT
+    self.technicolorGrain = resources.technicolorGrain
     self.stretchStatsBuffer = resources.stretchStatsBuffer
     self.residencySet = resources.residencySet
     self.gpuTiming = GPUTiming.makeIfRequested(device: device)
@@ -325,6 +342,7 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
 
     let timeStep = dt * (1.0 + smoothedBass * 0.5 + smoothedMid * 0.3)
     time += timeStep
+    projectorTime += dt
     wobblePhase += timeStep * (1.0 + Self.excitementWobbleGain * lastExcitement)
 
     guard let encoder = beginFrame(),
@@ -332,6 +350,9 @@ final class NavierStokesRenderer: MetalVisualizerRenderer {
           let historyB = taaHistoryB else { return nil }
 
     encoder.barrier(afterQueueStages: [.dispatch, .fragment], beforeStages: .dispatch)
+
+    advanceGateJump(outWidth: outWidth, outHeight: outHeight)
+    advanceGrain()
 
     let writeB = (frameNumber & 1) == 0
     let historyIn = writeB ? historyA : historyB

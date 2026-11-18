@@ -74,6 +74,8 @@ extension NavierStokesRenderer {
     bloomB = t.bloomB
     bloomMidA = t.bloomMidA
     bloomLoA = t.bloomLoA
+    halationA = t.halationA
+    halationB = t.halationB
     psiA = t.psiA
     psiB = t.psiB
     u0 = t.u0
@@ -94,7 +96,7 @@ extension NavierStokesRenderer {
   var allSimulationTextures: [MTLTexture] {
     [velocityA, velocityB, pressure, divergenceTexture,
      dyeA, dyeB, dyeC, dye0, dyePsiA, dyePsiB, dyePhiA, dyePhiB,
-     bloomA, bloomB, bloomMidA, bloomLoA,
+     bloomA, bloomB, bloomMidA, bloomLoA, halationA, halationB,
      psiA, psiB, u0,
      dyeVelocityA, dyeVelocityB, vortexFlowA, vortexFlowB, vortexField,
      cloudBillowA, cloudBillowB, cloudLight]

@@ -19,6 +19,7 @@ extension NavierStokesRenderer {
     let textures: Textures
     let residencySet: MTLResidencySet
     let technicolorLUT: MTLTexture
+    let technicolorGrain: MTLTexture
     let stretchStatsBuffer: MTLBuffer
   }
 
@@ -37,7 +38,8 @@ extension NavierStokesRenderer {
     let initialGrid = 1024
     guard let textures = createTextures(device: device, width: initialGrid, height: initialGrid),
           let residencySet = createResidencySet(device: device),
-          let technicolorLUT = createTechnicolorLUT(device: device) else { return nil }
+          let technicolorLUT = createTechnicolorLUT(device: device),
+          let technicolorGrain = createTechnicolorGrain(device: device) else { return nil }
     guard let stretchStatsBuffer = device.makeBuffer(
       length: stretchStatsStride * Int(maxFramesInFlight),
       options: .storageModeShared) else { return nil }
@@ -54,6 +56,7 @@ extension NavierStokesRenderer {
                      textures: textures,
                      residencySet: residencySet,
                      technicolorLUT: technicolorLUT,
+                     technicolorGrain: technicolorGrain,
                      stretchStatsBuffer: stretchStatsBuffer)
   }
 }

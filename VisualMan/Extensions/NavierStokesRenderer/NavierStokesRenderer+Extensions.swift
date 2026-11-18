@@ -246,6 +246,8 @@ extension NavierStokesRenderer {
     argumentTable.setTexture(historyIn.gpuResourceID, index: 5)
     argumentTable.setTexture(historyOut.gpuResourceID, index: 6)
     argumentTable.setTexture(technicolorLUT.gpuResourceID, index: 7)
+    argumentTable.setTexture(halationA.gpuResourceID, index: 8)
+    argumentTable.setTexture(technicolorGrain.gpuResourceID, index: 9)
     argumentTable.setAddress(frameUniformsAddress, index: 0)
 
     dispatchGrid(encoder: encoder, width: historyOut.width, height: historyOut.height)
@@ -261,6 +263,7 @@ extension NavierStokesRenderer {
       time: time, dt: dt,
       taaBlend: blend,
       historyValid: taaHistoryValid ? 1 : 0,
+      bloom: Self.renderBloomStrength,
       shading: Self.renderShading,
       detail: Self.renderDetail,
       jitter: Self.renderJitter,
@@ -271,7 +274,12 @@ extension NavierStokesRenderer {
         * (1 + (technicolorCeiling - 1) * Self.renderTechnicolorHeadroomLamp),
       technicolorCeiling: technicolorCeiling,
       technicolorTheme: SIMD4<Float>(technicolorThemeDye, 0),
-      technicolorMisregistration: technicolorMisregistration(bass: bass, high: high),
+      technicolorMisregistration: Self.technicolorMisregistrationShift,
+      technicolorMisregistrationWarp: Self.technicolorMisregistrationWarp,
+      technicolorGateWeave: technicolorGateWeave,
+      technicolorGateJump: SIMD4<Float>(lowHalf: gateJump, highHalf: gateStep),
+      technicolorHalation: Self.technicolorHalation,
+      technicolorGrain: grainShift,
       technicolorDepth: SIMD4<Float>(Self.renderTechnicolorThinDepth,
                                      Self.renderTechnicolorDepthStart,
                                      Self.renderTechnicolorDepthEnd, 0)
@@ -336,6 +344,7 @@ extension NavierStokesRenderer {
     gpuMark(encoder, .afterDyeDiffuse)
 
     runBloomPasses(encoder: encoder, bass: bass, mid: mid)
+    runHalationPasses(encoder: encoder, history: historyIn)
     lightCloud(encoder: encoder)
     gpuMark(encoder, .afterCloud)
 

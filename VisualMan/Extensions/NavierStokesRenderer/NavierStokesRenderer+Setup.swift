@@ -29,6 +29,7 @@ extension NavierStokesRenderer {
     let blurV: MTLComputePipelineState
     let bloomThresholdBlurH: MTLComputePipelineState
     let bloomDownsample: MTLComputePipelineState
+    let halationSource: MTLComputePipelineState
     let render: MTLComputePipelineState
     let clearRGBA: MTLComputePipelineState
     let buoyancy: MTLComputePipelineState
@@ -49,6 +50,7 @@ extension NavierStokesRenderer {
     let mgCoarseSolve: MTLComputePipelineState
     let resample: MTLComputePipelineState
     let technicolorBakeLUT: MTLComputePipelineState
+    let technicolorBakeGrain: MTLComputePipelineState
 
     nonisolated init(make: (String) -> MTLComputePipelineState?) throws(MissingResource) {
       func load(_ name: String) throws(MissingResource) -> MTLComputePipelineState {
@@ -71,6 +73,7 @@ extension NavierStokesRenderer {
       blurV = try load("fluidBlurV")
       bloomThresholdBlurH = try load("fluidBloomThresholdBlurH")
       bloomDownsample = try load("fluidBloomDownsample")
+      halationSource = try load("fluidHalationSource")
       render = try load("fluidRender")
       clearRGBA = try load("fluidClearRGBA")
       buoyancy = try load("fluidBuoyancy")
@@ -91,6 +94,7 @@ extension NavierStokesRenderer {
       mgCoarseSolve = try load("fluidMGCoarseSolve")
       resample = try load("fluidResample")
       technicolorBakeLUT = try load("technicolorBakeLUT")
+      technicolorBakeGrain = try load("technicolorBakeGrain")
     }
   }
 
@@ -111,6 +115,8 @@ extension NavierStokesRenderer {
     let bloomB: MTLTexture
     let bloomMidA: MTLTexture
     let bloomLoA: MTLTexture
+    let halationA: MTLTexture
+    let halationB: MTLTexture
     let psiA: MTLTexture
     let psiB: MTLTexture
     let u0: MTLTexture
@@ -153,6 +159,8 @@ extension NavierStokesRenderer {
       bloomB = try load(.rgba16Float, "bloomB", bloomSize, bloomSize)
       bloomMidA = try load(.rgba16Float, "bloomMidA", bloomSizeMid, bloomSizeMid)
       bloomLoA = try load(.rgba16Float, "bloomLoA", bloomSizeLo, bloomSizeLo)
+      halationA = try load(.r16Float, "halationA", width / 4, height / 4)
+      halationB = try load(.r16Float, "halationB", width / 4, height / 4)
       psiA = try load(.rg32Float, "psiA")
       psiB = try load(.rg32Float, "psiB")
       u0 = try load(.rg16Float, "u0")
@@ -188,7 +196,7 @@ extension NavierStokesRenderer {
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
     let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 8
+    desc.maxTextureBindCount = 10
     desc.maxBufferBindCount = 4
     var tables = [any MTL4ArgumentTable]()
     for _ in 0..<maxFramesInFlight {
@@ -232,6 +240,19 @@ extension NavierStokesRenderer {
     desc.storageMode = .private
     let texture = device.makeTexture(descriptor: desc)
     texture?.label = "Technicolor IV print LUT"
+    return texture
+  }
+
+  static let technicolorGrainSize: Int = 256
+
+  static func createTechnicolorGrain(device: MTLDevice) -> MTLTexture? {
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .rgba16Float, width: technicolorGrainSize, height: technicolorGrainSize,
+      mipmapped: false)
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+    let texture = device.makeTexture(descriptor: desc)
+    texture?.label = "Technicolor IV grain"
     return texture
   }
 
@@ -331,6 +352,11 @@ extension NavierStokesRenderer {
                               depth: Self.technicolorLUTSize),
       threadsPerThreadgroup: MTLSize(width: 8, height: 8, depth: 4))
 
+    encoder.setComputePipelineState(pipelines.technicolorBakeGrain)
+    argumentTable.setTexture(technicolorGrain.gpuResourceID, index: 0)
+    argumentTable.setAddress(writeUniform(Self.renderTechnicolorGrain), index: 0)
+    dispatchGrid(encoder: encoder, width: Self.technicolorGrainSize, height: Self.technicolorGrainSize)
+
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()
     commandQueue.commit([commandBuffer])
@@ -386,6 +412,7 @@ extension NavierStokesRenderer {
   func configureResidencySet() {
     for tex in allSimulationTextures { residencySet.addAllocation(tex) }
     residencySet.addAllocation(technicolorLUT)
+    residencySet.addAllocation(technicolorGrain)
     residencySet.addAllocation(stretchStatsBuffer)
     for buf in uniformBuffers { residencySet.addAllocation(buf) }
 

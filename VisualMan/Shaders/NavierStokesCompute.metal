@@ -34,7 +34,7 @@ struct FrameUniforms {
   float dt;
   float taaBlend;
   uint  historyValid;
-  uint  _pad;
+  float bloom;
   float shading;
   float detail;
   float jitter;
@@ -45,6 +45,11 @@ struct FrameUniforms {
   float technicolorCeiling;
   float4 technicolorTheme;
   float4 technicolorMisregistration;
+  float4 technicolorMisregistrationWarp;
+  float4 technicolorGateWeave;
+  float4 technicolorGateJump;
+  float4 technicolorHalation;
+  float4 technicolorGrain;
   float4 technicolorDepth;
 };
 
@@ -410,6 +415,29 @@ kernel void fluidBloomDownsample(texture2d<half, access::sample> src [[texture(0
   dst.write(c, gid);
 }
 
+constant float3 kHalationSensitivity = float3(1.0, 0.43, 0.0);
+constant float3 kHalationNear = float3(1.0, 0.42, 0.05);
+constant float3 kHalationFar = float3(1.0, 0.06, 0.02);
+
+kernel void fluidHalationSource(texture2d<float, access::sample> history [[texture(0)]],
+                                texture2d<float, access::write> halationOut [[texture(1)]],
+                                constant FrameUniforms &frame [[buffer(0)]],
+                                uint2 gid [[thread_position_in_grid]]) {
+  uint w = halationOut.get_width();
+  uint h = halationOut.get_height();
+  if (gid.x >= w || gid.y >= h) return;
+
+  constexpr sampler bilinear(filter::linear, address::clamp_to_edge);
+  float2 uv = (float2(gid) + 0.5) / float2(w, h);
+  float2 reach = 0.25 / float2(w, h);
+  float exposure = 0.25 * (history.sample(bilinear, uv + float2(-reach.x, -reach.y)).a
+                           + history.sample(bilinear, uv + float2( reach.x, -reach.y)).a
+                           + history.sample(bilinear, uv + float2(-reach.x,  reach.y)).a
+                           + history.sample(bilinear, uv + float2( reach.x,  reach.y)).a);
+  float knee = frame.technicolorHalation.y * frame.technicolorLampGain;
+  halationOut.write(float4(exposure * smoothstep(0.55 * knee, knee, exposure)), gid);
+}
+
 inline float dyeDensity(float4 d) {
   return max(d.r, max(d.g, d.b));
 }
@@ -630,6 +658,39 @@ kernel void technicolorBakeLUT(texture3d<half, access::write> lut [[texture(0)]]
   lut.write(half4(half3(rgb), 1.0h), gid);
 }
 
+constant uint kFilmGrainSize = 256;
+
+inline uint grainHash(uint x) {
+  x ^= x >> 16;
+  x *= 0x7feb352du;
+  x ^= x >> 15;
+  x *= 0x846ca68bu;
+  x ^= x >> 16;
+  return x;
+}
+
+inline float grainCell(int2 cell, uint record) {
+  uint2 p = uint2(cell) & (kFilmGrainSize - 1);
+  uint a = grainHash(p.x + grainHash(p.y + grainHash(record)));
+  uint b = grainHash(a + 0x9e3779b9u);
+  return (float(a >> 8) + float(b >> 8)) * (2.4494897 / 16777216.0) - 2.4494897;
+}
+
+kernel void technicolorBakeGrain(texture2d<half, access::write> grainOut [[texture(0)]],
+                                 constant float &strength [[buffer(0)]],
+                                 uint2 gid [[thread_position_in_grid]]) {
+  if (any(gid >= kFilmGrainSize)) return;
+  float3 n = float3(0.0);
+  for (int dy = -1; dy <= 1; ++dy) {
+    for (int dx = -1; dx <= 1; ++dx) {
+      float weight = (dx == 0 ? 1.0 : 0.36) * (dy == 0 ? 1.0 : 0.36);
+      int2 cell = int2(gid) + int2(dx, dy);
+      n += weight * float3(grainCell(cell, 0u), grainCell(cell, 1u), grainCell(cell, 2u));
+    }
+  }
+  grainOut.write(half4(half3(exp(strength * n / 1.2592)), 1.0h), gid);
+}
+
 inline float3 technicolorIV(float3 dyeAmounts, texture3d<float, access::sample> lut,
                             float presence, float3 themeDye, float neutralReach,
                             float depth, float lamp, float ceiling) {
@@ -658,6 +719,8 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                         texture2d<float, access::read> historyIn [[texture(5)]],
                         texture2d<float, access::write> historyOut [[texture(6)]],
                         texture3d<float, access::sample> technicolorLUT [[texture(7)]],
+                        texture2d<float, access::sample> halation [[texture(8)]],
+                        texture2d<float, access::read> grain [[texture(9)]],
                         constant FrameUniforms &frame [[buffer(0)]],
                         uint2 gid [[thread_position_in_grid]]) {
   float bass = frame.bass;
@@ -674,8 +737,14 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float2 dyeSize = float2(dye.get_width(), dye.get_height());
   float2 texel = 1.0 / dyeSize;
 
+  float2 registerScale = float(min(w, h)) / float2(w, h);
+  float2 weavePos = (center - 0.5) / registerScale;
+  float4 gateWeave = frame.technicolorGateWeave;
+
   float2 jitter = curlNoiseOffset(center, renderTime) * frame.jitter;
-  float2 sampleCenter = center + jitter;
+  float2 sampleCenter = center + jitter
+                      + (gateWeave.xy + gateWeave.z * float2(-weavePos.y, weavePos.x)) * registerScale
+                      + frame.technicolorGateJump.xy / float2(w, h);
 
   float dL = dyeDensity(dye.sample(bilinear, sampleCenter - float2(1.5, 0.0) * texel));
   float dR = dyeDensity(dye.sample(bilinear, sampleCenter + float2(1.5, 0.0) * texel));
@@ -688,12 +757,17 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
                     * texel * frame.detail * saturate(gradMag * 3.0);
 
   float2 dyeUV = sampleCenter + detailWarp;
-  float4 color = sampleCatmullRom(dye, bilinear, dyeUV, dyeSize);
 
-  float2 registerScale = float(min(w, h)) / float2(w, h);
-  float2 cyanUV = dyeUV + frame.technicolorMisregistration.xy * registerScale;
-  float2 yellowUV = dyeUV + frame.technicolorMisregistration.zw * registerScale;
-  float3 cRGB = max(float3(dye.sample(bilinear, cyanUV).r, color.g, dye.sample(bilinear, yellowUV).b),
+  float2 registerPos = (dyeUV - 0.5) / registerScale;
+  float2 registerTurn = float2(-registerPos.y, registerPos.x);
+  float4 registerWarp = frame.technicolorMisregistrationWarp;
+  float2 cyanUV = dyeUV + (frame.technicolorMisregistration.xy + registerWarp.x * registerTurn
+                           + registerWarp.y * registerPos) * registerScale;
+  float2 yellowUV = dyeUV + (frame.technicolorMisregistration.zw + registerWarp.z * registerTurn
+                             + registerWarp.w * registerPos) * registerScale;
+  float3 cRGB = max(float3(sampleCatmullRom5(dye, bilinear, cyanUV, dyeSize).r,
+                           sampleCatmullRom5(dye, bilinear, dyeUV, dyeSize).g,
+                           sampleCatmullRom5(dye, bilinear, yellowUV, dyeSize).b),
                     float3(0.0));
 
   float amount = dyeDensity(float4(cRGB, 0.0));
@@ -709,7 +783,7 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float hiW  = 0.08 + frame.high * 0.40;
   float midW = 0.08 + frame.mid  * 0.40;
   float loW  = 0.08 + frame.bass * 0.55;
-  float3 bloom = bHi * hiW + bMid * midW + bLo * loW;
+  float3 bloom = (bHi * hiW + bMid * midW + bLo * loW) * frame.bloom;
   c += bloom;
 
   float ceiling = frame.technicolorCeiling;
@@ -737,13 +811,31 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   c *= vignette * vignette * sqrt(vignette);
 
   float3 finalColor = c;
+  float exposure = dot(c, kHalationSensitivity);
+  int4 grainShift = int4(frame.technicolorGrain);
   if (historyValid != 0u) {
-    float3 prev = sqrt(max(historyIn.read(gid).rgb, float3(0.0)));
-    float3 blended = mix(sqrt(c), prev, taaBlend);
-    finalColor = blended * blended;
+    int2 gateStep = int2(frame.technicolorGateJump.zw);
+    int2 prevPos = clamp(int2(gid) + gateStep, int2(0), int2(w, h) - 1);
+    float4 prev = max(historyIn.read(uint2(prevPos)), float4(0.0));
+    prev.rgb /= grain.read(uint2(prevPos + grainShift.zw) & (kFilmGrainSize - 1)).rgb;
+
+    float knee = frame.technicolorHalation.y * frame.technicolorLampGain;
+    float2 haloUV = center + float2(gateStep) / float2(w, h);
+    float spill = halation.sample(bilinear, haloUV).r;
+    float glow = spill * (1.0 - smoothstep(0.25 * knee, max(knee, spill), exposure));
+    float3 tint = mix(kHalationFar, kHalationNear, saturate(2.0 * glow / knee));
+    float room = max(max(spill, knee) - exposure, 0.0) / dot(tint, kHalationSensitivity);
+    c += tint * min(frame.technicolorHalation.x * glow, room);
+
+    float4 blended = mix(sqrt(float4(c, exposure)), sqrt(prev), taaBlend);
+    blended *= blended;
+    finalColor = blended.rgb;
+    exposure = blended.a;
   }
 
-  historyOut.write(float4(finalColor, 1.0), gid);
+  finalColor *= grain.read(uint2(int2(gid) + grainShift.xy) & (kFilmGrainSize - 1)).rgb;
+
+  historyOut.write(float4(finalColor, exposure), gid);
 }
 
 kernel void fluidPsiInit(texture2d<float, access::write> psiOut [[texture(0)]],

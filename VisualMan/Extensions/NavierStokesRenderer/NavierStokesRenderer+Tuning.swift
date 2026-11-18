@@ -13,6 +13,7 @@ extension NavierStokesRenderer {
   static let renderDetail: Float = 0.3
   static let renderJitter: Float = 0.0005
   static let renderThinFade: Float = 0.18
+  static let renderBloomStrength: Float = 0.18
   static let renderCloudBillow: Float = 0.6
   static let renderCloudBillowScale: Float = 7.0
   static let renderCloudBillowRegrowTime: Float = 0.35
@@ -37,9 +38,17 @@ extension NavierStokesRenderer {
   static let renderTechnicolorLampGain: Float = 1.8
   static let renderTechnicolorMaxHeadroom: Float = 2.0
   static let renderTechnicolorHeadroomLamp: Float = 0.5
-  static let renderTechnicolorMisregistrationBase: Float = 0.00035
-  static let renderTechnicolorMisregistrationBass: Float = 0.0021875
-  static let renderTechnicolorMisregistrationHigh: Float = 0.0007
+  static let renderTechnicolorMisregistrationShift: Float = 0.0014
+  static let renderTechnicolorMisregistrationRotation: Float = 0.0005
+  static let renderTechnicolorMisregistrationMagnification: Float = 0.0007
+  static let renderTechnicolorGateWeave: Float = 0.0056
+  static let renderTechnicolorGateWeaveRotation: Float = 0.00125
+  static let renderTechnicolorGateJump: Float = 0.0047
+  static let renderTechnicolorGateJumpRate: Float = 12
+  static let renderTechnicolorHalation: Float = 2.4
+  static let renderTechnicolorHalationKnee: Float = 0.4
+  static let renderTechnicolorGrain: Float = 0.10
+  static let renderTechnicolorGrainRate: Float = 24
 
   static let dyeVelocitySmoothing: Float = 1.0
   static let dyeDiffusionBase: Float = 0.0225
