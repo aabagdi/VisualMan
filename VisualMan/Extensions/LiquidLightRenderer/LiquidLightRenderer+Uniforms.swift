@@ -47,7 +47,6 @@ struct LiquidLightParams {
 struct LiquidSeedParams {
   var simSize: SIMD2<Float>
   var eps: Float
-  var threshold: Float
 }
 
 struct LiquidAdvectParams {

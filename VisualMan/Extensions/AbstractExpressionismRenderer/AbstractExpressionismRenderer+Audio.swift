@@ -19,7 +19,6 @@ extension AbstractExpressionismRenderer {
         resumeSuppressionRemaining = Self.resumeFadeDuration
         envelope = .zero
         slowEnvelope = .zero
-        smoothedBass = 0
         if gap > 2.0 { resumeFadeIn = 0 }
       }
     } else {
@@ -48,9 +47,6 @@ extension AbstractExpressionismRenderer {
 
     let slowA = 1 - exp(-dt / 0.4)
     slowEnvelope += (input - slowEnvelope) * slowA
-
-    let bassA = 1 - exp(-dt / (bass > smoothedBass ? 0.06 : 0.25))
-    smoothedBass += (bass - smoothedBass) * bassA
 
     if resumeFadeIn < 1 {
       resumeFadeIn = min(1, resumeFadeIn + dt / Self.resumeFadeDuration)

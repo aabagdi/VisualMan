@@ -27,7 +27,6 @@ extension AbstractExpressionismRenderer {
 
     envelope = .zero
     slowEnvelope = .zero
-    smoothedBass = 0
 
     lastGesturalTime = -10
     lastWashTime = -10

@@ -98,7 +98,7 @@ extension LiquidLightRenderer {
   func seedPhase(encoder: any MTL4ComputeCommandEncoder, phaseOut: MTLTexture) {
     encoder.setComputePipelineState(seedPipeline)
     argumentTable.setTexture(phaseOut.gpuResourceID, index: 0)
-    let params = LiquidSeedParams(simSize: simSize, eps: Self.interfaceEps, threshold: 0.5)
+    let params = LiquidSeedParams(simSize: simSize, eps: Self.interfaceEps)
     argumentTable.setAddress(writeUniform(params), index: 0)
     dispatch(encoder, width: phaseOut.width, height: phaseOut.height)
   }

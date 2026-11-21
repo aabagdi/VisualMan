@@ -91,7 +91,7 @@ extension GameOfLifeRenderer {
 
     var params = GameOfLifeParams(
       bass: bass,
-      mid: mid,
+      mid: smoothedMid,
       simWidth: UInt32(simWidth),
       simHeight: UInt32(simHeight),
       frameCount: simFrameCount,
@@ -108,15 +108,6 @@ extension GameOfLifeRenderer {
       }
     }
     return (shouldStep, params)
-  }
-
-  func reset() {
-    simFrameCount = 0
-    stepAccumulator = 0
-    lastFrameTime = 0
-    smoothedBass = 0
-    smoothedMid = 0
-    seedInitialState()
   }
 
   func encodeStep(encoder: some MTL4ComputeCommandEncoder,

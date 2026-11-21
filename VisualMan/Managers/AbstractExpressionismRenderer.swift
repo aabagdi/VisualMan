@@ -52,7 +52,6 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var envelope: SIMD3<Float> = .zero
   var slowEnvelope: SIMD3<Float> = .zero
 
-  var smoothedBass: Float = 0
   var lastGesturalTime: Float = -10
   var lastWashTime: Float = -10
   var lastSplatterTime: Float = -10
@@ -285,7 +284,6 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     resumeFadeIn = 0
     envelope = .zero
     slowEnvelope = .zero
-    smoothedBass = 0
     songSeed = Float.random(in: 0..<1000)
     cameraPhase = 0
   }

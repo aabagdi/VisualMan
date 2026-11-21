@@ -9,31 +9,6 @@
 import Metal
 
 extension NavierStokesRenderer {
-  func reset() {
-    time = 0
-    wobblePhase = 0
-    dynamicsWarm = false
-    lastExcitement = 0
-
-    sharedEvent.wait(untilSignaledValue: frameNumber, timeoutMS: 1000)
-
-    pendingTAAHistoryReleases.forEach { residencySet.removeAllocation($0.texture) }
-    pendingTAAHistoryReleases.removeAll()
-    residencySet.commit()
-
-    clearSimulationTextures()
-  }
-
-  func clearSimulationTextures() {
-    runMaintenancePass(wait: false) { encoder in
-      encodeClear(encoder: encoder)
-    }
-    framesSinceReinit = Self.reinitMaxInterval
-    stepSinceReinit = 0
-    framesSinceDyeReinit = Self.dyeMapMaxInterval
-    resetFlowStats()
-  }
-
   func carryOverSimulation(dye oldDye: MTLTexture, velocity oldVelocity: MTLTexture) {
     let scale = SIMD4<Float>(Float(gridWidth) / Float(oldVelocity.width),
                              Float(gridHeight) / Float(oldVelocity.height), 0, 0)

@@ -25,7 +25,6 @@ struct LiquidLightParams {
 struct SeedParams {
   float2 simSize;
   float eps;
-  float threshold;
 };
 
 struct AdvectParams {
