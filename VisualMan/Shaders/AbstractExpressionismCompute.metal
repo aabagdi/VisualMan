@@ -104,6 +104,20 @@ struct AbExStroke {
   float4 animation;
 };
 
+enum class AbExStrokeType : int {
+  gestural     = 0,
+  wash         = 1,
+  splatter     = 2,
+  pollockTrail = 3,
+  knife        = 4,
+  scumble      = 5,
+  line         = 6
+};
+
+inline AbExStrokeType strokeType(constant AbExStroke &s) {
+  return AbExStrokeType(int(s.sizeOpacity.w + 0.5));
+}
+
 inline float3 hash23(float2 p) {
   float3 q = fract(float3(p.x, p.y, p.x + p.y) * float3(0.1031, 0.1030, 0.0973));
   q += dot(q, q.yzx + 33.33);
@@ -535,7 +549,7 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s) {
   return r;
 }
 
-inline StrokeResult evaluateDrip(float2 p, constant AbExStroke &s) {
+inline StrokeResult evaluatePollockTrail(float2 p, constant AbExStroke &s) {
   StrokeResult r; r.coverage = 0; r.heightDelta = 0;
   r.alongNorm = 0; r.acrossT = 0; r.bristleTone = 0; r.radialNorm = 0;
   r.strokeWetness = 0.0;
@@ -543,7 +557,7 @@ inline StrokeResult evaluateDrip(float2 p, constant AbExStroke &s) {
 
   float2 top      = s.posAngle.xy;
   float angle     = s.posAngle.z;
-  float dripLen   = max(s.posAngle.w, 0.02);
+  float trailLen  = max(s.posAngle.w, 0.02);
   float topWidth  = max(s.sizeOpacity.x, 0.003);
   float baseOp    = s.sizeOpacity.y;
   float seed      = s.sizeOpacity.z;
@@ -554,11 +568,11 @@ inline StrokeResult evaluateDrip(float2 p, constant AbExStroke &s) {
   float along = dot(d, dirAlong);
   float across = dot(d, dirAcross);
 
-  float maxOffset = dripLen * 0.13 + topWidth * 2.0;
-  if (along < -dripLen * 0.04 || along > dripLen * 1.04) return r;
+  float maxOffset = trailLen * 0.13 + topWidth * 2.0;
+  if (along < -trailLen * 0.04 || along > trailLen * 1.04) return r;
   if (abs(across) > maxOffset) return r;
 
-  float t = along / dripLen;
+  float t = along / trailLen;
 
   float launchT  = 1.0 - smoothstep(0.0,  0.18, t);
   float landingT = smoothstep(0.82, 1.0,  t);
@@ -581,10 +595,10 @@ inline StrokeResult evaluateDrip(float2 p, constant AbExStroke &s) {
                  + landingWidth * landingT;
   widthMod = clamp(widthMod, 0.25, 1.85);
 
-  float wobbleBase = shaderSimplex2D(float2(t * 1.0, seed * 0.7))      * dripLen * 0.10
-                   + shaderSimplex2D(float2(t * 3.5, seed * 1.3 + 11)) * dripLen * 0.035;
+  float wobbleBase = shaderSimplex2D(float2(t * 1.0, seed * 0.7))      * trailLen * 0.10
+                   + shaderSimplex2D(float2(t * 3.5, seed * 1.3 + 11)) * trailLen * 0.035;
   float launchSprayLateral = (shaderNoise(float2(t * 50.0, seed * 3.7)) - 0.5)
-                              * dripLen * 0.04 * launchT;
+                              * trailLen * 0.04 * launchT;
   float wobble = wobbleBase + launchSprayLateral;
   float dx = across - wobble;
 
@@ -609,8 +623,8 @@ inline StrokeResult evaluateDrip(float2 p, constant AbExStroke &s) {
     float bSeed = seed * (1.7 + float(b) * 2.3);
 
     float bt = 0.55 + hash11(bSeed) * 0.40;
-    float bWobble = shaderSimplex2D(float2(bt * 1.0, seed * 0.7)) * dripLen * 0.08;
-    float2 bc = top + dirAlong * (bt * dripLen) + dirAcross * bWobble;
+    float bWobble = shaderSimplex2D(float2(bt * 1.0, seed * 0.7)) * trailLen * 0.08;
+    float2 bc = top + dirAlong * (bt * trailLen) + dirAcross * bWobble;
 
     float poolBoost = (landingPersonality > 0.0) ? (1.0 + landingPersonality * 0.6) : 1.0;
     float br = topWidth * (0.40 + hash11(bSeed + 1.7) * 0.45) * poolBoost;
@@ -1174,25 +1188,25 @@ kernel void abexPaint(
 
   for (uint k = 0; k < tileStrokeCount && k < ABEX_MAX_STROKES_PER_TILE; k++) {
     int i = int(tileStrokeList[k]);
-    float type = strokes[i].sizeOpacity.w;
+    AbExStrokeType type = strokeType(strokes[i]);
 
-    bool isGestural = (type < 0.5);
-    bool isWash     = (type >= 0.5 && type < 1.5);
-    bool isSplatter = (type >= 1.5 && type < 2.5);
-    bool isDrip     = (type >= 2.5 && type < 3.5);
-    bool isKnife    = (type >= 3.5 && type < 4.5);
-    bool isScumble  = (type >= 4.5 && type < 5.5);
-    bool isLine     = (type >= 5.5);
+    bool isGestural     = (type == AbExStrokeType::gestural);
+    bool isWash         = (type == AbExStrokeType::wash);
+    bool isSplatter     = (type == AbExStrokeType::splatter);
+    bool isPollockTrail = (type == AbExStrokeType::pollockTrail);
+    bool isKnife        = (type == AbExStrokeType::knife);
+    bool isScumble      = (type == AbExStrokeType::scumble);
+    bool isLine         = (type == AbExStrokeType::line);
     bool pearlStroke = (int(floor(strokes[i].color.w)) & 4) != 0;
 
     StrokeResult sr;
-    if      (isGestural) sr = evaluateGestural(p, strokes[i], 1.0 / float(w), hwOwner);
-    else if (isWash)     sr = evaluateWash(p, strokes[i]);
-    else if (isSplatter) sr = evaluateSplatter(p, strokes[i]);
-    else if (isDrip)     sr = evaluateDrip(p, strokes[i]);
-    else if (isKnife)    sr = evaluateKnife(p, strokes[i]);
-    else if (isScumble)  sr = evaluateScumble(p, strokes[i]);
-    else                 sr = evaluateLine(p, strokes[i]);
+    if      (isGestural)     sr = evaluateGestural(p, strokes[i], 1.0 / float(w), hwOwner);
+    else if (isWash)         sr = evaluateWash(p, strokes[i]);
+    else if (isSplatter)     sr = evaluateSplatter(p, strokes[i]);
+    else if (isPollockTrail) sr = evaluatePollockTrail(p, strokes[i]);
+    else if (isKnife)        sr = evaluateKnife(p, strokes[i]);
+    else if (isScumble)      sr = evaluateScumble(p, strokes[i]);
+    else                     sr = evaluateLine(p, strokes[i]);
 
     if (!simd_any(sr.coverage > 0.001)) continue;
 
@@ -1420,10 +1434,10 @@ kernel void abexPaint(
       half effH = max(height, permHeight);
       float resistanceMult = isGestural ? 0.8 : 1.0;
       float resistanceCap;
-      if (isSplatter || isDrip) resistanceCap = 0.0;
-      else if (isScumble)       resistanceCap = 0.0;
-      else if (isGestural)      resistanceCap = 0.04;
-      else                      resistanceCap = 0.08;
+      if (isSplatter || isPollockTrail) resistanceCap = 0.0;
+      else if (isScumble)               resistanceCap = 0.0;
+      else if (isGestural)              resistanceCap = 0.04;
+      else                              resistanceCap = 0.08;
       float resistance     = clamp(float(effH) * resistanceMult, 0.0, resistanceCap);
       float adhesion       = 1.0 - resistance;
 
@@ -1470,7 +1484,7 @@ kernel void abexPaint(
       height += gScrape;
     }
 
-    if (isSplatter || isDrip) {
+    if (isSplatter || isPollockTrail) {
       float brushId = strokes[i].sizeOpacity.z;
       float2 spRel = p - strokes[i].posAngle.xy;
       float n = shaderNoise(spRel * 85.0 + float2(brushId * 7.0, brushId * 13.0));
@@ -1620,12 +1634,12 @@ kernel void abexPaint(
     half depositLoad = cov * clamp(half(sr.strokeWetness), 0.0h, 1.0h);
     if (depositLoad > 0.005h) {
       half absorbencyRate;
-      if      (isWash)     absorbencyRate = 0.10h;
-      else if (isSplatter) absorbencyRate = 0.08h;
-      else if (isDrip)     absorbencyRate = 0.06h;
-      else if (isScumble)  absorbencyRate = 0.05h;
-      else if (isKnife)    absorbencyRate = 0.01h;
-      else                 absorbencyRate = 0.05h;
+      if      (isWash)         absorbencyRate = 0.10h;
+      else if (isSplatter)     absorbencyRate = 0.08h;
+      else if (isPollockTrail) absorbencyRate = 0.06h;
+      else if (isScumble)      absorbencyRate = 0.05h;
+      else if (isKnife)        absorbencyRate = 0.01h;
+      else                     absorbencyRate = 0.05h;
       half availableCapacity = 1.0h - substrate.r;
       half saturationGain = depositLoad * availableCapacity * absorbencyRate;
       substrate.r = saturate(substrate.r + saturationGain);
@@ -1689,9 +1703,9 @@ kernel void abexVelocityDeposit(
 
   for (uint k = 0; k < tileStrokeCount && k < ABEX_MAX_STROKES_PER_TILE; k++) {
     int i = int(tileStrokeList[k]);
-    float type = strokes[i].sizeOpacity.w;
-    bool isGestural = (type < 0.5);
-    bool isKnife    = (type >= 3.5 && type < 4.5);
+    AbExStrokeType type = strokeType(strokes[i]);
+    bool isGestural = (type == AbExStrokeType::gestural);
+    bool isKnife    = (type == AbExStrokeType::knife);
     if (!isKnife && !isGestural) continue;
 
     float2 center = strokes[i].posAngle.xy;

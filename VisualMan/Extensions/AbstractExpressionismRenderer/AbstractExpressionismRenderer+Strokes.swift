@@ -53,7 +53,7 @@ extension AbstractExpressionismRenderer {
                                    ampBase: 0.25, ampJitter: 0.40)
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, AbExStrokeType.gestural.shaderValue),
       color: SIMD4(color.x, color.y, color.z, packColorW(shape: 0, durability: dur)),
       animation: SIMD4(0, 1, 0, curvature)))
     depositFlow(at: gestured.pos, angle: angle, weight: 0.5 + energy * 0.5)
@@ -74,7 +74,7 @@ extension AbstractExpressionismRenderer {
       let bristleSeed = nextSeed() * 100
       strokes.append(AbExStroke(
         posAngle: SIMD4(x, y, angle, halfLen),
-        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 0),
+        sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, AbExStrokeType.gestural.shaderValue),
         color: SIMD4(color.x, color.y, color.z, 0),
         animation: SIMD4(0, 1, 0, 0)))
     } else {
@@ -83,7 +83,7 @@ extension AbstractExpressionismRenderer {
       let bristleSeed = nextSeed() * 100
       strokes.append(AbExStroke(
         posAngle: SIMD4(x, y, 0, radius),
-        sizeOpacity: SIMD4(radius, opacity, bristleSeed, 2),
+        sizeOpacity: SIMD4(radius, opacity, bristleSeed, AbExStrokeType.splatter.shaderValue),
         color: SIMD4(color.x, color.y, color.z, 0),
         animation: SIMD4(0, 1, 0, 0)))
     }
@@ -131,7 +131,7 @@ extension AbstractExpressionismRenderer {
       let bristleSeed = nextSeed() * 100
       strokes.append(AbExStroke(
         posAngle: SIMD4(x, y, angle, length),
-        sizeOpacity: SIMD4(topWidth, opacity, bristleSeed, 3),
+        sizeOpacity: SIMD4(topWidth, opacity, bristleSeed, AbExStrokeType.pollockTrail.shaderValue),
         color: SIMD4(trailColor.x, trailColor.y, trailColor.z, 0),
         animation: SIMD4(0, 1, 0, 0)))
     }
@@ -165,7 +165,7 @@ extension AbstractExpressionismRenderer {
     let color = pickStainColor()
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, AbExStrokeType.wash.shaderValue),
       color: SIMD4(color.x, color.y, color.z, 0),
       animation: SIMD4(0, 1, 0, 0)))
     depositDensity(at: pos, weight: 1.4 * sizeMult)
@@ -188,7 +188,7 @@ extension AbstractExpressionismRenderer {
     let color = pickStainColor()
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 1),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, AbExStrokeType.wash.shaderValue),
       color: SIMD4(color.x, color.y, color.z, 0),
       animation: SIMD4(0, 1, 0, 0)))
     depositDensity(at: pos, weight: 0.6)
@@ -239,7 +239,7 @@ extension AbstractExpressionismRenderer {
                                    ampBase: 0.20, ampJitter: 0.35)
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 4),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, AbExStrokeType.knife.shaderValue),
       color: SIMD4(color.x, color.y, color.z, 0),
       animation: SIMD4(0, 1, 0, curvature)))
     depositFlow(at: pos, angle: angle, weight: 1.0 + energy * 0.4)
@@ -267,7 +267,7 @@ extension AbstractExpressionismRenderer {
     let color = pickColorBiased(at: SIMD2(x, y))
     strokes.append(AbExStroke(
       posAngle: SIMD4(x, y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, 5),
+      sizeOpacity: SIMD4(halfWidth, opacity, bristleSeed, AbExStrokeType.scumble.shaderValue),
       color: SIMD4(color.x, color.y, color.z, 0),
       animation: SIMD4(0, 1, 0, 0)))
     depositDensity(at: SIMD2(x, y), weight: 1.0)

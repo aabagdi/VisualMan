@@ -18,11 +18,25 @@ struct AbExParams {
   var atmosphere: SIMD4<Float>
 }
 
+enum AbExStrokeType: Int {
+  case gestural = 0
+  case wash = 1
+  case splatter = 2
+  case pollockTrail = 3
+  case knife = 4
+  case scumble = 5
+  case line = 6
+
+  var shaderValue: Float { Float(rawValue) }
+}
+
 struct AbExStroke {
   var posAngle: SIMD4<Float>
   var sizeOpacity: SIMD4<Float>
   var color: SIMD4<Float>
   var animation: SIMD4<Float>
+
+  var type: AbExStrokeType { AbExStrokeType(rawValue: Int(sizeOpacity.w)) ?? .gestural }
 }
 
 @MainActor

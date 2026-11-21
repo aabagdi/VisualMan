@@ -25,14 +25,13 @@ extension AbstractExpressionismRenderer {
         overflow.append(s)
         continue
       }
-      let typeRaw = Int(s.sizeOpacity.w)
       let duration: Float
       
-      switch typeRaw {
-      case 4:  duration = Self.knifeAnimationSeconds
-      case 1:  duration = Self.washAnimationSeconds
-      case 5:  duration = Self.scumbleAnimationSeconds
-      default: duration = Self.gesturalAnimationSeconds
+      switch s.type {
+      case .knife:   duration = Self.knifeAnimationSeconds
+      case .wash:    duration = Self.washAnimationSeconds
+      case .scumble: duration = Self.scumbleAnimationSeconds
+      default:       duration = Self.gesturalAnimationSeconds
       }
       
       animatingStrokes.append(AnimatingStroke(
@@ -81,8 +80,7 @@ extension AbstractExpressionismRenderer {
     var freshSmearStrokes = [AbExStroke]()
     let preGestural = generateGesturalCandidates(energy: energy, focus: focus, spread: spread)
     for s in preGestural {
-      let typeRaw = Int(s.sizeOpacity.w)
-      if typeRaw == 0 {
+      if s.type == .gestural {
         freshSmearStrokes.append(s)
       } else {
         strokes.append(s)
@@ -108,8 +106,8 @@ extension AbstractExpressionismRenderer {
 
     appendPollockTrails(to: &strokes, energy: energy)
 
-    let noPearl: Set<Int> = [2, 5]
-    for i in strokes.indices where !noPearl.contains(Int(strokes[i].sizeOpacity.w)) {
+    let noPearl: Set<AbExStrokeType> = [.splatter, .scumble]
+    for i in strokes.indices where !noPearl.contains(strokes[i].type) {
       rollPearlescent(&strokes[i])
     }
     for i in freshSmearStrokes.indices { rollPearlescent(&freshSmearStrokes[i]) }
@@ -143,8 +141,7 @@ extension AbstractExpressionismRenderer {
     var out = [AbExStroke]()
     for anim in animatingStrokes where out.count < Self.maxStrokesPerFrame {
       guard anim.elapsed > anim.previousElapsed else { continue }
-      let typeRaw = Int(anim.stroke.sizeOpacity.w)
-      let isWash = (typeRaw == 1)
+      let isWash = (anim.stroke.type == .wash)
       let ext = isWash ? 0 : Self.animationExtensionSeconds
       let drawDuration = anim.duration - ext
 

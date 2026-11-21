@@ -82,7 +82,7 @@ extension AbstractExpressionismRenderer {
     let dur = pickDurability(permanentChance: 0.12, stickyChance: 0.28)
     return AbExStroke(
       posAngle: SIMD4(x, y, angle, radius),
-      sizeOpacity: SIMD4(burstTypeRoll, opacity, bristleSeed, 2),
+      sizeOpacity: SIMD4(burstTypeRoll, opacity, bristleSeed, AbExStrokeType.splatter.shaderValue),
       color: SIMD4(color.x, color.y, color.z, packColorW(shape: shapeVariant, durability: dur)),
       animation: SIMD4(0, 1, 0, 0))
   }
@@ -148,7 +148,7 @@ extension AbstractExpressionismRenderer {
           strokes.append(AbExStroke(
             posAngle: SIMD4(satX, satY, 0, satRadius),
             sizeOpacity: SIMD4(satTypeRoll, 0.85 + nextSeed() * 0.10,
-                                 bristleSeed, 2),
+                                 bristleSeed, AbExStrokeType.splatter.shaderValue),
             color: color,
             animation: SIMD4(0, 1, 0, 0)))
         }

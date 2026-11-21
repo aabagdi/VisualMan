@@ -108,7 +108,8 @@ extension AbstractExpressionismRenderer {
     let c = pigment.linearRgb
     return AbExStroke(
       posAngle: SIMD4(pos.x, pos.y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, 0.95, gesturalSeed(load, variant: variant), 0),
+      sizeOpacity: SIMD4(halfWidth, 0.95, gesturalSeed(load, variant: variant),
+                         AbExStrokeType.gestural.shaderValue),
       color: SIMD4(c.x, c.y, c.z, 0),
       animation: SIMD4(0, 1, 0, curvature))
   }
@@ -120,7 +121,7 @@ extension AbstractExpressionismRenderer {
     let c = pigment.linearRgb
     return AbExStroke(
       posAngle: SIMD4(pos.x, pos.y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, seed, 1),
+      sizeOpacity: SIMD4(halfWidth, opacity, seed, AbExStrokeType.wash.shaderValue),
       color: SIMD4(c.x, c.y, c.z, 0),
       animation: SIMD4(0, 1, 0, 0))
   }
@@ -132,18 +133,18 @@ extension AbstractExpressionismRenderer {
     let typeRoll: Float = heavy ? 0.94 : 0.50
     return AbExStroke(
       posAngle: SIMD4(pos.x, pos.y, 0, radius),
-      sizeOpacity: SIMD4(typeRoll, 0.95, seed, 2),
+      sizeOpacity: SIMD4(typeRoll, 0.95, seed, AbExStrokeType.splatter.shaderValue),
       color: SIMD4(c.x, c.y, c.z, 0),
       animation: SIMD4(0, 1, 0, 0))
   }
 
-  static func testDrip(at pos: SIMD2<Float>, angle: Float,
-                       length: Float, topWidth: Float,
-                       srgb: SIMD3<Float>, seed: Float) -> AbExStroke {
+  static func testPollockTrail(at pos: SIMD2<Float>, angle: Float,
+                               length: Float, topWidth: Float,
+                               srgb: SIMD3<Float>, seed: Float) -> AbExStroke {
     let c = srgbToLinear(srgb)
     return AbExStroke(
       posAngle: SIMD4(pos.x, pos.y, angle, length),
-      sizeOpacity: SIMD4(topWidth, 0.97, seed, 3),
+      sizeOpacity: SIMD4(topWidth, 0.97, seed, AbExStrokeType.pollockTrail.shaderValue),
       color: SIMD4(c.x, c.y, c.z, 0),
       animation: SIMD4(0, 1, 0, 0))
   }
@@ -155,7 +156,7 @@ extension AbstractExpressionismRenderer {
     let c = pigment.linearRgb
     return AbExStroke(
       posAngle: SIMD4(pos.x, pos.y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, 0.95, seed, 4),
+      sizeOpacity: SIMD4(halfWidth, 0.95, seed, AbExStrokeType.knife.shaderValue),
       color: SIMD4(c.x, c.y, c.z, 0),
       animation: SIMD4(0, 1, 0, curvature))
   }
@@ -167,7 +168,7 @@ extension AbstractExpressionismRenderer {
     let c = pigment.linearRgb
     return AbExStroke(
       posAngle: SIMD4(pos.x, pos.y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, opacity, seed, 5),
+      sizeOpacity: SIMD4(halfWidth, opacity, seed, AbExStrokeType.scumble.shaderValue),
       color: SIMD4(c.x, c.y, c.z, 0),
       animation: SIMD4(0, 1, 0, 0))
   }
@@ -179,7 +180,7 @@ extension AbstractExpressionismRenderer {
     let c = srgbToLinear(SIMD3(grey, grey, grey))
     return AbExStroke(
       posAngle: SIMD4(pos.x, pos.y, angle, halfLen),
-      sizeOpacity: SIMD4(halfWidth, 0.9, seed, 6),
+      sizeOpacity: SIMD4(halfWidth, 0.9, seed, AbExStrokeType.line.shaderValue),
       color: SIMD4(c.x, c.y, c.z, 0),
       animation: SIMD4(0, 1, 0, curvature))
   }
@@ -274,8 +275,8 @@ extension AbstractExpressionismRenderer {
                    pigment: .ultramarineBlue, heavy: false, seed: 79),
     ]),
     PaintTestEvent(time: 7.7, label: "C  Poured trail crosses the stack", strokes: [
-      testDrip(at: SIMD2(-0.02, bandC), angle: 0.9, length: 0.28, topWidth: 0.004,
-               srgb: SIMD3(0.02, 0.02, 0.02), seed: 83),
+      testPollockTrail(at: SIMD2(-0.02, bandC), angle: 0.9, length: 0.28, topWidth: 0.004,
+                       srgb: SIMD3(0.02, 0.02, 0.02), seed: 83),
     ]),
     PaintTestEvent(time: 8.3, label: "C  Charcoal line over everything", strokes: [
       testLine(at: SIMD2(0, bandC), angle: -0.9, halfLen: 0.15, halfWidth: 0.0011,
@@ -338,9 +339,9 @@ extension AbstractExpressionismRenderer {
       paintTestEventIndex += 1
       paintTestStatus = String(format: "%4.1fs  %@", event.time, event.label)
       for s in event.strokes {
-        switch Int(s.sizeOpacity.w) {
-        case 0, 1, 4, 5: animated.append(s)
-        default:         instant.append(s)
+        switch s.type {
+        case .gestural, .wash, .knife, .scumble: animated.append(s)
+        default:                                 instant.append(s)
         }
       }
     }

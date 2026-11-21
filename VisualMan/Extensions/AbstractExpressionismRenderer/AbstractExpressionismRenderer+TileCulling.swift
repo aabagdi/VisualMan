@@ -35,30 +35,30 @@ extension AbstractExpressionismRenderer {
     var halfAlong: Float
     var halfAcross: Float
 
-    switch Int(s.sizeOpacity.w) {
-    case 1:
+    switch s.type {
+    case .wash:
       halfAlong = max(s.posAngle.w, 0.01) * 1.8
       halfAcross = max(s.sizeOpacity.x, 0.01) * 1.8
-    case 2:
+    case .splatter:
       let radius = max(s.posAngle.w, 0.002) * 1.6
       let isElongated = (Int(floor(s.color.w)) & 3) == 1
       halfAlong = isElongated ? radius / 0.22 : radius
       halfAcross = radius
-    case 3:
-      let dripLen = max(s.posAngle.w, 0.02)
+    case .pollockTrail:
+      let trailLen = max(s.posAngle.w, 0.02)
       let topWidth = max(s.sizeOpacity.x, 0.003)
-      alongOffset = dripLen * 0.5
-      halfAlong = dripLen * 0.54
-      halfAcross = dripLen * 0.13 + topWidth * 2.0
-    case 5:
+      alongOffset = trailLen * 0.5
+      halfAlong = trailLen * 0.54
+      halfAcross = trailLen * 0.13 + topWidth * 2.0
+    case .scumble:
       halfAlong = max(s.posAngle.w, 0.01) * 1.05
       halfAcross = max(s.sizeOpacity.x, 0.01) * 1.05
-    case 6:
+    case .line:
       let halfLen = max(s.posAngle.w, 0.01)
       let halfWd = max(s.sizeOpacity.x, 0.001)
       halfAlong = halfLen * 1.05
       halfAcross = halfWd * 3.7 + abs(s.animation.w) * halfLen * 0.35
-    default:
+    case .gestural, .knife:
       let halfLen = max(s.posAngle.w, 0.01)
       let halfWd = max(s.sizeOpacity.x, 0.002)
       let w_curve = s.animation.w

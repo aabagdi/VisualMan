@@ -190,14 +190,8 @@ extension AbstractExpressionismRenderer {
   }
 
   private func splitStrokesByPhase(_ all: [AbExStroke]) -> SplitStrokes {
-    let deposit = all.filter {
-      let typeRaw = Int($0.sizeOpacity.w)
-      return typeRaw != 0 && typeRaw != 4
-    }
-    let smear = all.filter {
-      let typeRaw = Int($0.sizeOpacity.w)
-      return typeRaw == 0 || typeRaw == 4
-    }
+    let deposit = all.filter { $0.type != .gestural && $0.type != .knife }
+    let smear = all.filter { $0.type == .gestural || $0.type == .knife }
     return SplitStrokes(deposit: deposit, smear: smear)
   }
 

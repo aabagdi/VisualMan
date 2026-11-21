@@ -43,7 +43,7 @@ extension AbstractExpressionismRenderer {
                          color c: SIMD3<Float>, seed: Float) -> AbExStroke {
     AbExStroke(
       posAngle: SIMD4(pos.x, pos.y, 0, radius),
-      sizeOpacity: SIMD4(0.50, 0.98, seed, 2),
+      sizeOpacity: SIMD4(0.50, 0.98, seed, AbExStrokeType.splatter.shaderValue),
       color: SIMD4(c.x, c.y, c.z, 2),
       animation: SIMD4(0, 1, 0, 0))
   }
