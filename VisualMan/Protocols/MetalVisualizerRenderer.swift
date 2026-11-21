@@ -30,7 +30,6 @@ protocol MetalVisualizerRenderer: AnyObject {
   
   func encodeFrame(bass: Float, mid: Float, high: Float, drawableWidth: Int, drawableHeight: Int) -> MTLTexture?
   func commitCompute()
-  func reset()
   func prepareForResume()
   func setDisplayHeadroom(_ headroom: Float)
 }
@@ -40,7 +39,6 @@ extension MetalVisualizerRenderer {
     argumentTables[Int(frameNumber % Self.maxFramesInFlight)]
   }
   
-  func reset() {}
   func prepareForResume() {}
   func setDisplayHeadroom(_ headroom: Float) {}
   
