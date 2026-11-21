@@ -41,9 +41,10 @@ extension DSPProcessor {
     static let logPresenceHigh: Float = log10(presenceHighFrequency)
     static let logPresenceMid: Float = (logPresenceLow + logPresenceHigh) / 2.0
     static let logPresenceHalfWidth: Float = (logPresenceHigh - logPresenceLow) / 2.0
+    static let magnitudeScaleDB: Float = 20.0 * log10(2.0 / Float(fftSize))
   }
   
-  func rebuildAWeightTable(sampleRate: Float) {
+  func rebuildWeightingDBTable(sampleRate: Float) {
     let binFrequencyWidth = sampleRate / Float(Constants.fftSize)
     
     let c1: Float = 12194.217 * 12194.217
@@ -69,7 +70,7 @@ extension DSPProcessor {
       } else if frequency <= 10 {
         aWeight = -50.0
       }
-      aWeightTable[i] = pow(10.0, aWeight / 20.0)
+      weightingDBTable[i] = aWeight + Constants.magnitudeScaleDB + Constants.dbOffset
     }
   }
   
@@ -78,7 +79,6 @@ extension DSPProcessor {
     let endBin: Int
     let fracBinLow: Float
     let fracBinHigh: Float
-    let logCenter: Float
   }
 
   func rebuildBarBinRanges(sampleRate: Float) {
@@ -97,16 +97,16 @@ extension DSPProcessor {
       let endBin = max(startBin + 1, min(Int(fracBinHigh), 1024))
       cachedBarBinRanges[i] = BarBinRange(
         startBin: startBin, endBin: endBin,
-        fracBinLow: fracBinLow, fracBinHigh: fracBinHigh,
-        logCenter: (logFreqLow + logFreqHigh) / 2.0
+        fracBinLow: fracBinLow, fracBinHigh: fracBinHigh
       )
+      barBoostTable[i] = frequencyBoost(logCenter: (logFreqLow + logFreqHigh) / 2.0) * Constants.tanhScale
     }
   }
 
   func createVisualizerBars(from fftData: borrowing [1024 of Float]) -> [32 of Float] {
     var bars = [32 of Float](repeating: 0.0)
 
-    return fftData.withUnsafeBorrowedElementPointer { fft in
+    fftData.withUnsafeBorrowedElementPointer { fft in
       for i in 0..<Constants.barCount {
         let range = cachedBarBinRanges[i]
         let count = vDSP_Length(range.endBin - range.startBin)
@@ -127,30 +127,32 @@ extension DSPProcessor {
           vDSP_meanv(fft + range.startBin, 1, &avgMag, count)
         }
 
-        let rawMag = avgMag * Constants.avgWeight + maxMag * Constants.maxWeight
-        bars[i] = applyFrequencyBoosts(rawMag, logCenter: range.logCenter)
-
-        bars[i] = tanh(bars[i] * Constants.tanhScale)
-        bars[i] = max(0, min(1, bars[i]))
+        bars[i] = avgMag * Constants.avgWeight + maxMag * Constants.maxWeight
       }
-      return bars
     }
+
+    bars.withUnsafeElementPointer { b in
+      barBoostTable.withUnsafeElementPointer { boost in
+        var count = Int32(Constants.barCount)
+        vDSP_vmul(b, 1, boost, 1, b, 1, vDSP_Length(Constants.barCount))
+        vvtanhf(b, b, &count)
+      }
+    }
+    return bars
   }
   
-  private func applyFrequencyBoosts(_ magnitude: Float, logCenter: Float) -> Float {
-    var result = magnitude
+  private func frequencyBoost(logCenter: Float) -> Float {
+    var result: Float = 1.0
 
     if logCenter < Constants.logBoostCeiling {
       let ratio = (Constants.logBoostCeiling - logCenter)
                 / (Constants.logBoostCeiling - Constants.logMinFreq)
-      let boost = 1.0 + Constants.lowFrequencyBoostFactor * ratio
-      result *= boost
+      result *= 1.0 + Constants.lowFrequencyBoostFactor * ratio
     }
 
     if logCenter >= Constants.logPresenceLow && logCenter <= Constants.logPresenceHigh {
       let distance = abs(logCenter - Constants.logPresenceMid) / Constants.logPresenceHalfWidth
-      let boost = 1.0 + Constants.presenceBoostFactor * (1.0 - distance * distance)
-      result *= boost
+      result *= 1.0 + Constants.presenceBoostFactor * (1.0 - distance * distance)
     }
 
     return result

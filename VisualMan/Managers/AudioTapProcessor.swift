@@ -46,9 +46,13 @@ final class AudioTapProcessor: Sendable {
     ringLock.withLockUnchecked {
       monoScratch.withUnsafeElementPointer { dst in
         var scale: Float = 1.0 / Float(channelCount)
-        vDSP_vsmul(channels[0] + skip, 1, &scale, dst, 1, vDSP_Length(n))
-        for c in 1..<channelCount {
-          vDSP_vsma(channels[c] + skip, 1, &scale, dst, 1, dst, 1, vDSP_Length(n))
+        if channelCount == 2 {
+          vDSP_vasm(channels[0] + skip, 1, channels[1] + skip, 1, &scale, dst, 1, vDSP_Length(n))
+        } else {
+          vDSP_vsmul(channels[0] + skip, 1, &scale, dst, 1, vDSP_Length(n))
+          for c in 1..<channelCount {
+            vDSP_vsma(channels[c] + skip, 1, &scale, dst, 1, dst, 1, vDSP_Length(n))
+          }
         }
         let buf = UnsafeBufferPointer(start: dst, count: n)
         writeToRing(buf, sampleRate: sampleRate)

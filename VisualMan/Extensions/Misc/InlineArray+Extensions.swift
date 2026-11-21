@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 3/10/26.
 //
 
+import Accelerate
 import Foundation
 
 extension InlineArray: @retroactive Equatable where Element: Equatable {
@@ -27,27 +28,27 @@ extension InlineArray<1024, Float> {
   }
   
   var midLevel: Float {
-    var midResult: Float = 0.0
-    var midMax: Float = 0.0
-    for i in FrequencyBands.midRange {
-      let currentLevel = self[i]
-      midMax = max(midMax, currentLevel)
-      midResult += currentLevel
+    withUnsafeBorrowedElementPointer { levels in
+      let band = levels + FrequencyBands.midRange.lowerBound
+      let count = vDSP_Length(FrequencyBands.midRange.count)
+      var midAvg: Float = 0.0
+      var midMax: Float = 0.0
+      vDSP_meanv(band, 1, &midAvg, count)
+      vDSP_maxv(band, 1, &midMax, count)
+      return midAvg * 0.5 + midMax * 0.5
     }
-    let midAvg = midResult / Float(FrequencyBands.midRange.count)
-    return midAvg * 0.5 + midMax * 0.5
   }
   
   var highLevel: Float {
-    var highResult: Float = 0.0
-    var highMax: Float = 0.0
-    for i in FrequencyBands.highRange {
-      let currentLevel = self[i]
-      highMax = max(highMax, currentLevel)
-      highResult += currentLevel
+    withUnsafeBorrowedElementPointer { levels in
+      let band = levels + FrequencyBands.highRange.lowerBound
+      let count = vDSP_Length(FrequencyBands.highRange.count)
+      var highAvg: Float = 0.0
+      var highMax: Float = 0.0
+      vDSP_meanv(band, 1, &highAvg, count)
+      vDSP_maxv(band, 1, &highMax, count)
+      return highMax * 0.7 + highAvg * 0.3
     }
-    let highAvg = highResult / Float(FrequencyBands.highRange.count)
-    return highMax * 0.7 + highAvg * 0.3
   }
 }
 

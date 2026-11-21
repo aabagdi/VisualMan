@@ -26,10 +26,11 @@ actor DSPProcessor {
   private var hannWindow: [2048 of Float] = .init(repeating: 0.0)
   private var cachedSampleRate: Float = 0.0
   
-  var aWeightTable: [1024 of Float] = .init(repeating: 0.0)
+  var weightingDBTable: [1024 of Float] = .init(repeating: 0.0)
   var cachedBarBinRanges: [32 of BarBinRange] = .init(
-    repeating: BarBinRange(startBin: 0, endBin: 1, fracBinLow: 0, fracBinHigh: 0, logCenter: 0)
+    repeating: BarBinRange(startBin: 0, endBin: 1, fracBinLow: 0, fracBinHigh: 0)
   )
+  var barBoostTable: [32 of Float] = .init(repeating: 0.0)
   
   private var ringBuffer: [2048 of Float] = .init(repeating: 0.0)
   private var ringWriteIndex: Int = 0
@@ -40,8 +41,7 @@ actor DSPProcessor {
   private var imagIn: [1024 of Float] = .init(repeating: 0.0)
   private var realOut: [1024 of Float] = .init(repeating: 0.0)
   private var imagOut: [1024 of Float] = .init(repeating: 0.0)
-  private var magnitudes: [1024 of Float] = .init(repeating: 0.0)
-  private var weightedMagnitudes: [1024 of Float] = .init(repeating: 0.0)
+  private var powerSpectrum: [1024 of Float] = .init(repeating: 0.0)
   private var normalizedSpectrum: [1024 of Float] = .init(repeating: 0.0)
   private var waveformBuffer: [1024 of Float] = .init(repeating: 0.0)
 
@@ -73,8 +73,7 @@ actor DSPProcessor {
     imagIn = [1024 of Float](repeating: 0.0)
     realOut = [1024 of Float](repeating: 0.0)
     imagOut = [1024 of Float](repeating: 0.0)
-    magnitudes = [1024 of Float](repeating: 0.0)
-    weightedMagnitudes = [1024 of Float](repeating: 0.0)
+    powerSpectrum = [1024 of Float](repeating: 0.0)
     normalizedSpectrum = [1024 of Float](repeating: 0.0)
     waveformBuffer = [1024 of Float](repeating: 0.0)
     gainHistory = [30 of Float](repeating: 0.0)
@@ -89,7 +88,7 @@ actor DSPProcessor {
     writeToRing(samples)
 
     captureWaveform()
-    computeFFTMagnitudes()
+    computePowerSpectrum()
     
     normalizeToLogScale(sampleRate: sampleRate)
     
@@ -149,17 +148,16 @@ actor DSPProcessor {
     }
   }
 
-  private func computeFFTMagnitudes() {
+  private func computePowerSpectrum() {
     let splitPoint = ringWriteIndex
     ringBuffer.withUnsafeElementPointer { ring in
       windowBuffer.withUnsafeElementPointer { wb in
-        let tailCount = Constants.fftSize - splitPoint
-        wb.update(from: ring + splitPoint, count: tailCount)
-        if splitPoint > 0 {
-          (wb + tailCount).update(from: ring, count: splitPoint)
-        }
         hannWindow.withUnsafeElementPointer { hann in
-          vDSP_vmul(wb, 1, hann, 1, wb, 1, vDSP_Length(Constants.fftSize))
+          let tailCount = Constants.fftSize - splitPoint
+          vDSP_vmul(ring + splitPoint, 1, hann, 1, wb, 1, vDSP_Length(tailCount))
+          if splitPoint > 0 {
+            vDSP_vmul(ring, 1, hann + tailCount, 1, wb + tailCount, 1, vDSP_Length(splitPoint))
+          }
         }
       }
     }
@@ -190,50 +188,35 @@ actor DSPProcessor {
     
     realOut.withUnsafeElementPointer { ro in
       imagOut.withUnsafeElementPointer { io in
-        magnitudes.withUnsafeElementPointer { mag in
+        powerSpectrum.withUnsafeElementPointer { power in
           var complex = DSPSplitComplex(realp: ro, imagp: io)
-          vDSP_zvabs(&complex, 1, mag, 1, vDSP_Length(Constants.spectrumSize))
+          vDSP_zvmags(&complex, 1, power, 1, vDSP_Length(Constants.spectrumSize))
         }
       }
-    }
-    
-    var scaleFactor: Float = 2.0 / Float(Constants.fftSize)
-    magnitudes.withUnsafeElementPointer { mag in
-      vDSP_vsmul(mag, 1, &scaleFactor, mag, 1, vDSP_Length(Constants.spectrumSize))
     }
   }
   
   private func normalizeToLogScale(sampleRate: Float) {
     if sampleRate != cachedSampleRate {
-      rebuildAWeightTable(sampleRate: sampleRate)
+      rebuildWeightingDBTable(sampleRate: sampleRate)
       rebuildBarBinRanges(sampleRate: sampleRate)
       cachedSampleRate = sampleRate
     }
     
-    magnitudes.withUnsafeElementPointer { mag in
-      aWeightTable.withUnsafeElementPointer { aw in
-        weightedMagnitudes.withUnsafeElementPointer { wm in
-          var floor: Float = 1e-10
-          vDSP_vsadd(mag, 1, &floor, wm, 1, vDSP_Length(Constants.spectrumSize))
-          vDSP_vmul(wm, 1, aw, 1, wm, 1, vDSP_Length(Constants.spectrumSize))
+    powerSpectrum.withUnsafeElementPointer { power in
+      weightingDBTable.withUnsafeElementPointer { weighting in
+        normalizedSpectrum.withUnsafeElementPointer { lm in
+          var ref: Float = 1.0
+          let specLen = vDSP_Length(Constants.spectrumSize)
+          vDSP_vdbcon(power, 1, &ref, lm, 1, specLen, 0)
+
+          var invRange: Float = 1.0 / Constants.dbRange
+          vDSP_vasm(lm, 1, weighting, 1, &invRange, lm, 1, specLen)
+
+          var low: Float = 0.0
+          var high: Float = 1.0
+          vDSP_vclip(lm, 1, &low, &high, lm, 1, specLen)
         }
-      }
-    }
-    
-    weightedMagnitudes.withUnsafeElementPointer { wm in
-      normalizedSpectrum.withUnsafeElementPointer { lm in
-        var ref: Float = 1.0
-        let specLen = vDSP_Length(Constants.spectrumSize)
-        vDSP_vdbcon(wm, 1, &ref, lm, 1, specLen, 1)
-
-        var offset: Float = Constants.dbOffset
-        vDSP_vsadd(lm, 1, &offset, lm, 1, specLen)
-        var range: Float = Constants.dbRange
-        vDSP_vsdiv(lm, 1, &range, lm, 1, specLen)
-
-        var low: Float = 0.0
-        var high: Float = 1.0
-        vDSP_vclip(lm, 1, &low, &high, lm, 1, specLen)
       }
     }
   }
@@ -254,8 +237,8 @@ actor DSPProcessor {
   
   private func updateAutomaticGainControl(bars: borrowing [32 of Float], dt: Float) {
     var maxBar: Float = 0
-    for i in 0..<Constants.barCount {
-      maxBar = max(maxBar, bars[i])
+    bars.withUnsafeBorrowedElementPointer { b in
+      vDSP_maxv(b, 1, &maxBar, vDSP_Length(Constants.barCount))
     }
 
     let safeDt = max(dt, 1e-4)
