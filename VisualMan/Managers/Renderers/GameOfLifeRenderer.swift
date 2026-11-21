@@ -180,20 +180,22 @@ final class GameOfLifeRenderer: MetalVisualizerRenderer {
   }
 
   func ensureSimTextures(drawableWidth: Int, drawableHeight: Int) {
-    guard simA == nil && simB == nil else { return }
-
-    if let old = simA { residencySet.removeAllocation(old) }
-    if let old = simB { residencySet.removeAllocation(old) }
-
     let longScreen = max(drawableWidth, drawableHeight)
     let shortScreen = min(drawableWidth, drawableHeight)
+    guard longScreen > 0 else { return }
     let aspect = Float(shortScreen) / Float(longScreen)
     let shortAxis = max(Self.minShortAxisCells,
                         Int((Float(Self.longAxisCells) * aspect).rounded()))
 
-    let isLandscape = drawableWidth > drawableHeight
-    simWidth = isLandscape ? Self.longAxisCells : shortAxis
-    simHeight = isLandscape ? shortAxis : Self.longAxisCells
+    if simA != nil, simB != nil, simWidth == shortAxis, simHeight == Self.longAxisCells { return }
+
+    if let old = simA { pendingTextureReleases.append((frame: frameNumber, texture: old)) }
+    if let old = simB { pendingTextureReleases.append((frame: frameNumber, texture: old)) }
+    simA = nil
+    simB = nil
+
+    simWidth = shortAxis
+    simHeight = Self.longAxisCells
 
     guard let textures = Self.createSimTextures(device: device, width: simWidth, height: simHeight) else {
       Self.logger.error("Failed to create adaptive sim textures")

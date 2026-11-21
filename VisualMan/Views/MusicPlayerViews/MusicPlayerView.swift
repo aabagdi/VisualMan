@@ -11,7 +11,6 @@ import Dependencies
 struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
   @State private var isTapped: Bool = false
-  @State private var snapshotter = VisualizerSnapshotter()
   @State private var showScreenshotToast = false
   @State private var toastDismissTask: Task<Void, Never>?
 
@@ -20,6 +19,8 @@ struct MusicPlayerView: View {
   @Dependency(AudioPlaylistManager.self) private var playlistManager
   @Environment(VisualizerRendererCache.self) private var rendererCache
   @Dependency(\.continuousClock) private var clock
+  @Dependency(VisualizerSnapshotter.self) private var snapshotter
+  @Dependency(ExternalDisplayManager.self) private var externalDisplay
   
   private let _audioSources: [any AudioSource]
   private let _startingIndex: Int
@@ -41,10 +42,16 @@ struct MusicPlayerView: View {
   
   var body: some View {
     ZStack {
-      AudioReactiveVisualizerLayer(
-        currentVisualizer: visualizerSelection.current,
-        albumArt: currentAudioSource?.albumArt
-      )
+      Group {
+        if externalDisplay.isConnected {
+          ExternalDisplayPlaceholderView(albumArt: currentAudioSource?.albumArt)
+        } else {
+          AudioReactiveVisualizerLayer(
+            currentVisualizer: visualizerSelection.current,
+            albumArt: currentAudioSource?.albumArt
+          )
+        }
+      }
       .ignoresSafeArea()
       .onTapGesture {
         withAnimation(.easeInOut) {
@@ -71,6 +78,7 @@ struct MusicPlayerView: View {
         .allowsHitTesting(false)
     }
     .toolbar(.hidden, for: .tabBar)
+    .modifier(ExternalDisplayAccessory())
     .environment(snapshotter)
     .onAppear {
       viewModel.start(audioSources: _audioSources, startingIndex: _startingIndex)
@@ -189,6 +197,30 @@ struct MusicPlayerView: View {
   #endif
 }
 
+private struct ExternalDisplayPlaceholderView: View {
+  let albumArt: UIImage?
+
+  var body: some View {
+    Color.black
+      .overlay {
+        if let albumArt {
+          Image(uiImage: albumArt)
+            .resizable()
+            .scaledToFill()
+            .blur(radius: 40)
+            .opacity(0.5)
+        }
+      }
+      .overlay {
+        Label("Audio output source", systemImage: "airplay.audio")
+          .font(.title3)
+          .fontWeight(.semibold)
+          .foregroundStyle(.white.opacity(0.8))
+      }
+      .clipped()
+  }
+}
+
 private struct AudioReactiveVisualizerLayer: View {
   let currentVisualizer: VMVisualizer
   let albumArt: UIImage?
@@ -247,7 +279,7 @@ private struct PlayerControlsLayer: View {
         }
       }
       .frame(height: 60)
-      .padding()
+      .padding(.horizontal)
 
       HStack {
         Button {
@@ -282,7 +314,12 @@ private struct PlayerControlsLayer: View {
         .padding()
       }
       .contentShape(Rectangle())
-      .padding()
+      .padding(.horizontal)
+
+      AudioRoutePickerView(tintColor: UIColor(normalFillColor))
+        .frame(width: 30, height: 30)
+        .accessibilityLabel("Audio Output")
+        .padding(.bottom)
     }
     .background(
       LinearGradient(

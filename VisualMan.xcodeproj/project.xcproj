@@ -94,7 +94,7 @@
         "INFOPLIST_KEY_MetalCaptureEnabled": "NO",
         "INFOPLIST_KEY_NSAppleMusicUsageDescription": "This app requires access to your local music library and files to play audio and create audio visualizers. No data is collected.",
         "INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription": "VisualMan saves visualizer screenshots to your photo library.",
-        "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
+        "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "NO",
         "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
         "INFOPLIST_KEY_UILaunchScreen_Generation": "YES",
         "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",

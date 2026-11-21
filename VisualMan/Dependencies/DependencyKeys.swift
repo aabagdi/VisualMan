@@ -22,3 +22,19 @@ extension AudioPlaylistManager: DependencyKey {
 extension MusicLibraryAccessManager: DependencyKey {
   static var liveValue: MusicLibraryAccessManager { MusicLibraryAccessManager() }
 }
+
+extension ExternalDisplayManager: DependencyKey {
+  static var liveValue: ExternalDisplayManager { ExternalDisplayManager() }
+}
+
+extension VisualizerSelection: DependencyKey {
+  static var liveValue: VisualizerSelection { VisualizerSelection() }
+}
+
+extension VisualizerRendererCache: DependencyKey {
+  static var liveValue: VisualizerRendererCache { VisualizerRendererCache() }
+}
+
+extension VisualizerSnapshotter: DependencyKey {
+  static var liveValue: VisualizerSnapshotter { VisualizerSnapshotter() }
+}

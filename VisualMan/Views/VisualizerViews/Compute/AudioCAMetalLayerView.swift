@@ -179,7 +179,9 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
     private func startDisplayLinkIfNeeded() {
       guard displayLink == nil else { return }
-      let link = CADisplayLink(target: self, selector: #selector(onDisplayLink))
+      let screen = hostView?.window?.windowScene?.screen
+      let link = screen?.displayLink(withTarget: self, selector: #selector(onDisplayLink))
+        ?? CADisplayLink(target: self, selector: #selector(onDisplayLink))
       link.preferredFrameRateRange = makeFrameRateRange()
       link.add(to: .main, forMode: .common)
       self.displayLink = link

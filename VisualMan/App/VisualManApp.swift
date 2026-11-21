@@ -12,9 +12,9 @@ import Dependencies
 @main
 struct VisualManApp: App {
   @State private var showLowPowerAlert = false
-  @State private var rendererCache = VisualizerRendererCache()
 
   @Dependency(MusicLibraryAccessManager.self) private var musicLibraryManager
+  @Dependency(VisualizerRendererCache.self) private var rendererCache
 
   var body: some Scene {
     WindowGroup {
@@ -27,6 +27,16 @@ struct VisualManApp: App {
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
           showLowPowerAlert = ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
+        // TEMP external display diagnostics
+        .onReceive(NotificationCenter.default.publisher(for: UIScene.willConnectNotification)) { note in
+          let scene = note.object as? UIScene
+          print("[ExternalDisplay] scene willConnect role=\(scene?.session.role.rawValue ?? "nil") delegate=\(String(describing: scene?.delegate))")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+          let roles = UIApplication.shared.connectedScenes.map { $0.session.role.rawValue }
+          let config = Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest") ?? "missing"
+          print("[ExternalDisplay] active; scenes=\(roles) manifest=\(config)")
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
           rendererCache.purge()

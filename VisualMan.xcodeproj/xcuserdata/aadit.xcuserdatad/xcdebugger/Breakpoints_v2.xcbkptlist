@@ -48,30 +48,12 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 17fe83941522a9ef"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "debug::abort(char const*)"
-                  moduleName = "libsystem_sanitizers.dylib"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - cc42baac7bbdeefe"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
                   symbolName = "abort.344"
                   moduleName = "libsystem_kernel.dylib"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 338aae03933fd8b5"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[BSActionUsageViolation abort]"
-                  moduleName = "BaseBoard"
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
@@ -93,33 +75,6 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 9f11ade6bc10094"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[BWDeferredCaptureContainer abort]"
-                  moduleName = "CMCapture"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 54ed0afbb535fd39"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
-                  moduleName = "WebKitLegacy"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 9aa96a930ee8a810"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::FileSystemWritableFileStreamSink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 1a5114caa01c5a4f"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
@@ -129,56 +84,11 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 7a7c421dfe0be272"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::VideoTrackGenerator::Sink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 5b24b37daf2d3ab3"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
                   symbolName = "WebCore::PaymentRequest::abort(WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - f903c634dbf8b76f"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::WritableStreamSink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - ed2ccaf5acc032d5"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::CrossRealmWritableStreamSink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 3df4ff65c09e75e0"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::WebTransportSendStreamSink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 245b283ddc401db0"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::InternalWritableStream::abort(JSC::JSGlobalObject&amp;, JSC::JSValue)"
                   moduleName = "WebCore"
                   usesParentBreakpointCondition = "Yes">
                </Location>
@@ -201,29 +111,11 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - c98abbcaa8fe2d30"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 812347f0f24d6e70"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
                   symbolName = "WebCore::BackgroundFetch::Record::abort()"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 6198cfebe5611d2d"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::BackgroundFetchRegistration::abort(WebCore::ScriptExecutionContext&amp;, WebCore::DOMPromiseDeferred&lt;WebCore::IDLBoolean&gt;&amp;&amp;)"
                   moduleName = "WebCore"
                   usesParentBreakpointCondition = "Yes">
                </Location>
@@ -237,29 +129,11 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - f2581f32420dffc0"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::JSWritableStream::abort(JSC::JSGlobalObject&amp;, JSC::CallFrame&amp;)"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - ed79f16fa8aadfa5"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
                   symbolName = "WebCore::SpeechRecognizer::abort(std::__1::optional&lt;WebCore::SpeechRecognitionError&gt;&amp;&amp;)"
-                  moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 145be79ee1394d13"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "WebCore::JSWritableStreamDefaultWriter::abort(JSC::JSGlobalObject&amp;, JSC::CallFrame&amp;)"
                   moduleName = "WebCore"
                   usesParentBreakpointCondition = "Yes">
                </Location>
@@ -297,15 +171,6 @@
                   continueAfterRunningActions = "No"
                   symbolName = "-[WebSpeechRecognizerTaskMock abort]"
                   moduleName = "WebCore"
-                  usesParentBreakpointCondition = "Yes">
-               </Location>
-               <Location
-                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 5d01d7daa091fc52"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "-[FTCinematicHighPriorityTrackerState abort]"
-                  moduleName = "FusionTracker"
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
@@ -453,6 +318,141 @@
                   usesParentBreakpointCondition = "Yes">
                </Location>
                <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 17fe83941522a9ef"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "debug::abort(char const*)"
+                  moduleName = "libsystem_sanitizers.dylib"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 338aae03933fd8b5"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[BSActionUsageViolation abort]"
+                  moduleName = "BaseBoard"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 9f11ade6bc10094"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[BWDeferredCaptureContainer abort]"
+                  moduleName = "CMCapture"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 54ed0afbb535fd39"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
+                  moduleName = "WebKitLegacy"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 9aa96a930ee8a810"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::FileSystemWritableFileStreamSink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 7a7c421dfe0be272"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::VideoTrackGenerator::Sink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - f903c634dbf8b76f"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::WritableStreamSink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - ed2ccaf5acc032d5"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::CrossRealmWritableStreamSink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 3df4ff65c09e75e0"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::WebTransportSendStreamSink::abort(WebCore::JSDOMGlobalObject&amp;, JSC::JSValue, WebCore::DOMPromiseDeferred&lt;void&gt;&amp;&amp;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 245b283ddc401db0"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::InternalWritableStream::abort(JSC::JSGlobalObject&amp;, JSC::JSValue)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - c98abbcaa8fe2d30"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::DummySpeechRecognitionProvider::DummySpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 6198cfebe5611d2d"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::BackgroundFetchRegistration::abort(WebCore::ScriptExecutionContext&amp;, WebCore::DOMPromiseDeferred&lt;WebCore::IDLBoolean&gt;&amp;&amp;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - f2581f32420dffc0"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::JSWritableStream::abort(JSC::JSGlobalObject&amp;, JSC::CallFrame&amp;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 145be79ee1394d13"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "WebCore::JSWritableStreamDefaultWriter::abort(JSC::JSGlobalObject&amp;, JSC::CallFrame&amp;)"
+                  moduleName = "WebCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 5d01d7daa091fc52"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[FTCinematicHighPriorityTrackerState abort]"
+                  moduleName = "FusionTracker"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
                   uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - 413f0640142450f5"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
@@ -468,6 +468,24 @@
                   continueAfterRunningActions = "No"
                   symbolName = "WebKit::WebSpeechRecognitionConnection::abort(WTF::ObjectIdentifierGeneric&lt;WebCore::SpeechRecognitionConnectionClientIdentifierType, WTF::ObjectIdentifierMainThreadAccessTraits&gt;)"
                   moduleName = "WebKit"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - ed1621498f0dddd1"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[MFSMTPConnection abort]"
+                  moduleName = "Message"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+               <Location
+                  uuid = "BDE2D365-2ADF-4DE8-8FCE-4AE4895D3569 - b328b16976b5f494"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "-[AXDragSession abort]"
+                  moduleName = "AccessibilityUIUtilities"
                   usesParentBreakpointCondition = "Yes">
                </Location>
             </Locations>

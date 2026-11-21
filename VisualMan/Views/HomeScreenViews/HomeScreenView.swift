@@ -12,7 +12,6 @@ internal import UniformTypeIdentifiers
 private struct NowPlayingDestination: Hashable {}
 
 struct HomeScreenView: View {
-  @State private var visualizerSelection = VisualizerSelection()
   @State private var isShowingFileImporter = false
   @State private var selectedAudioSource: FileAudioSource?
   @State private var isShowingFilePlayer = false
@@ -22,6 +21,7 @@ struct HomeScreenView: View {
   @Dependency(AudioEngineManager.self) private var audioManager
   @Dependency(MusicLibraryAccessManager.self) private var library
   @Dependency(AudioPlaylistManager.self) private var playlistManager
+  @Dependency(VisualizerSelection.self) private var visualizerSelection
   
   var body: some View {
     NavigationStack {
