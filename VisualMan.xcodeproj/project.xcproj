@@ -104,7 +104,7 @@
           "$(inherited)",
           "@executable_path/Frameworks",
         ],
-        "MARKETING_VERSION": "1.11",
+        "MARKETING_VERSION": "1.12",
         "MTLLINKER_FLAGS": "",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.aabagdi.VisualMan",
         "PRODUCT_NAME": "$(TARGET_NAME)",
