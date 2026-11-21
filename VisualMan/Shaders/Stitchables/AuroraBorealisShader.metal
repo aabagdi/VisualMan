@@ -6,7 +6,7 @@
 //
 
 #include <metal_stdlib>
-#include "ShaderUtils.h"
+#include "../Utilities/ShaderUtils.h"
 using namespace metal;
 
 inline float auroraFBM(float2 p) {

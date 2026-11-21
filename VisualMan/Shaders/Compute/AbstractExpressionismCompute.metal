@@ -6,9 +6,9 @@
 //
 
 #include <metal_stdlib>
-#include "ShaderUtils.h"
+#include "../Utilities/ShaderUtils.h"
 #define MIXBOX_COLORSPACE_LINEAR 1
-#include "../Mixbox/Mixbox.metal"
+#include "../../Mixbox/Mixbox.metal"
 using namespace metal;
 
 #define ABEX_ADDITIVE_HIGHLIGHTS 1

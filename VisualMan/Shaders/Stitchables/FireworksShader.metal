@@ -6,7 +6,7 @@
 //
 
 #include <metal_stdlib>
-#include "ShaderUtils.h"
+#include "../Utilities/ShaderUtils.h"
 using namespace metal;
 
 static inline float3 bassColor(uint palette, uint variant) {

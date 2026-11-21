@@ -6,7 +6,7 @@
 //
 
 #include <metal_stdlib>
-#include "ShaderUtils.h"
+#include "../Utilities/ShaderUtils.h"
 using namespace metal;
 
 #define NUM_BLOBS 7

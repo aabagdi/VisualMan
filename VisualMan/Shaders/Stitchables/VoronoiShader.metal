@@ -6,7 +6,7 @@
 //
 
 #include <metal_stdlib>
-#include "ShaderUtils.h"
+#include "../Utilities/ShaderUtils.h"
 using namespace metal;
 #define GOLD 1.618033988749895
 #define MAX_SEEDS 20
