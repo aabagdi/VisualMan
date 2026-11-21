@@ -309,6 +309,7 @@ extension AbstractExpressionismRenderer {
     guard ensureCanvasTextures(displayWidth: drawableWidth, displayHeight: drawableHeight),
           let tex = currentPingPongTextures(),
           let encoder = beginFrame() else { return nil }
+    encoder.barrier(afterQueueStages: [.dispatch, .fragment], beforeStages: .dispatch)
     gpuTiming?.beginFrame(frameNumber: frameNumber)
 
     runPendingResample(encoder: encoder, tex: tex)

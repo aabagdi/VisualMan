@@ -70,7 +70,6 @@ extension AbstractExpressionismRenderer {
                      params: AbExParams, regions: [CanvasRegion]) {
     guard let pig = pigmentTexture, let mat = materialTexture, let lut = mixboxLUT,
           let cracks = crackTexture, !regions.isEmpty else { return }
-    encoder.barrier(afterQueueStages: .dispatch, beforeStages: .dispatch)
     encoder.setComputePipelineState(pigmentPipeline)
     argumentTable.setTexture(wet.gpuResourceID, index: 0)
     argumentTable.setTexture(dry.gpuResourceID, index: 1)
