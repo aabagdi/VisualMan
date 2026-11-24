@@ -28,7 +28,6 @@ struct VisualManApp: App {
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
           showLowPowerAlert = ProcessInfo.processInfo.isLowPowerModeEnabled
         }
-        // TEMP external display diagnostics
         .onReceive(NotificationCenter.default.publisher(for: UIScene.willConnectNotification)) { note in
           let scene = note.object as? UIScene
           print("[ExternalDisplay] scene willConnect role=\(scene?.session.role.rawValue ?? "nil") delegate=\(String(describing: scene?.delegate))")

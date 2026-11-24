@@ -46,6 +46,32 @@ extension NavierStokesRenderer {
     grainShift = SIMD4<Float>(lowHalf: shift, highHalf: shown)
   }
 
+  func makeGrainCoverage(fence: UInt64) -> MTLTexture? {
+    guard let coverage = Self.createTechnicolorGrain(device: device) else { return nil }
+    coverage.label = "Technicolor IV grain coverage"
+    residencySet.addAllocation(coverage)
+    residencySet.commit()
+    pendingTAAHistoryReleases.append((frame: fence, texture: coverage))
+    return coverage
+  }
+
+  func bakeGrain(encoder: any MTL4ComputeCommandEncoder, coverage: MTLTexture) {
+    let size = Self.technicolorGrainSize
+
+    encoder.setComputePipelineState(pipelines.technicolorBakeGrainCoverage)
+    argumentTable.setTexture(coverage.gpuResourceID, index: 0)
+    dispatchGrid(encoder: encoder, width: size, height: size)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+
+    encoder.setComputePipelineState(pipelines.technicolorBakeGrain)
+    argumentTable.setTexture(technicolorGrain.gpuResourceID, index: 0)
+    argumentTable.setTexture(coverage.gpuResourceID, index: 1)
+    let strength = SIMD4<Float>(Self.renderTechnicolorGrain, Self.renderTechnicolorGrainCloud,
+                                Self.renderTechnicolorGrainCloudChroma, Self.renderTechnicolorGrainCloudSize)
+    argumentTable.setAddress(writeUniform(strength), index: 0)
+    dispatchGrid(encoder: encoder, width: size, height: size)
+  }
+
   static let technicolorHalation = SIMD4<Float>(
     renderTechnicolorHalation, renderTechnicolorHalationKnee, 0, 0)
 

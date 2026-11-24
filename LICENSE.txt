@@ -73,6 +73,19 @@ source code from the authors' reference implementation is included.
 
 ===============================================================================
 
+STOCHASTIC FILM GRAIN
+The film grain in the Navier-Stokes visualizer is adapted from the model
+described in:
+
+  A Newson, Julie Delon, B Galerne. A Stochastic Film Grain Model for
+  Resolution-Independent Rendering. Computer Graphics Forum, 2017.
+  ⟨hal-01520260⟩ https://hal.science/hal-01520260
+
+The model was implemented independently in Metal for this project; no
+source code from the authors' reference implementation is included.
+
+===============================================================================
+
 ALL OTHER FILES IN THIS PROJECT
 Copyright (c) 2025 Aadit Bagdi
 Licensed under the MIT License (full text below).

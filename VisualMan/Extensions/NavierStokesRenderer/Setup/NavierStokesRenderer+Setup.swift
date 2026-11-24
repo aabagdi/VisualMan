@@ -49,6 +49,7 @@ extension NavierStokesRenderer {
     let mgCoarseSolve: MTLComputePipelineState
     let resample: MTLComputePipelineState
     let technicolorBakeLUT: MTLComputePipelineState
+    let technicolorBakeGrainCoverage: MTLComputePipelineState
     let technicolorBakeGrain: MTLComputePipelineState
 
     nonisolated init(make: (String) -> MTLComputePipelineState?) throws(MissingResource) {
@@ -92,6 +93,7 @@ extension NavierStokesRenderer {
       mgCoarseSolve = try load("fluidMGCoarseSolve")
       resample = try load("fluidResample")
       technicolorBakeLUT = try load("technicolorBakeLUT")
+      technicolorBakeGrainCoverage = try load("technicolorBakeGrainCoverage")
       technicolorBakeGrain = try load("technicolorBakeGrain")
     }
   }
@@ -241,7 +243,7 @@ extension NavierStokesRenderer {
     return texture
   }
 
-  static let technicolorGrainSize: Int = 256
+  static let technicolorGrainSize: Int = 512
 
   static func createTechnicolorGrain(device: MTLDevice) -> MTLTexture? {
     let desc = MTLTextureDescriptor.texture2DDescriptor(
@@ -287,6 +289,8 @@ extension NavierStokesRenderer {
     allocator.reset()
     uniformOffset = 0
 
+    let grainCoverage = makeGrainCoverage(fence: warmupFrame)
+
     commandBuffer.beginCommandBuffer(allocator: allocator)
     commandBuffer.useResidencySet(residencySet)
     guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
@@ -313,12 +317,7 @@ extension NavierStokesRenderer {
                               depth: Self.technicolorLUTSize),
       threadsPerThreadgroup: MTLSize(width: 8, height: 8, depth: 4))
 
-    encoder.setComputePipelineState(pipelines.technicolorBakeGrain)
-    argumentTable.setTexture(technicolorGrain.gpuResourceID, index: 0)
-    let grainStrength = SIMD4<Float>(Self.renderTechnicolorGrain, Self.renderTechnicolorGrainCloud,
-                                     Self.renderTechnicolorGrainCloudChroma, Self.renderTechnicolorGrainCloudSize)
-    argumentTable.setAddress(writeUniform(grainStrength), index: 0)
-    dispatchGrid(encoder: encoder, width: Self.technicolorGrainSize, height: Self.technicolorGrainSize)
+    if let grainCoverage { bakeGrain(encoder: encoder, coverage: grainCoverage) }
 
     encoder.endEncoding()
     commandBuffer.endCommandBuffer()

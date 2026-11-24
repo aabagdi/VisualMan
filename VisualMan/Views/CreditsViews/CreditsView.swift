@@ -41,6 +41,19 @@ struct CreditsView: View {
         )
 
         CreditRow(
+          title: "Stochastic Film Grain",
+          role: "Film grain model",
+          attribution: "Newson, Delon & Galerne, 2017",
+          license: nil,
+          url: URL(string: "https://hal.science/hal-01520260"),
+          note: """
+            A Newson, Julie Delon, B Galerne. A Stochastic Film Grain \
+            Model for Resolution-Independent Rendering. Computer \
+            Graphics Forum, 2017. ⟨hal-01520260⟩
+            """
+        )
+
+        CreditRow(
           title: "spectral_film_lut",
           role: "Technicolor No. IV dye spectra, digitized by Jan Lohse",
           attribution: "© 2026 Jan Lohse",

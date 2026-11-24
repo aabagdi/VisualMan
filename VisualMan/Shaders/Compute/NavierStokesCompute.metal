@@ -655,7 +655,18 @@ kernel void technicolorBakeLUT(texture3d<half, access::write> lut [[texture(0)]]
   lut.write(half4(half3(rgb), 1.0h), gid);
 }
 
-constant uint kFilmGrainSize = 256;
+constant uint kFilmGrainSize = 512;
+constant float kFilmGrainRadius = 0.4;
+constant float kFilmGrainRadiusDeviation = 0.08;
+constant float kFilmGrainRadiusMax = 1.0;
+constant float kFilmGrainFilter = 0.8;
+constant float kFilmGrainCoverage = 0.5;
+constant float kFilmGrainCoverageStd = 0.123;
+constant float2 kFilmGrainResponse = float2(0.494, 0.674);
+constant float kFilmGrainShadowLimit = 0.22;
+constant float3x3 kFilmDyeAbsorption = float3x3(float3(0.9948, 0.2414, 0.0940),
+                                                float3(0.0995, 0.9656, 0.3289),
+                                                float3(0.0199, 0.0966, 0.9397));
 
 inline uint grainHash(uint x) {
   x ^= x >> 16;
@@ -666,11 +677,67 @@ inline uint grainHash(uint x) {
   return x;
 }
 
-inline float grainCell(int2 cell, uint record) {
-  uint2 p = uint2(cell) & (kFilmGrainSize - 1);
-  uint a = grainHash(p.x + grainHash(p.y + grainHash(record)));
-  uint b = grainHash(a + 0x9e3779b9u);
-  return (float(a >> 8) + float(b >> 8)) * (2.4494897 / 16777216.0) - 2.4494897;
+inline float grainUnit(uint x) {
+  return (float(x >> 8) + 0.5) * (1.0 / 16777216.0);
+}
+
+inline float grainCoverage(int2 texel, uint record) {
+  const float meanSquare = kFilmGrainRadius * kFilmGrainRadius
+                         + kFilmGrainRadiusDeviation * kFilmGrainRadiusDeviation;
+  const float logVariance = log(meanSquare / (kFilmGrainRadius * kFilmGrainRadius));
+  const float logMean = log(kFilmGrainRadius) - 0.5 * logVariance;
+  const float lambda = log(1.0 / (1.0 - kFilmGrainCoverage)) / (M_PI_F * meanSquare);
+  const float empty = exp(-lambda);
+  uint covered = 0u;
+  for (int dy = -1; dy <= 1; ++dy) {
+    for (int dx = -1; dx <= 1; ++dx) {
+      int2 cell = texel + int2(dx, dy);
+      uint2 p = uint2(cell) & (kFilmGrainSize - 1);
+      uint h = grainHash(p.x + grainHash(p.y + grainHash(record + 7u)));
+      float u = grainUnit(h);
+      float term = empty;
+      float cdf = empty;
+      uint count = 0u;
+      while (u > cdf && count < 10u) {
+        count++;
+        term *= lambda / float(count);
+        cdf += term;
+      }
+      for (uint k = 0u; k < count; ++k) {
+        uint h1 = grainHash(h + 0x9e3779b9u * (2u * k + 1u));
+        uint h2 = grainHash(h1 ^ 0x85ebca6bu);
+        uint h3 = grainHash(h2 + 0xc2b2ae35u);
+        uint h4 = grainHash(h3 ^ 0x27d4eb2fu);
+        float2 pos = float2(cell) + float2(grainUnit(h1), grainUnit(h2));
+        float z = sqrt(-2.0 * log(grainUnit(h3))) * cos(2.0 * M_PI_F * grainUnit(h4));
+        float r = min(exp(logMean + sqrt(logVariance) * z), kFilmGrainRadiusMax);
+        for (uint i = 0u; i < 16u; ++i) {
+          float2 s = float2(texel) + (float2(float(i & 3u), float(i >> 2)) + 0.5) * 0.25;
+          float2 d = s - pos;
+          covered |= (dot(d, d) < r * r) ? (1u << i) : 0u;
+        }
+      }
+    }
+  }
+  return float(popcount(covered)) * (1.0 / 16.0);
+}
+
+inline float3 grainResponse(float3 rgb, float white) {
+  float3 level = clamp(sqrt(rgb / white), kFilmGrainShadowLimit, 1.0);
+  return pow(2.0 * level, float3(-kFilmGrainResponse.x))
+       * pow(2.0 * (1.0 - level), float3(kFilmGrainResponse.y));
+}
+
+inline float3 grainGain(float3 rgb, float3 density, float white) {
+  return exp(-(kFilmDyeAbsorption * (grainResponse(rgb, white) * density)));
+}
+
+kernel void technicolorBakeGrainCoverage(texture2d<half, access::write> coverageOut [[texture(0)]],
+                                         uint2 gid [[thread_position_in_grid]]) {
+  if (any(gid >= kFilmGrainSize)) return;
+  int2 texel = int2(gid);
+  coverageOut.write(half4(half3(float3(grainCoverage(texel, 0u), grainCoverage(texel, 1u),
+                                       grainCoverage(texel, 2u))), 1.0h), gid);
 }
 
 constant int kFilmCloudReach = 5;
@@ -683,17 +750,22 @@ inline float cloudCell(int2 cell, uint record) {
 }
 
 kernel void technicolorBakeGrain(texture2d<half, access::write> grainOut [[texture(0)]],
+                                 texture2d<half, access::read> coverage [[texture(1)]],
                                  constant float4 &strength [[buffer(0)]],
                                  uint2 gid [[thread_position_in_grid]]) {
   if (any(gid >= kFilmGrainSize)) return;
-  float3 n = float3(0.0);
-  for (int dy = -1; dy <= 1; ++dy) {
-    for (int dx = -1; dx <= 1; ++dx) {
-      float weight = (dx == 0 ? 1.0 : 0.36) * (dy == 0 ? 1.0 : 0.36);
-      int2 cell = int2(gid) + int2(dx, dy);
-      n += weight * float3(grainCell(cell, 0u), grainCell(cell, 1u), grainCell(cell, 2u));
+  const float filterVariance = kFilmGrainFilter * kFilmGrainFilter - 1.0 / 12.0;
+  float3 filtered = float3(0.0);
+  float filterSum = 0.0;
+  for (int dy = -3; dy <= 3; ++dy) {
+    for (int dx = -3; dx <= 3; ++dx) {
+      float weight = exp(-0.5 * float(dx * dx + dy * dy) / filterVariance);
+      uint2 tap = uint2(int2(gid) + int2(dx, dy)) & (kFilmGrainSize - 1);
+      filtered += weight * float3(coverage.read(tap).rgb);
+      filterSum += weight;
     }
   }
+  float3 n = (filtered / filterSum - kFilmGrainCoverage) / kFilmGrainCoverageStd;
 
   float4 cloud = float4(0.0);
   float2 weightSum = float2(0.0);
@@ -710,7 +782,7 @@ kernel void technicolorBakeGrain(texture2d<half, access::write> grainOut [[textu
     / sqrt(kFilmCloudCoverage * (1.0 - kFilmCloudCoverage) * weightSum.y);
   float3 clouds = sqrt(1.0 - strength.z * strength.z) * cloud.w + strength.z * cloud.xyz;
 
-  grainOut.write(half4(half3(exp(strength.x * n / 1.2592 - strength.y * clouds)), 1.0h), gid);
+  grainOut.write(half4(half3(strength.x * n + strength.y * clouds), 1.0h), gid);
 }
 
 inline float3 technicolorIV(float3 dyeAmounts, texture3d<float, access::sample> lut,
@@ -837,11 +909,16 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
   float3 finalColor = c;
   float exposure = dot(c, kHalationSensitivity);
   int4 grainShift = int4(frame.technicolorGrain);
+  float grainWhite = frame.technicolorLampGain;
   if (historyValid != 0u) {
     int2 gateStep = int2(frame.technicolorGateJump.zw);
     int2 prevPos = clamp(int2(gid) + gateStep, int2(0), int2(w, h) - 1);
     float4 prev = max(historyIn.read(uint2(prevPos)), float4(0.0));
-    prev.rgb /= grain.read(uint2(prevPos + grainShift.zw) & (kFilmGrainSize - 1)).rgb;
+    float3 prevGrain = grain.read(uint2(prevPos + grainShift.zw) & (kFilmGrainSize - 1)).rgb;
+    float3 shown = prev.rgb;
+    for (int i = 0; i < 4; ++i) {
+      prev.rgb = shown / grainGain(prev.rgb, prevGrain, grainWhite);
+    }
 
     float knee = frame.technicolorHalation.y * frame.technicolorLampGain;
     float2 haloUV = center + float2(gateStep) / float2(w, h);
@@ -857,7 +934,8 @@ kernel void fluidRender(texture2d<float, access::sample> dye [[texture(0)]],
     exposure = blended.a;
   }
 
-  finalColor *= grain.read(uint2(int2(gid) + grainShift.xy) & (kFilmGrainSize - 1)).rgb;
+  float3 grainDensity = grain.read(uint2(int2(gid) + grainShift.xy) & (kFilmGrainSize - 1)).rgb;
+  finalColor *= grainGain(finalColor, grainDensity, grainWhite);
 
   historyOut.write(float4(finalColor, exposure), gid);
 
