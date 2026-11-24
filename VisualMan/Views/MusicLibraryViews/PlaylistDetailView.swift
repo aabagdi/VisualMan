@@ -23,5 +23,6 @@ struct PlaylistDetailView: View {
     }
     .navigationTitle(playlist.value(forProperty: MPMediaPlaylistPropertyName) as? String ?? "Unknown")
     .toolbarVisibility(.hidden, for: .tabBar)
+    .modifier(SettingsToolbarButton())
   }
 }

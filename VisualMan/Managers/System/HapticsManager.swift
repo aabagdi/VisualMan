@@ -9,6 +9,7 @@ import AVFoundation
 import CoreHaptics
 import os
 
+@Observable
 @MainActor
 final class HapticsManager {
   enum Constants {
@@ -19,6 +20,7 @@ final class HapticsManager {
     static let playerLinger: TimeInterval = 0.5
     static let engineRetryDelay: TimeInterval = 1.0
     static let curvePointLimit = 16
+    static let enabledKey = "hapticsEnabled"
   }
 
   private enum EngineState {
@@ -32,21 +34,33 @@ final class HapticsManager {
     let endTime: TimeInterval
   }
 
-  private let logger = Logger(subsystem: "com.VisualMan", category: "HapticsManager")
-  private let engine: CHHapticEngine?
+  var isEnabled: Bool {
+    didSet {
+      UserDefaults.standard.set(isEnabled, forKey: Constants.enabledKey)
+      if !isEnabled {
+        halt()
+      }
+    }
+  }
 
-  private var engineState = EngineState.stopped
-  private var wantsEngine = false
-  private var engineRetryTime: TimeInterval = 0
-  private var track: BassHapticTrack?
-  private var analysisTask: Task<Void, Never>?
-  private var scheduledPlayers: [ScheduledPlayer] = []
-  private var scheduledThrough: TimeInterval?
-  private var lastTick: (position: TimeInterval, time: TimeInterval)?
-  private var outputLatency: TimeInterval = 0
-  private var routeChangeObserver: (any NSObjectProtocol)?
+  var isSupported: Bool { engine != nil }
+
+  @ObservationIgnored private let logger = Logger(subsystem: "com.VisualMan", category: "HapticsManager")
+  @ObservationIgnored private let engine: CHHapticEngine?
+
+  @ObservationIgnored private var engineState = EngineState.stopped
+  @ObservationIgnored private var wantsEngine = false
+  @ObservationIgnored private var engineRetryTime: TimeInterval = 0
+  @ObservationIgnored private var track: BassHapticTrack?
+  @ObservationIgnored private var analysisTask: Task<Void, Never>?
+  @ObservationIgnored private var scheduledPlayers: [ScheduledPlayer] = []
+  @ObservationIgnored private var scheduledThrough: TimeInterval?
+  @ObservationIgnored private var lastTick: (position: TimeInterval, time: TimeInterval)?
+  @ObservationIgnored private var outputLatency: TimeInterval = 0
+  @ObservationIgnored private var routeChangeObserver: (any NSObjectProtocol)?
 
   init() {
+    isEnabled = UserDefaults.standard.object(forKey: Constants.enabledKey) as? Bool ?? true
     guard CHHapticEngine.capabilitiesForHardware().supportsHaptics,
           let engine = try? CHHapticEngine(audioSession: .sharedInstance()) else {
       engine = nil
@@ -107,7 +121,7 @@ final class HapticsManager {
   }
 
   func advance(to position: TimeInterval, hostTime: UInt64) {
-    guard let engine, let track else { return }
+    guard isEnabled, let engine, let track else { return }
 
     wantsEngine = true
     let now = AVAudioTime.seconds(forHostTime: mach_absolute_time())

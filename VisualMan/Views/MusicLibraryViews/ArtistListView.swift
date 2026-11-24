@@ -38,6 +38,7 @@ struct ArtistListView: View {
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
+    .modifier(SettingsToolbarButton())
     .navigationTitle("Artists")
   }
 

@@ -122,6 +122,7 @@ struct AlbumDetailView: View {
     }
     .listStyle(.insetGrouped)
     .toolbarVisibility(.hidden, for: .tabBar)
+    .modifier(SettingsToolbarButton())
   }
   
 }

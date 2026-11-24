@@ -35,5 +35,6 @@ struct CompilationListView: View {
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
+    .modifier(SettingsToolbarButton())
   }
 }

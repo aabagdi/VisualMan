@@ -19,6 +19,7 @@ struct GenreDetailView: View {
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
+    .modifier(SettingsToolbarButton())
     .navigationTitle(genre)
   }
 }

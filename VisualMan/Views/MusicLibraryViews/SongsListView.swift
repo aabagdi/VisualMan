@@ -39,6 +39,7 @@ struct SongsListView: View {
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
+    .modifier(SettingsToolbarButton())
     .navigationTitle("Songs")
   }
 }

@@ -43,5 +43,6 @@ struct GenreListView: View {
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
+    .modifier(SettingsToolbarButton())
   }
 }

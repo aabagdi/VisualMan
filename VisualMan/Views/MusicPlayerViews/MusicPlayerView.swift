@@ -79,6 +79,7 @@ struct MusicPlayerView: View {
     }
     .toolbar(.hidden, for: .tabBar)
     .modifier(ExternalDisplayAccessory())
+    .modifier(SettingsToolbarButton())
     .environment(snapshotter)
     .onAppear {
       viewModel.start(audioSources: _audioSources, startingIndex: _startingIndex)

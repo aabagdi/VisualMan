@@ -50,6 +50,7 @@ struct HomeScreenView: View {
             }
           }
         }
+        .modifier(SettingsToolbarButton())
     }
     .fileImporter(
       isPresented: $isShowingFileImporter,
