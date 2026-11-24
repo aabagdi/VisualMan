@@ -2,19 +2,281 @@
 //  HapticsManager.swift
 //  VisualMan
 //
-//  Created by Aadit Bagdi on 11/23/26.
+//  Created by Aadit Bagdi on 11/24/26.
 //
 
-import Foundation
-import CoreHaptics
 import AVFoundation
+import CoreHaptics
+import os
 
+@MainActor
 final class HapticsManager {
-  private let hapticEngine: CHHapticEngine?
-  
-  private init() throws {
-    hapticEngine = try CHHapticEngine(audioSession: AVAudioSession.sharedInstance())
-    
-    try hapticEngine?.start()
+  enum Constants {
+    static let chunkDuration: TimeInterval = 1.0
+    static let scheduleAhead: TimeInterval = 0.75
+    static let startLead: TimeInterval = 0.05
+    static let discontinuityTolerance: TimeInterval = 0.04
+    static let playerLinger: TimeInterval = 0.5
+    static let engineRetryDelay: TimeInterval = 1.0
+    static let curvePointLimit = 16
+  }
+
+  private enum EngineState {
+    case stopped
+    case starting
+    case running
+  }
+
+  private struct ScheduledPlayer {
+    let player: any CHHapticPatternPlayer
+    let endTime: TimeInterval
+  }
+
+  private let logger = Logger(subsystem: "com.VisualMan", category: "HapticsManager")
+  private let engine: CHHapticEngine?
+
+  private var engineState = EngineState.stopped
+  private var wantsEngine = false
+  private var engineRetryTime: TimeInterval = 0
+  private var track: BassHapticTrack?
+  private var analysisTask: Task<Void, Never>?
+  private var scheduledPlayers: [ScheduledPlayer] = []
+  private var scheduledThrough: TimeInterval?
+  private var lastTick: (position: TimeInterval, time: TimeInterval)?
+  private var outputLatency: TimeInterval = 0
+  private var routeChangeObserver: (any NSObjectProtocol)?
+
+  init() {
+    guard CHHapticEngine.capabilitiesForHardware().supportsHaptics,
+          let engine = try? CHHapticEngine(audioSession: .sharedInstance()) else {
+      engine = nil
+      return
+    }
+    self.engine = engine
+
+    engine.playsHapticsOnly = true
+    engine.stoppedHandler = { @Sendable [weak self] _ in
+      Task { @MainActor in
+        self?.handleEngineStopped()
+      }
+    }
+    engine.resetHandler = { @Sendable [weak self] in
+      Task { @MainActor in
+        self?.handleEngineStopped()
+      }
+    }
+
+    routeChangeObserver = NotificationCenter.default.addObserver(
+      forName: AVAudioSession.routeChangeNotification,
+      object: AVAudioSession.sharedInstance(),
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.handleRouteChange()
+      }
+    }
+  }
+
+  isolated deinit {
+    analysisTask?.cancel()
+    if let routeChangeObserver {
+      NotificationCenter.default.removeObserver(routeChangeObserver)
+    }
+  }
+
+  func loadTrack(at url: URL) {
+    analysisTask?.cancel()
+    analysisTask = nil
+    cancelScheduledPlayers()
+    track = nil
+
+    guard engine != nil else { return }
+    outputLatency = AVAudioSession.sharedInstance().outputLatency
+
+    analysisTask = Task(priority: .utility) { [weak self] in
+      do {
+        let track = try await BassHapticAnalyzer.analyze(url: url)
+        guard !Task.isCancelled else { return }
+        self?.track = track
+      } catch is CancellationError {
+        return
+      } catch {
+        self?.logger.error("Failed to analyze bass for haptics: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  func advance(to position: TimeInterval, hostTime: UInt64) {
+    guard let engine, let track else { return }
+
+    wantsEngine = true
+    let now = AVAudioTime.seconds(forHostTime: mach_absolute_time())
+    guard engineState == .running else {
+      startEngine(at: now)
+      return
+    }
+
+    let songNow = position + now - AVAudioTime.seconds(forHostTime: hostTime)
+    if let lastTick,
+       abs(songNow - (lastTick.position + now - lastTick.time)) > Constants.discontinuityTolerance {
+      cancelScheduledPlayers()
+    }
+    lastTick = (songNow, now)
+    scheduledPlayers.removeAll { $0.endTime < now }
+
+    let earliestStart = songNow + Constants.startLead
+    if let scheduledThrough, scheduledThrough < earliestStart {
+      cancelScheduledPlayers()
+    }
+
+    let chunkStart = scheduledThrough ?? earliestStart
+    guard chunkStart - songNow < Constants.scheduleAhead else { return }
+
+    var pulses = Array(track.pulses(startingIn: chunkStart ..< chunkStart + Constants.chunkDuration))
+    if scheduledThrough == nil, let resumed = track.pulse(activeAt: chunkStart)?.resumed(at: chunkStart) {
+      pulses.insert(resumed, at: 0)
+    }
+    scheduledThrough = chunkStart + Constants.chunkDuration
+    guard !pulses.isEmpty else { return }
+
+    do {
+      try schedule(pulses, from: chunkStart, after: chunkStart - songNow + outputLatency, on: engine, now: now)
+    } catch {
+      logger.error("Failed to schedule haptics: \(error.localizedDescription)")
+      handleEngineStopped()
+      engineRetryTime = now + Constants.engineRetryDelay
+    }
+  }
+
+  func halt() {
+    wantsEngine = false
+    cancelScheduledPlayers()
+    guard engineState == .running else { return }
+    engineState = .stopped
+    engine?.stop(completionHandler: nil)
+  }
+
+  private func schedule(
+    _ pulses: [BassPulse],
+    from chunkStart: TimeInterval,
+    after delay: TimeInterval,
+    on engine: CHHapticEngine,
+    now: TimeInterval
+  ) throws {
+    var sustains: [CHHapticEvent] = []
+    var curves: [CHHapticParameterCurve] = []
+    var transients: [CHHapticEvent] = []
+    var patternDuration: TimeInterval = 0
+
+    for pulse in pulses {
+      let offset = pulse.start - chunkStart
+      sustains.append(
+        CHHapticEvent(
+          eventType: .hapticContinuous,
+          parameters: [
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
+            CHHapticEventParameter(parameterID: .hapticSharpness, value: pulse.sharpness)
+          ],
+          relativeTime: offset,
+          duration: pulse.duration
+        )
+      )
+      curves.append(contentsOf: intensityCurves(for: pulse, at: offset))
+      if let transient = pulse.transient {
+        transients.append(
+          CHHapticEvent(
+            eventType: .hapticTransient,
+            parameters: [
+              CHHapticEventParameter(parameterID: .hapticIntensity, value: transient.intensity),
+              CHHapticEventParameter(parameterID: .hapticSharpness, value: transient.sharpness)
+            ],
+            relativeTime: offset
+          )
+        )
+      }
+      patternDuration = max(patternDuration, offset + pulse.duration)
+    }
+
+    let startTime = engine.currentTime + delay
+    let endTime = now + delay + patternDuration + Constants.playerLinger
+
+    let sustainPlayer = try engine.makePlayer(with: CHHapticPattern(events: sustains, parameterCurves: curves))
+    try sustainPlayer.start(atTime: startTime)
+    scheduledPlayers.append(ScheduledPlayer(player: sustainPlayer, endTime: endTime))
+
+    guard !transients.isEmpty else { return }
+    let transientPlayer = try engine.makePlayer(with: CHHapticPattern(events: transients, parameters: []))
+    try transientPlayer.start(atTime: startTime)
+    scheduledPlayers.append(ScheduledPlayer(player: transientPlayer, endTime: endTime))
+  }
+
+  private func intensityCurves(for pulse: BassPulse, at offset: TimeInterval) -> [CHHapticParameterCurve] {
+    let points = pulse.envelope
+    var curves: [CHHapticParameterCurve] = []
+    var index = 0
+
+    while index < points.count - 1 {
+      let end = min(index + Constants.curvePointLimit, points.count)
+      let first = points[index]
+      let controlPoints = points[index ..< end].map {
+        CHHapticParameterCurve.ControlPoint(relativeTime: $0.time - first.time, value: $0.intensity)
+      }
+      curves.append(
+        CHHapticParameterCurve(
+          parameterID: .hapticIntensityControl,
+          controlPoints: controlPoints,
+          relativeTime: offset + first.time
+        )
+      )
+      index = end - 1
+    }
+
+    return curves
+  }
+
+  private func startEngine(at now: TimeInterval) {
+    guard let engine, engineState == .stopped, now >= engineRetryTime else { return }
+    engineState = .starting
+    engine.start { @Sendable [weak self] error in
+      Task { @MainActor in
+        self?.handleEngineStarted(error: error)
+      }
+    }
+  }
+
+  private func handleEngineStarted(error: (any Error)?) {
+    guard engineState == .starting else { return }
+
+    if let error {
+      logger.error("Failed to start haptic engine: \(error.localizedDescription)")
+      engineState = .stopped
+      engineRetryTime = AVAudioTime.seconds(forHostTime: mach_absolute_time()) + Constants.engineRetryDelay
+    } else if wantsEngine {
+      engineState = .running
+    } else {
+      engineState = .stopped
+      engine?.stop(completionHandler: nil)
+    }
+  }
+
+  private func handleEngineStopped() {
+    engineState = .stopped
+    scheduledPlayers.removeAll()
+    scheduledThrough = nil
+    lastTick = nil
+  }
+
+  private func handleRouteChange() {
+    outputLatency = AVAudioSession.sharedInstance().outputLatency
+    cancelScheduledPlayers()
+  }
+
+  private func cancelScheduledPlayers() {
+    for scheduled in scheduledPlayers {
+      try? scheduled.player.cancel()
+    }
+    scheduledPlayers.removeAll()
+    scheduledThrough = nil
+    lastTick = nil
   }
 }

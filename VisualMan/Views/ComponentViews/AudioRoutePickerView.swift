@@ -18,18 +18,12 @@ struct AudioRoutePickerView: View {
 
   @AppStorage("hideScreenMirroringHint") private var hideScreenMirroringHint = false
 
-  @State private var isRoutedExternally = false
   @State private var isRoutedToAirPlay = false
   @State private var airPlaySwitchCount = 0
   @State private var showScreenMirroringHint = false
 
   var body: some View {
-    RoutePickerRepresentable()
-      .overlay {
-        Image(systemName: "airplay.audio")
-          .foregroundStyle(Color(isRoutedExternally ? activeTintColor : tintColor))
-          .allowsHitTesting(false)
-      }
+    RoutePickerRepresentable(tintColor: tintColor, activeTintColor: activeTintColor)
       .task {
         updateRoute(isInitial: true)
         for await _ in NotificationCenter.default.notifications(named: AVAudioSession.routeChangeNotification) {
@@ -59,9 +53,6 @@ struct AudioRoutePickerView: View {
 
   private func updateRoute(isInitial: Bool) {
     let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
-    isRoutedExternally = outputs.contains {
-      [.airPlay, .bluetoothA2DP, .HDMI, .carAudio].contains($0.portType)
-    }
     let airPlay = outputs.contains { $0.portType == .airPlay }
     if airPlay && !isRoutedToAirPlay && !isInitial {
       airPlaySwitchCount += 1
@@ -71,14 +62,18 @@ struct AudioRoutePickerView: View {
 }
 
 private struct RoutePickerRepresentable: UIViewRepresentable {
+  let tintColor: UIColor
+  let activeTintColor: UIColor
+
   func makeUIView(context: Context) -> AVRoutePickerView {
     let picker = AVRoutePickerView()
-    picker.prioritizesVideoDevices = true
+    picker.prioritizesVideoDevices = false
     picker.backgroundColor = .clear
-    picker.tintColor = .clear
-    picker.activeTintColor = .clear
     return picker
   }
 
-  func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+  func updateUIView(_ uiView: AVRoutePickerView, context: Context) {
+    uiView.tintColor = tintColor
+    uiView.activeTintColor = activeTintColor
+  }
 }

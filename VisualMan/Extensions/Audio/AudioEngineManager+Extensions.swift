@@ -115,10 +115,12 @@ extension AudioEngineManager {
     displayLinkTask = nil
     displayLinkStream?.stop()
     displayLinkStream = nil
+    hapticsManager.halt()
   }
   
   private func updateTime() {
-    guard let newTime = renderedPlaybackPosition() else { return }
+    guard let anchor = renderedPlaybackAnchor() else { return }
+    let newTime = anchor.position
 
     if newTime >= 0 && newTime <= duration {
       currentTime = newTime
@@ -126,10 +128,16 @@ extension AudioEngineManager {
 
     if currentTime >= duration - 0.05 && playbackState == .playing {
       handlePlaybackCompleted()
+    } else if playbackState == .playing {
+      hapticsManager.advance(to: anchor.position, hostTime: anchor.hostTime)
     }
   }
 
   func renderedPlaybackPosition() -> TimeInterval? {
+    renderedPlaybackAnchor()?.position
+  }
+
+  func renderedPlaybackAnchor() -> (position: TimeInterval, hostTime: UInt64)? {
     guard let player,
           let audioFile,
           player.isPlaying,
@@ -139,7 +147,8 @@ extension AudioEngineManager {
 
     let playerSeconds = Double(playerTime.sampleTime) / playerTime.sampleRate
     let seekSeconds = Double(lastSeekFrame) / audioFile.fileFormat.sampleRate
-    return seekSeconds + playerSeconds
+    let hostTime = nodeTime.isHostTimeValid ? nodeTime.hostTime : mach_absolute_time()
+    return (seekSeconds + playerSeconds, hostTime)
   }
 
   func handleScheduledAudioFinished(playbackID: UUID) {

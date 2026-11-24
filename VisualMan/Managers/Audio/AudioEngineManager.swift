@@ -43,6 +43,7 @@ final class AudioEngineManager {
   var isPlaying: Bool { playbackState == .playing }
   
   @ObservationIgnored @Dependency(\.uuid) var uuid
+  @ObservationIgnored @Dependency(HapticsManager.self) var hapticsManager
   
   @ObservationIgnored private(set) var engine: AVAudioEngine?
   @ObservationIgnored private var securityScopedURL: URL?
@@ -201,6 +202,7 @@ final class AudioEngineManager {
       schedule(audioFile, on: player, playbackID: playbackID)
       
       installAudioTap(on: engine)
+      hapticsManager.loadTrack(at: url)
 
       playbackState = .playing
       startDisplayLink()

@@ -23,6 +23,10 @@ extension MusicLibraryAccessManager: DependencyKey {
   static var liveValue: MusicLibraryAccessManager { MusicLibraryAccessManager() }
 }
 
+extension HapticsManager: DependencyKey {
+  static var liveValue: HapticsManager { HapticsManager() }
+}
+
 extension ExternalDisplayManager: DependencyKey {
   static var liveValue: ExternalDisplayManager { ExternalDisplayManager() }
 }
