@@ -47,8 +47,8 @@ extension NavierStokesRenderer {
   static let renderTechnicolorGateJumpRate: Float = 12
   static let renderTechnicolorHalation: Float = 2.4
   static let renderTechnicolorHalationKnee: Float = 0.4
-  static let renderTechnicolorGrain: Float = 0.066
-  static let renderTechnicolorGrainCloud: Float = 0.0594
+  static let renderTechnicolorGrain: Float = 0.069
+  static let renderTechnicolorGrainCloud: Float = 0.0621
   static let renderTechnicolorGrainCloudChroma: Float = 0.3
   static let renderTechnicolorGrainCloudSize: Float = 1.7
   static let renderTechnicolorGrainRate: Float = 24

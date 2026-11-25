@@ -663,7 +663,7 @@ constant float kFilmGrainFilter = 0.8;
 constant float kFilmGrainCoverage = 0.5;
 constant float kFilmGrainCoverageStd = 0.123;
 constant float2 kFilmGrainResponse = float2(0.494, 0.674);
-constant float kFilmGrainShadowLimit = 0.22;
+constant float kFilmGrainShadowLimit = 0.205;
 constant float3x3 kFilmDyeAbsorption = float3x3(float3(0.9948, 0.2414, 0.0940),
                                                 float3(0.0995, 0.9656, 0.3289),
                                                 float3(0.0199, 0.0966, 0.9397));
