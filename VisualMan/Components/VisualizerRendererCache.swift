@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 #if !targetEnvironment(simulator)
 private nonisolated func drainGPU(event: MTLSharedEvent, target: UInt64) {
@@ -41,7 +42,12 @@ final class VisualizerRendererCache {
     }
 
     let task = Task<Void, Never> { @MainActor in
-      if let new = await make() {
+      let signpostID = pointsOfInterest.makeSignpostID()
+      let createState = pointsOfInterest.beginInterval("Create Renderer", id: signpostID,
+                                                       "\(String(describing: type), privacy: .public)")
+      let new = await make()
+      pointsOfInterest.endInterval("Create Renderer", createState)
+      if let new {
         self.renderers[key] = new
       }
     }

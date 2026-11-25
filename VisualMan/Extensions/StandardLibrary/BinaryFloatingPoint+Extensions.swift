@@ -7,16 +7,13 @@
 
 import Foundation
 
-private let _positionalFormatter: DateComponentsFormatter = {
-  let formatter = DateComponentsFormatter()
-  formatter.allowedUnits = [.minute, .second]
-  formatter.unitsStyle = .positional
-  formatter.zeroFormattingBehavior = .pad
-  return formatter
-}()
-
 extension BinaryFloatingPoint {
   func asTimeString() -> String {
-    _positionalFormatter.string(from: TimeInterval(self)) ?? ""
+    guard isFinite else { return "" }
+    let seconds = Int(self)
+    let pattern: Duration.TimeFormatStyle.Pattern = seconds >= 3600
+      ? .hourMinuteSecond
+      : .minuteSecond(padMinuteToLength: 2)
+    return Duration.seconds(seconds).formatted(.time(pattern: pattern))
   }
 }

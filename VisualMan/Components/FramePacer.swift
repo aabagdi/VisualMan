@@ -10,16 +10,34 @@ import os
 
 nonisolated final class FramePacer: Sendable {
   static let rates = [120, 80, 60]
+  static let startRate = 80
   static let window = 60
   static let stepDownLoad = 0.99
   static let stepUpLoad = 0.95
+  static let blockedDrawableWait: CFTimeInterval = 0.002
 
   private struct State {
     var lastCompletion: CFTimeInterval = 0
     var costs: [CFTimeInterval] = []
+    var skipsNextFrame = false
   }
 
   private let state = OSAllocatedUnfairLock(initialState: State())
+
+  func acquireDrawable<Drawable>(skipsAfterWait: Bool, _ acquire: () -> Drawable?) -> Drawable? {
+    let start = CACurrentMediaTime()
+    let drawable = acquire()
+    let waited = CACurrentMediaTime() - start
+    state.withLock { $0.skipsNextFrame = skipsAfterWait && waited > Self.blockedDrawableWait }
+    return drawable
+  }
+
+  func takeFrameSkip() -> Bool {
+    state.withLock { state in
+      defer { state.skipsNextFrame = false }
+      return state.skipsNextFrame
+    }
+  }
 
   func frameCompleted(submitted: CFTimeInterval) {
     let now = CACurrentMediaTime()

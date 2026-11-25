@@ -7,6 +7,7 @@
 
 import Foundation
 import Dependencies
+import os
 
 extension MusicPlayerView {
   @Observable
@@ -117,7 +118,8 @@ extension MusicPlayerView {
     
     private func playCurrentSong() {
       guard let source = playlistManager.currentAudioSource else { return }
-      
+      pointsOfInterest.emitEvent("Song Selected", "\(source.title ?? "Unknown", privacy: .public)")
+
       playTask?.cancel()
       playTask = Task {
         do {

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Dependencies
+import os
 
 struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
@@ -92,7 +93,9 @@ struct MusicPlayerView: View {
       viewModel.start(audioSources: _audioSources, startingIndex: _startingIndex)
     }
     .task {
+      let preWarmState = pointsOfInterest.beginInterval("Pre-Warm Renderers")
       await rendererCache.preWarm()
+      pointsOfInterest.endInterval("Pre-Warm Renderers", preWarmState)
       seedPaletteForCurrentSong()
     }
     .onChange(of: playlistManager.currentIndex) { _, _ in
@@ -161,6 +164,7 @@ struct MusicPlayerView: View {
     Menu {
       ForEach(VMVisualizer.allCases, id: \.self) { type in
         Button {
+          pointsOfInterest.emitEvent("Visualizer Selected", "\(String(describing: type), privacy: .public)")
           visualizerSelection.current = type
         } label: {
           if type == visualizerSelection.current {
@@ -290,8 +294,6 @@ private struct PlayerControlsLayer: View {
   }
 
   var body: some View {
-    @Bindable var audioManager = audioManager
-
     VStack {
       Spacer()
       if let current = playlistManager.currentAudioSource {
@@ -305,30 +307,25 @@ private struct PlayerControlsLayer: View {
         .frame(height: titleHeight)
       }
 
-      ProgressSliderView(value: $audioManager.currentTime,
+      ProgressSliderView(value: { audioManager.currentTime },
+                         setValue: { audioManager.currentTime = $0 },
                          inRange: TimeInterval.zero...max(audioManager.duration, 0.1),
                          activeFillColor: sliderColor,
                          fillColor: normalFillColor,
                          emptyColor: emptyColor,
-                         height: 8
-      ) { isDragging in
+                         height: 8,
+                         onEditingChanged: { isDragging in
         if !isDragging {
           audioManager.seek(to: audioManager.currentTime)
         }
-      }
+      })
       .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
       .frame(height: 60)
       .padding(.horizontal)
 
       HStack {
-        Button {
-          viewModel.skipBackwards()
-        } label: {
-          Image(systemName: "backward")
-            .foregroundStyle(normalFillColor)
-        }
-        .accessibilityLabel(audioManager.currentTime >= 3 ? Text("Restart") : Text("Previous"))
-        .padding()
+        SkipBackwardButton(viewModel: viewModel, color: normalFillColor)
+          .padding()
 
         Spacer()
 

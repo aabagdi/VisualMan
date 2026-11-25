@@ -59,6 +59,56 @@ extension AudioCAMetalLayerView.Coordinator {
     }
     return allocators
   }
+
+  static func encodeBlitPass(into commandBuffer: any MTL4CommandBuffer,
+                             allocator: any MTL4CommandAllocator,
+                             target: MTLTexture,
+                             clearColor: MTLClearColor,
+                             pipeline: any MTLRenderPipelineState,
+                             table: any MTL4ArgumentTable,
+                             source: MTLTexture?) {
+    let renderPassDesc = MTL4RenderPassDescriptor()
+    renderPassDesc.colorAttachments[0].texture = target
+    renderPassDesc.colorAttachments[0].loadAction = .clear
+    renderPassDesc.colorAttachments[0].storeAction = .store
+    renderPassDesc.colorAttachments[0].clearColor = clearColor
+
+    commandBuffer.beginCommandBuffer(allocator: allocator)
+    if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDesc) {
+      if let source {
+        encoder.barrier(afterQueueStages: .dispatch, beforeStages: .fragment)
+        encoder.setRenderPipelineState(pipeline)
+        table.setTexture(source.gpuResourceID, index: 0)
+        encoder.setArgumentTable(table, stages: .fragment)
+        encoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 3)
+      }
+      encoder.endEncoding()
+    }
+    commandBuffer.endCommandBuffer()
+  }
+}
+
+nonisolated final class PresentGate: Sendable {
+  private struct State {
+    var drawableSignaled = false
+    var gpuCompleted = false
+  }
+
+  private let state = OSAllocatedUnfairLock(initialState: State())
+
+  func markDrawableSignaled() -> Bool {
+    state.withLock { state in
+      state.drawableSignaled = true
+      return state.gpuCompleted
+    }
+  }
+
+  func markGPUCompleted() -> Bool {
+    state.withLock { state in
+      state.gpuCompleted = true
+      return state.drawableSignaled
+    }
+  }
 }
 
 #endif

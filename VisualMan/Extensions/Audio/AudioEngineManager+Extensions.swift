@@ -31,16 +31,18 @@ extension AudioEngineManager {
   func resume() async {
     stopPauseDecay()
     if let engine, !engine.isRunning {
+      let stateBeforeStart = playbackState
       do {
-        try engine.start()
+        try await Self.startEngine(engine)
       } catch {
         do {
           try await activateAudioSession()
-          try engine.start()
+          try await Self.startEngine(engine)
         } catch {
           audioLogger.error("Failed to restart audio engine on resume: \(error.localizedDescription)")
         }
       }
+      guard playbackState == stateBeforeStart else { return }
     }
     player?.play()
     playbackState = .playing
@@ -292,7 +294,7 @@ extension AudioEngineManager {
     }
     if let engine, !engine.isRunning {
       do {
-        try engine.start()
+        try await Self.startEngine(engine)
       } catch {
         audioLogger.error("Failed to restart engine after interruption: \(error.localizedDescription)")
       }

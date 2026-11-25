@@ -129,6 +129,11 @@ final class AudioEngineManager {
   func play(_ source: AudioSource) async throws {
     if currentAudioSourceURL == source.getPlaybackURL() && playbackState == .playing { return }
 
+    let signpostID = pointsOfInterest.makeSignpostID()
+    let playState = pointsOfInterest.beginInterval("Play Song", id: signpostID,
+                                                   "\(source.title ?? "Unknown", privacy: .public)")
+    defer { pointsOfInterest.endInterval("Play Song", playState) }
+
     player?.stop()
 
     stopPauseDecay()
@@ -175,9 +180,12 @@ final class AudioEngineManager {
     currentPlaybackID = playbackID
 
     let opened: OpenedAudioFile
+    let openState = pointsOfInterest.beginInterval("Open Audio File")
     do {
       opened = try await Self.openAudioFile(at: url)
+      pointsOfInterest.endInterval("Open Audio File", openState)
     } catch {
+      pointsOfInterest.endInterval("Open Audio File", openState)
       guard currentPlaybackID == playbackID else { throw CancellationError() }
       playbackState = .idle
       throw VMError.failedToPlay(underlying: error)
@@ -194,21 +202,28 @@ final class AudioEngineManager {
 
       duration = opened.duration
 
-      try await activateAudioSession()
-
-      engine.prepare()
-
-      if !engine.isRunning {
-        try engine.start()
+      let sessionState = pointsOfInterest.beginInterval("Activate Audio Session")
+      do {
+        try await activateAudioSession()
+        pointsOfInterest.endInterval("Activate Audio Session", sessionState)
+      } catch {
+        pointsOfInterest.endInterval("Activate Audio Session", sessionState)
+        throw error
       }
-      
+
+      try await Self.startEngine(engine)
+
+      guard currentPlaybackID == playbackID else { throw CancellationError() }
+
       schedule(audioFile, on: player, playbackID: playbackID)
-      
+
       installAudioTap(on: engine)
       hapticsManager.loadTrack(at: url)
 
       playbackState = .playing
       startDisplayLink()
+    } catch is CancellationError {
+      throw CancellationError()
     } catch {
       playbackState = .idle
       stopDisplayLink()
@@ -228,6 +243,16 @@ final class AudioEngineManager {
     let file = try AVAudioFile(forReading: url)
     let duration = Double(file.length) / file.fileFormat.sampleRate
     return OpenedAudioFile(file: file, duration: duration)
+  }
+
+  @concurrent
+  nonisolated static func startEngine(_ engine: AVAudioEngine) async throws {
+    try pointsOfInterest.withIntervalSignpost("Start Audio Engine") {
+      engine.prepare()
+      if !engine.isRunning {
+        try engine.start()
+      }
+    }
   }
 
   private func schedule(_ audioFile: AVAudioFile, on player: AVAudioPlayerNode, playbackID: UUID) {

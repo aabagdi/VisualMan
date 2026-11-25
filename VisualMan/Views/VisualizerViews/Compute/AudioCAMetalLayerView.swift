@@ -19,6 +19,9 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   var config: MetalViewConfig = MetalViewConfig()
 
   func makeUIView(context: Context) -> CAMetalHostView {
+    let makeState = pointsOfInterest.beginInterval("Make Metal View", id: pointsOfInterest.makeSignpostID(),
+                                                   "\(String(describing: R.self), privacy: .public)")
+    defer { pointsOfInterest.endInterval("Make Metal View", makeState) }
     let view = CAMetalHostView()
     let layer = view.metalLayer
     layer.device = renderer.device
@@ -44,6 +47,9 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   }
 
   static func dismantleUIView(_ uiView: CAMetalHostView, coordinator: Coordinator) {
+    let dismantleState = pointsOfInterest.beginInterval("Dismantle Metal View", id: pointsOfInterest.makeSignpostID(),
+                                                        "\(String(describing: R.self), privacy: .public)")
+    defer { pointsOfInterest.endInterval("Dismantle Metal View", dismantleState) }
     coordinator.detach()
     let renderer = coordinator.renderer
     renderer.sharedEvent.wait(untilSignaledValue: renderer.frameNumber, timeoutMS: 100)
@@ -67,6 +73,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private let presentAllocators: [any MTL4CommandAllocator]
     private let presentEvent: MTLSharedEvent?
     private var presentCount: UInt64 = 0
+    private var firstFrameState: OSSignpostIntervalState?
 
     nonisolated(unsafe) private var thermalObserver: (any NSObjectProtocol)?
     private var lifecycle: AppLifecycleObserver?
@@ -94,6 +101,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     init(renderer: R, config: MetalViewConfig) {
       self.renderer = renderer
       self.config = config
+      if config.pacesFrameRate { pacedFPS = FramePacer.startRate }
 
       let device = renderer.device
       let blit = Self.makeBlitResources(device: device, pixelFormat: config.pixelFormat)
@@ -137,6 +145,8 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     }
 
     func attach(view: CAMetalHostView) {
+      firstFrameState = pointsOfInterest.beginInterval("Time to First Frame", id: pointsOfInterest.makeSignpostID(),
+                                                       "\(String(describing: R.self), privacy: .public)")
       self.hostView = view
       renderer.commandQueue.addResidencySet(view.metalLayer.residencySet)
       view.onWindowAttach = { [weak self] in
@@ -168,6 +178,10 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     }
 
     func detach() {
+      if let firstFrameState {
+        pointsOfInterest.endInterval("Time to First Frame", firstFrameState, "Detached before first frame")
+        self.firstFrameState = nil
+      }
       hostView?.onWindowAttach = nil
       if let hostView {
         presentEvent?.wait(untilSignaledValue: presentCount, timeoutMS: 100)
@@ -203,7 +217,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     }
 
     private func drawFrame() {
-      guard let view = hostView, !isInBackground else { return }
+      guard let view = hostView, !isInBackground, !pacer.takeFrameSkip() else { return }
 
       framesRendered += 1
       if !gpuRampedUp && framesRendered >= rampUpFrameThreshold {
@@ -255,7 +269,8 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       }
 
       guard intermediateTex != nil || !hasEverPresented,
-            let drawable = view.metalLayer.nextDrawable() else { return }
+            let drawable = pacer.acquireDrawable(skipsAfterWait: config.pacesFrameRate && hasEverPresented,
+                                                 view.metalLayer.nextDrawable) else { return }
 
       presentFrame(pipeline: blitPipeline,
                    intermediateTex: intermediateTex,
@@ -297,12 +312,16 @@ extension AudioCAMetalLayerView.Coordinator {
 
   private func updatePacing() {
     guard config.pacesFrameRate, let link = displayLink, let cost = pacer.takeFrameCost() else { return }
-    let rate = FramePacer.rate(current: pacedFPS, cost: cost,
-                               displayPeriod: link.targetTimestamp - link.timestamp)
+    let linkPeriod = link.targetTimestamp - link.timestamp
+    let requestedPeriod = 1 / Double(min(targetFPS, maxFPS, pacedFPS))
+    let rate = FramePacer.rate(current: pacedFPS, cost: cost, displayPeriod: max(linkPeriod, requestedPeriod))
     guard rate != pacedFPS else { return }
     let costMS = cost * 1000
-    blitLogger.info(
-      "Display rate \(self.pacedFPS) -> \(rate) Hz, frames cost \(costMS, format: .fixed(precision: 2)) ms")
+    let periodMS = linkPeriod * 1000
+    blitLogger.info("""
+      Display rate \(self.pacedFPS) -> \(rate) Hz, frames cost \(costMS, format: .fixed(precision: 2)) ms, \
+      link period \(periodMS, format: .fixed(precision: 2)) ms
+      """)
     pacedFPS = rate
     link.preferredFrameRateRange = makeFrameRateRange()
     pacer.reset()
@@ -339,31 +358,25 @@ extension AudioCAMetalLayerView.Coordinator {
     let allocator = presentAllocators[slot]
     allocator.reset()
 
-    let renderPassDesc = MTL4RenderPassDescriptor()
-    renderPassDesc.colorAttachments[0].texture = drawable.texture
-    renderPassDesc.colorAttachments[0].loadAction = .clear
-    renderPassDesc.colorAttachments[0].storeAction = .store
-    renderPassDesc.colorAttachments[0].clearColor = clearColor
-
-    presentCommandBuffer.beginCommandBuffer(allocator: allocator)
-    if let encoder = presentCommandBuffer.makeRenderCommandEncoder(descriptor: renderPassDesc) {
-      if let intermediateTex {
-        encoder.barrier(afterQueueStages: .dispatch, beforeStages: .fragment)
-        encoder.setRenderPipelineState(pipeline)
-        let table = blitArgumentTables[slot]
-        table.setTexture(intermediateTex.gpuResourceID, index: 0)
-        encoder.setArgumentTable(table, stages: .fragment)
-        encoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 3)
-      }
-      encoder.endEncoding()
-    }
-    presentCommandBuffer.endCommandBuffer()
+    Self.encodeBlitPass(into: presentCommandBuffer,
+                        allocator: allocator,
+                        target: drawable.texture,
+                        clearColor: clearColor,
+                        pipeline: pipeline,
+                        table: blitArgumentTables[slot],
+                        source: intermediateTex)
 
     nonisolated(unsafe) let drawable = drawable
     let pacer = config.pacesFrameRate ? pacer : nil
+    let firstFrameState = intermediateTex != nil ? firstFrameState : nil
+    if firstFrameState != nil { self.firstFrameState = nil }
+    let gate = PresentGate()
     let commitOptions = MTL4CommitOptions()
     commitOptions.addFeedbackHandler { @Sendable feedback in
-      guard feedback.error == nil else { return }
+      if let firstFrameState {
+        pointsOfInterest.endInterval("Time to First Frame", firstFrameState)
+      }
+      guard feedback.error == nil, gate.markGPUCompleted() else { return }
       drawable.present()
       pacer?.frameCompleted(submitted: submitted)
     }
@@ -372,6 +385,9 @@ extension AudioCAMetalLayerView.Coordinator {
     queue.commit([presentCommandBuffer], options: commitOptions)
     queue.signalDrawable(drawable)
     queue.signalEvent(presentEvent, value: presentCount)
+    guard gate.markDrawableSignaled() else { return }
+    drawable.present()
+    pacer?.frameCompleted(submitted: submitted)
   }
 }
 

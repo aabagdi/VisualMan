@@ -119,6 +119,8 @@ final class HapticsManager {
     outputLatency = AVAudioSession.sharedInstance().outputLatency
 
     analysisTask = Task(priority: .utility) { [weak self] in
+      let analysisState = pointsOfInterest.beginInterval("Bass Haptic Analysis")
+      defer { pointsOfInterest.endInterval("Bass Haptic Analysis", analysisState) }
       do {
         let track = try await BassHapticAnalyzer.analyze(url: url)
         guard !Task.isCancelled else { return }

@@ -8,22 +8,25 @@
 import SwiftUI
 
 struct ProgressSliderView<T: BinaryFloatingPoint>: View {
-  @Binding var value: T
+  let value: () -> T
+  let setValue: (T) -> Void
   let inRange: ClosedRange<T>
   let activeFillColor: Color
   let fillColor: Color
   let emptyColor: Color
   let height: CGFloat
   let onEditingChanged: (Bool) -> Void
-  
+
   @State private var isDragging: Bool = false
   @State private var tempValue: T = 0
+  @State private var playedSeconds: T = 0
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @ScaledMetric(relativeTo: .caption) private var sliderHeight: CGFloat = 30
 
   init(
-    value: Binding<T>,
+    value: @escaping () -> T,
+    setValue: @escaping (T) -> Void,
     inRange: ClosedRange<T>,
     activeFillColor: Color,
     fillColor: Color,
@@ -31,7 +34,8 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     height: CGFloat,
     onEditingChanged: @escaping (Bool) -> Void
   ) {
-    self._value = value
+    self.value = value
+    self.setValue = setValue
     self.inRange = inRange
     self.activeFillColor = activeFillColor
     self.fillColor = fillColor
@@ -39,21 +43,9 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     self.height = height
     self.onEditingChanged = onEditingChanged
   }
-  
-  private var currentProgress: T {
-    if isDragging {
-      return getPrgPercentage(tempValue)
-    } else {
-      return getPrgPercentage(value)
-    }
-  }
-  
-  private var displayTime: T {
-    return currentProgress * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
-  }
-  
+
   private var elapsedSeconds: T {
-    displayTime.rounded(.down)
+    isDragging ? tempValue.rounded(.down) : playedSeconds
   }
 
   private var remainingTime: T {
@@ -69,9 +61,15 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
               .fill(emptyColor)
               .frame(height: height)
             
-            Capsule()
-              .fill(isDragging ? activeFillColor : fillColor)
-              .frame(width: max(bounds.size.width * CGFloat(currentProgress), 0), height: height)
+            ProgressFillView(
+              value: value,
+              draggedValue: isDragging ? tempValue : nil,
+              inRange: inRange,
+              color: isDragging ? activeFillColor : fillColor,
+              width: bounds.size.width,
+              height: height,
+              playedSeconds: $playedSeconds
+            )
           }
           .frame(height: height)
           
@@ -110,7 +108,8 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
             tempValue = clampedProgress * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
           }
           .onEnded { _ in
-            value = tempValue
+            setValue(tempValue)
+            playedSeconds = tempValue.rounded(.down)
             isDragging = false
             onEditingChanged(false)
           }
@@ -120,7 +119,7 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("Playback position")
     .accessibilityValue(
-      "\(displayTime.asTimeString()) of \((inRange.upperBound).asTimeString())"
+      "\(elapsedSeconds.asTimeString()) of \((inRange.upperBound).asTimeString())"
     )
     .accessibilityAddTraits(.updatesFrequently)
     .accessibilityShowsLargeContentViewer {
@@ -129,23 +128,39 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     .accessibilityAdjustableAction { direction in
       let range = inRange.upperBound - inRange.lowerBound
       let step = range * 0.05
+      let current = value()
       switch direction {
       case .increment:
-        value = min(value + step, inRange.upperBound)
+        setValue(min(current + step, inRange.upperBound))
       case .decrement:
-        value = max(value - step, inRange.lowerBound)
+        setValue(max(current - step, inRange.lowerBound))
       @unknown default:
         break
       }
       onEditingChanged(false)
     }
   }
+}
 
-  private func getPrgPercentage(_ value: T) -> T {
+private struct ProgressFillView<T: BinaryFloatingPoint>: View {
+  let value: () -> T
+  let draggedValue: T?
+  let inRange: ClosedRange<T>
+  let color: Color
+  let width: CGFloat
+  let height: CGFloat
+  @Binding var playedSeconds: T
+
+  var body: some View {
+    let current = max(min(value(), inRange.upperBound), inRange.lowerBound)
     let range = inRange.upperBound - inRange.lowerBound
-    if range == 0 { return 0 }
-    let correctedStartValue = value - inRange.lowerBound
-    let percentage = correctedStartValue / range
-    return max(min(percentage, 1), 0)
+    let progress = range == 0 ? 0 : ((draggedValue ?? current) - inRange.lowerBound) / range
+
+    Capsule()
+      .fill(color)
+      .frame(width: max(width * CGFloat(progress), 0), height: height)
+      .onChange(of: current.rounded(.down), initial: true) { _, seconds in
+        playedSeconds = seconds
+      }
   }
 }
