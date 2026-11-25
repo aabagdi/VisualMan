@@ -22,9 +22,6 @@ struct ExternalDisplayView: View {
       if let current = playlistManager.currentAudioSource {
         VisualizerContainerView(
           currentVisualizer: visualizerSelection.current,
-          visualizerBars: audioManager.visualizerBars,
-          audioLevels: audioManager.audioLevels,
-          waveform: audioManager.waveform,
           albumArt: current.albumArt,
           isPlaying: audioManager.isPlaying
         )

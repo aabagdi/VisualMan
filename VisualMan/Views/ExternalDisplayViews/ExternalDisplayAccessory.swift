@@ -17,17 +17,8 @@ struct ExternalDisplayAccessory: ViewModifier {
         .sceneAccessory {
           ExternalNonInteractiveAccessory {
             ExternalDisplayView()
-              .onAppear {
-                print("[ExternalDisplay] accessory appeared") // TEMP
-                externalDisplay.sceneConnected()
-              }
-              .onDisappear {
-                print("[ExternalDisplay] accessory disappeared") // TEMP
-                externalDisplay.sceneDisconnected()
-              }
-          }
-          .onAvailabilityChange { isAvailable in
-            print("[ExternalDisplay] accessory available=\(isAvailable)") // TEMP
+              .onAppear { externalDisplay.sceneConnected() }
+              .onDisappear { externalDisplay.sceneDisconnected() }
           }
         }
     } else {

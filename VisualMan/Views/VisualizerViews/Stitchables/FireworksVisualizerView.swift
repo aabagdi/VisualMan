@@ -8,10 +8,8 @@
 import SwiftUI
 
 struct FireworksVisualizerView: View {
-  let audioLevels: [1024 of Float]
-
   var body: some View {
-    ShaderVisualizerView(audioLevels: audioLevels) { audio in
+    ShaderVisualizerView { audio in
       let peakLevel = min((audio.bass + audio.mid + audio.high) / 3.0 * 1.2, 1.0)
       Rectangle()
         .fireworksShader(time: audio.time,

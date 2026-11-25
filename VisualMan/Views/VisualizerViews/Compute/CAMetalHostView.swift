@@ -21,6 +21,7 @@ final class CAMetalHostView: UIView {
   }
 
   var onWindowAttach: (() -> Void)?
+  var onWindowDetach: (() -> Void)?
 
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -33,6 +34,8 @@ final class CAMetalHostView: UIView {
       metalLayer.contentsScale = window.screen.nativeScale
       updateDrawableSize()
       onWindowAttach?()
+    } else {
+      onWindowDetach?()
     }
   }
 

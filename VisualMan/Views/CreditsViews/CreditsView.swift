@@ -140,11 +140,11 @@ struct CreditsView: View {
 
 private struct CreditRow: View {
   let title: String
-  let role: String
-  let attribution: String
+  let role: LocalizedStringResource
+  let attribution: LocalizedStringResource
   let license: String?
   let url: URL?
-  let note: String?
+  let note: LocalizedStringResource?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {

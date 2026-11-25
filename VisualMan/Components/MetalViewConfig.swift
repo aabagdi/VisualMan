@@ -25,11 +25,10 @@ struct MetalViewConfig {
 
 struct AudioMetalView<R: MetalVisualizerRenderer>: View {
   let renderer: R
-  let audioLevels: [1024 of Float]
   var config: MetalViewConfig = MetalViewConfig()
 
   var body: some View {
-    AudioCAMetalLayerView(renderer: renderer, audioLevels: audioLevels, config: config)
+    AudioCAMetalLayerView(renderer: renderer, config: config)
   }
 }
 

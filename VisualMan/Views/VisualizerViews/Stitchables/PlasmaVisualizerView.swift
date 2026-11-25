@@ -8,10 +8,8 @@
 import SwiftUI
 
 struct PlasmaVisualizerView: View {
-  let audioLevels: [1024 of Float]
-
   var body: some View {
-    ShaderVisualizerView(audioLevels: audioLevels) { audio in
+    ShaderVisualizerView { audio in
       Rectangle()
         .plasmaShader(audio: audio)
     }

@@ -19,22 +19,25 @@ struct CompilationListView: View {
   }
   
   var body: some View {
-    Section {
+    Group {
       if !compilations.isEmpty {
-        List(displayedCompilations, id: \.representativeItem?.persistentID) { compilation in
-          NavigationLink(destination: AlbumDetailView(album: compilation)) {
+        List(displayedCompilations, id: \.persistentID) { compilation in
+          NavigationLink {
+            AlbumDetailView(album: compilation)
+          } label: {
             AlbumRowView(album: compilation)
           }
         }
         .debouncedSearchable(text: $searchText, results: $filteredCompilations, source: compilations) {
           [$0.representativeItem?.albumTitle]
         }
-        .navigationTitle("Compilations")
       } else {
-        Text("No compilations found!")
+        ContentUnavailableView("No Compilations", systemImage: "person.2.crop.square.stack.fill",
+                               description: Text("Your music library has no compilations."))
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
+    .navigationTitle("Compilations")
   }
 }

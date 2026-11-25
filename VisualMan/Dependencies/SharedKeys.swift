@@ -15,6 +15,10 @@ extension SharedKey where Self == AppStorageKey<Bool>.Default {
   static var keepsControlsVisible: Self {
     Self[.appStorage("keepsControlsVisible"), default: false]
   }
+
+  static var hidesScreenMirroringHint: Self {
+    Self[.appStorage("hideScreenMirroringHint"), default: false]
+  }
 }
 
 extension SharedKey where Self == AppStorageKey<Double>.Default {

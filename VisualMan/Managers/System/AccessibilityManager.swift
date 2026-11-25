@@ -95,7 +95,7 @@ final class AccessibilityManager {
     ]
     observers = names.map { name in
       NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-        Task { @MainActor in
+        MainActor.assumeIsolated {
           self?.refreshSystemSettings()
         }
       }

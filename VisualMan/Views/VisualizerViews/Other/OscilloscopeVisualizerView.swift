@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Dependencies
 
 struct OscilloscopeVisualizerView: View {
   private enum Constants {
@@ -25,17 +26,36 @@ struct OscilloscopeVisualizerView: View {
     static let crtScanlineIntensity: Float = 0.3
     static let crtVignetteStrength: Float = 0.4
     static let phosphorRetention: Float = 0.75
+    static let crtMaxSampleOffsetFraction = crtMaxOffsetFraction(curvature: crtCurvature)
+    static let trailGlow: [(width: CGFloat, opacity: Double)] = [
+      (16.0, 0.025),
+      (10.0, 0.05),
+      (6.0, 0.1),
+      (3.0, 0.2),
+      (1.5, 0.4),
+    ]
+    static let glowLayers: [(width: CGFloat, opacity: Double)] = [
+      (12.0, 0.03),
+      (8.0, 0.06),
+      (5.0, 0.1),
+      (3.0, 0.2),
+      (1.5, 0.9),
+    ]
+
+    private static func crtMaxOffsetFraction(curvature: Float) -> CGFloat {
+      let k = CGFloat(curvature)
+      let peak = (2.0 / 3.0).squareRoot() * (4.0 / 3.0)
+      return 0.5 * peak * k / (1 + 2 * k)
+    }
   }
 
   @State private var audio = SmoothedAudio()
   @State private var smoothedWaveform: [Float] = .init(repeating: 0.0, count: Constants.displayPointCount)
   @State private var phosphorTrail: [Float] = .init(repeating: 0.0, count: Constants.displayPointCount)
-  @State private var downsampleBuffer: [Float] = .init(repeating: 0.0, count: Constants.displayPointCount)
 
-  let audioLevels: [1024 of Float]
-  let waveform: [1024 of Float]
+  @Dependency(AudioEngineManager.self) private var audioManager
 
-  private func triggerIndex() -> Int {
+  private func triggerIndex(in waveform: [1024 of Float]) -> Int {
     let searchLimit = 1024 - Constants.windowSamples
     var prev = waveform[0]
     for i in 1..<searchLimit {
@@ -48,10 +68,10 @@ struct OscilloscopeVisualizerView: View {
     return 0
   }
 
-  private func downsampleWaveform(into buffer: inout [Float]) {
+  private func downsampleWaveform(_ waveform: [1024 of Float], into buffer: inout [Float]) {
     let n = Constants.displayPointCount
     let samplesPerPoint = Constants.windowSamples / n
-    let start = triggerIndex()
+    let start = triggerIndex(in: waveform)
     for i in 0..<n {
       let base = start + i * samplesPerPoint
       var sum: Float = 0
@@ -146,14 +166,7 @@ struct OscilloscopeVisualizerView: View {
         let brightness = min(0.7 + audioEnergy * 0.3, 1.0)
 
         let trailPath = buildWaveformPath(from: phosphorTrail, size: size)
-        let trailGlow: [(width: CGFloat, opacity: Double)] = [
-          (16.0, 0.025),
-          (10.0, 0.05),
-          (6.0, 0.1),
-          (3.0, 0.2),
-          (1.5, 0.4),
-        ]
-        for layer in trailGlow {
+        for layer in Constants.trailGlow {
           context.stroke(
             trailPath,
             with: .color(Color(hue: 0.33,
@@ -166,15 +179,7 @@ struct OscilloscopeVisualizerView: View {
 
         let waveformPath = buildWaveformPath(from: smoothedWaveform, size: size)
 
-        let glowLayers: [(width: CGFloat, opacity: Double)] = [
-          (12.0, 0.03),
-          (8.0, 0.06),
-          (5.0, 0.1),
-          (3.0, 0.2),
-          (1.5, 0.9),
-        ]
-
-        for layer in glowLayers {
+        for layer in Constants.glowLayers {
           context.stroke(
             waveformPath,
             with: .color(Color(hue: 0.33,
@@ -187,7 +192,8 @@ struct OscilloscopeVisualizerView: View {
       }
       .visualEffect { [curvature = Constants.crtCurvature,
                        scanline = Constants.crtScanlineIntensity,
-                       vignette = Constants.crtVignetteStrength] content, proxy in
+                       vignette = Constants.crtVignetteStrength,
+                       offsetFraction = Constants.crtMaxSampleOffsetFraction] content, proxy in
         content
           .layerEffect(
             ShaderLibrary.crtEffect(
@@ -196,12 +202,14 @@ struct OscilloscopeVisualizerView: View {
               .float(scanline),
               .float(vignette)
             ),
-            maxSampleOffset: CGSize(width: 10, height: 10)
+            maxSampleOffset: CGSize(width: (proxy.size.width * offsetFraction).rounded(.up),
+                                    height: (proxy.size.height * offsetFraction).rounded(.up))
           )
       }
       .onChange(of: timeline.date) { oldValue, newValue in
         let dt = min(Float(newValue.timeIntervalSince(oldValue)), 1.0 / 30.0)
-        audio.update(from: audioLevels, dt: dt)
+        audio.update(from: audioManager.audioLevels, dt: dt)
+        let waveform = audioManager.waveform
 
         var rawPeak: Float = 0
         for i in 0..<1024 {
@@ -211,30 +219,36 @@ struct OscilloscopeVisualizerView: View {
 
         let retention = Constants.phosphorRetention
         let n = Constants.displayPointCount
+        var trail = phosphorTrail
+        var smoothed = smoothedWaveform
         for i in 0..<n {
-          phosphorTrail[i] = phosphorTrail[i] * retention + smoothedWaveform[i] * (1.0 - retention)
+          trail[i] = trail[i] * retention + smoothed[i] * (1.0 - retention)
         }
 
         if rawPeak < Constants.silenceThreshold {
           for i in 0..<n {
-            smoothedWaveform[i] *= Constants.decayFactor
-            if abs(smoothedWaveform[i]) < Constants.decayThreshold {
-              smoothedWaveform[i] = 0
+            smoothed[i] *= Constants.decayFactor
+            if abs(smoothed[i]) < Constants.decayThreshold {
+              smoothed[i] = 0
             }
-            phosphorTrail[i] *= Constants.decayFactor
-            if abs(phosphorTrail[i]) < Constants.decayThreshold {
-              phosphorTrail[i] = 0
+            trail[i] *= Constants.decayFactor
+            if abs(trail[i]) < Constants.decayThreshold {
+              trail[i] = 0
             }
           }
         } else {
-          downsampleWaveform(into: &downsampleBuffer)
+          var downsampled = [Float](repeating: 0.0, count: n)
+          downsampleWaveform(waveform, into: &downsampled)
           for i in 0..<n {
-            let target = downsampleBuffer[i]
-            let current = smoothedWaveform[i]
+            let target = downsampled[i]
+            let current = smoothed[i]
             let smooth = abs(target) > abs(current) ? Constants.attackSmoothing : Constants.releaseSmoothing
-            smoothedWaveform[i] = current * smooth + target * (1.0 - smooth)
+            smoothed[i] = current * smooth + target * (1.0 - smooth)
           }
         }
+
+        phosphorTrail = trail
+        smoothedWaveform = smoothed
       }
       .ignoresSafeArea()
       .accessibilityHidden(true)

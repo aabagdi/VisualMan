@@ -34,9 +34,9 @@ extension MusicPlayerView {
       setupLockScreenControls()
 
       playbackListeningTask?.cancel()
+      let completions = audioManager.playbackCompletions()
       playbackListeningTask = Task { [weak self] in
-        guard let stream = self?.audioManager.playbackCompleted else { return }
-        for await _ in stream {
+        for await _ in completions {
           guard !Task.isCancelled else { break }
           self?.onSongCompleted()
         }

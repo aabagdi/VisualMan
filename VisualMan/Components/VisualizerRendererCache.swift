@@ -9,14 +9,12 @@ import SwiftUI
 import os
 
 #if !targetEnvironment(simulator)
-private nonisolated func drainGPU(event: MTLSharedEvent, target: UInt64) {
-  event.wait(untilSignaledValue: target, timeoutMS: 1000)
-}
-
 @MainActor
 @Observable
 final class VisualizerRendererCache {
+  @ObservationIgnored
   private var renderers = [ObjectIdentifier: any MetalVisualizerRenderer]()
+  @ObservationIgnored
   private var inFlightTasks = [ObjectIdentifier: Task<Void, Never>]()
 
   @ObservationIgnored
@@ -75,20 +73,11 @@ final class VisualizerRendererCache {
   }
   
   func purge() {
-    let fenceInfo: [(event: MTLSharedEvent, target: UInt64)] = renderers.values.compactMap { renderer in
-      let target = renderer.frameNumber
-      renderer.commandQueue.removeResidencySet(renderer.residencySet)
-      guard target > 0 else { return nil }
-      return (renderer.sharedEvent, target)
+    renderers = renderers.filter { _, renderer in
+      renderer.sharedEvent.signaledValue < renderer.frameNumber
     }
-    renderers.removeAll()
-    sharedDevice = nil
-    Task.detached {
-      await withTaskGroup(of: Void.self) { group in
-        for info in fenceInfo {
-          group.addTask { drainGPU(event: info.event, target: info.target) }
-        }
-      }
+    if renderers.isEmpty {
+      sharedDevice = nil
     }
   }
 }

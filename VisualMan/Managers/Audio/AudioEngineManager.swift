@@ -34,7 +34,13 @@ final class AudioEngineManager {
   var visualizerBars: [32 of Float] = .init(repeating: 0.0)
   var waveform: [1024 of Float] = .init(repeating: 0.0)
   var playbackState: PlaybackState = .idle
-  var currentTime: TimeInterval = 0
+  var currentTime: TimeInterval = 0 {
+    didSet {
+      let hasPosition = currentTime > 0
+      if hasPosition != hasPlaybackPosition { hasPlaybackPosition = hasPosition }
+    }
+  }
+  private(set) var hasPlaybackPosition = false
   var duration: TimeInterval = 0
   var failedToInitialize = false
   var initializationError: VMError?
@@ -49,7 +55,7 @@ final class AudioEngineManager {
   
   @ObservationIgnored private(set) var engine: AVAudioEngine?
   @ObservationIgnored private var securityScopedURL: URL?
-  @ObservationIgnored var playbackContinuation: AsyncStream<Void>.Continuation?
+  @ObservationIgnored var playbackCompletionContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
   @ObservationIgnored var pauseDecayTask: Task<Void, Never>?
   @ObservationIgnored var pauseDecayStream: DisplayLinkStream?
   
@@ -60,22 +66,21 @@ final class AudioEngineManager {
   @ObservationIgnored var lastSeekFrame: AVAudioFramePosition = 0
   @ObservationIgnored var currentPlaybackID: UUID
   @ObservationIgnored var nowPlayingTask: Task<Void, Never>?
+  @ObservationIgnored var sessionDeactivationTask: Task<Void, Never>?
   @ObservationIgnored var interruptionObserver: (any NSObjectProtocol)?
   @ObservationIgnored var routeChangeObserver: (any NSObjectProtocol)?
   @ObservationIgnored var configChangeObserver: (any NSObjectProtocol)?
+  @ObservationIgnored var resumesAfterInterruption = false
   
   let audioTapProcessor = AudioTapProcessor()
-  
-  let playbackCompleted: AsyncStream<Void>
-  
+  let engineLock = NSRecursiveLock()
+  let engineShouldRun = OSAllocatedUnfairLock(initialState: false)
+
   init() {
     @Dependency(\.uuid) var uuid
     let initialID = uuid()
     currentPlaybackID = initialID
-    
-    let (stream, continuation) = AsyncStream<Void>.makeStream()
-    playbackCompleted = stream
-    playbackContinuation = continuation
+
     do {
       try setupAudioEngine()
     } catch {
@@ -94,7 +99,9 @@ final class AudioEngineManager {
     pauseDecayStream?.stop()
     pauseDecayTask?.cancel()
     nowPlayingTask?.cancel()
-    playbackContinuation?.finish()
+    for continuation in playbackCompletionContinuations.values {
+      continuation.finish()
+    }
     stopSecurityScopedAccess()
     for observer in [interruptionObserver, routeChangeObserver, configChangeObserver].compactMap({ $0 }) {
       NotificationCenter.default.removeObserver(observer)
@@ -134,17 +141,26 @@ final class AudioEngineManager {
                                                    "\(source.title ?? "Unknown", privacy: .public)")
     defer { pointsOfInterest.endInterval("Play Song", playState) }
 
-    player?.stop()
+    let playbackID = uuid()
+    currentPlaybackID = playbackID
+    let pendingDeactivation = sessionDeactivationTask
+    sessionDeactivationTask = nil
+    pendingDeactivation?.cancel()
 
+    engineLock.withLock {
+      player?.stop()
+      engine?.mainMixerNode.removeTap(onBus: 0)
+    }
     stopPauseDecay()
     stopDisplayLink()
-    engine?.mainMixerNode.removeTap(onBus: 0)
 
     audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
     waveform = [1024 of Float](repeating: 0.0)
     audioConditioner.reset()
     await audioTapProcessor.reset()
+    await pendingDeactivation?.value
+    guard currentPlaybackID == playbackID else { return }
     lastSeekFrame = 0
 
     guard let url = source.getPlaybackURL() else {
@@ -153,31 +169,28 @@ final class AudioEngineManager {
 
     let isSecurityScoped = (source as? FileAudioSource)?.isSecurityScoped ?? false
     do {
-      try await play(from: url, isSecurityScoped: isSecurityScoped)
+      try await play(from: url, isSecurityScoped: isSecurityScoped, playbackID: playbackID)
     } catch is CancellationError {
       return
     }
     currentAudioSourceURL = source.getPlaybackURL()
   }
 
-  private func play(from url: URL, isSecurityScoped: Bool) async throws {
+  private func play(from url: URL, isSecurityScoped: Bool, playbackID: UUID) async throws {
     stopSecurityScopedAccess()
 
     let accessing = url.startAccessingSecurityScopedResource()
     if isSecurityScoped || accessing {
       securityScopedURL = url
     }
-    try await playAudioFromURL(url)
+    try await playAudioFromURL(url, playbackID: playbackID)
   }
-  
-  private func playAudioFromURL(_ url: URL) async throws {
+
+  private func playAudioFromURL(_ url: URL, playbackID: UUID) async throws {
     guard let engine,
           let player else {
       throw VMError.nilEngineOrPlayer
     }
-    
-    let playbackID = uuid()
-    currentPlaybackID = playbackID
 
     let opened: OpenedAudioFile
     let openState = pointsOfInterest.beginInterval("Open Audio File")
@@ -211,13 +224,16 @@ final class AudioEngineManager {
         throw error
       }
 
-      try await Self.startEngine(engine)
+      try await startEngine(engine)
 
       guard currentPlaybackID == playbackID else { throw CancellationError() }
 
-      schedule(audioFile, on: player, playbackID: playbackID)
-
-      installAudioTap(on: engine)
+      try engineLock.withLock {
+        guard engine.isRunning else { throw VMError.failedToPlay(underlying: nil) }
+        schedule(audioFile, on: player, playbackID: playbackID)
+        installAudioTap(on: engine)
+        try player.playCatchingExceptions()
+      }
       hapticsManager.loadTrack(at: url)
 
       playbackState = .playing
@@ -229,8 +245,6 @@ final class AudioEngineManager {
       stopDisplayLink()
       throw VMError.failedToPlay(underlying: error)
     }
-
-    player.play()
   }
   
   nonisolated struct OpenedAudioFile {
@@ -243,16 +257,6 @@ final class AudioEngineManager {
     let file = try AVAudioFile(forReading: url)
     let duration = Double(file.length) / file.fileFormat.sampleRate
     return OpenedAudioFile(file: file, duration: duration)
-  }
-
-  @concurrent
-  nonisolated static func startEngine(_ engine: AVAudioEngine) async throws {
-    try pointsOfInterest.withIntervalSignpost("Start Audio Engine") {
-      engine.prepare()
-      if !engine.isRunning {
-        try engine.start()
-      }
-    }
   }
 
   private func schedule(_ audioFile: AVAudioFile, on player: AVAudioPlayerNode, playbackID: UUID) {

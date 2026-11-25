@@ -14,8 +14,6 @@ private struct NowPlayingDestination: Hashable {}
 struct HomeScreenView: View {
   @State private var isShowingFileImporter = false
   @State private var selectedAudioSource: FileAudioSource?
-  @State private var isShowingFilePlayer = false
-  @State private var fileLoadingFailed = false
   @State private var fileError: VMError?
   
   @Dependency(AudioEngineManager.self) private var audioManager
@@ -30,20 +28,20 @@ struct HomeScreenView: View {
           MusicPlayerView(playlistManager.audioSources,
                           startingIndex: playlistManager.currentIndex)
         }
-        .navigationDestination(isPresented: $isShowingFilePlayer) {
-          if let audioSource = selectedAudioSource {
-            MusicPlayerView(fileAudioSource: audioSource)
-          }
+        .navigationDestination(item: $selectedAudioSource) { audioSource in
+          MusicPlayerView(fileAudioSource: audioSource)
         }
         .toolbar {
           ToolbarItem(placement: .topBarLeading) {
-            NavigationLink("Credits", destination: CreditsView())
+            NavigationLink("Credits") {
+              CreditsView()
+            }
           }
           ToolbarItemGroup(placement: .topBarTrailing) {
             Button("Files", systemImage: "folder.fill") {
               isShowingFileImporter = true
             }
-            if audioManager.isPlaying || audioManager.currentTime > 0 {
+            if audioManager.isPlaying || audioManager.hasPlaybackPosition {
               NavigationLink(value: NowPlayingDestination()) {
                 Label("Now Playing", systemImage: "play.fill")
               }
@@ -55,45 +53,50 @@ struct HomeScreenView: View {
     .fileImporter(
       isPresented: $isShowingFileImporter,
       allowedContentTypes: [.aiff, .mp3, .wav, .mpeg4Audio, .audio]
-    ) { result in
-      switch result {
-      case .success(let url):
-        openFile(at: url)
-      case .failure:
-        fileError = VMError.failedToCreateFile
-        fileLoadingFailed = true
-      }
-    }
+    ) { fileImporterCompleted($0) }
     .alert(
-      fileError?.errorDescription ?? "An unknown error occurred while loading the file.",
-      isPresented: $fileLoadingFailed
+      fileError?.errorDescription ?? String(localized: "An unknown error occurred while loading the file."),
+      isPresented: $fileError.isPresented
     ) {
-      Button("Okay", role: .cancel) {
-        fileLoadingFailed = false
-        fileError = nil
-      }
+      Button("Okay", role: .cancel) { }
     }
     .environment(visualizerSelection)
   }
   
+  private func fileImporterCompleted(_ result: Result<URL, any Error>) {
+    switch result {
+    case .success(let url):
+      openFile(at: url)
+    case .failure:
+      fileError = VMError.failedToCreateFile
+    }
+  }
+
   private func openFile(at url: URL) {
-    Task { @MainActor in
+    Task {
       let isSecurityScoped = url.startAccessingSecurityScopedResource()
       do {
         selectedAudioSource = try await FileAudioSource.from(
           url: url,
           isSecurityScoped: isSecurityScoped
         )
-        isShowingFilePlayer = true
       } catch let error as VMError {
         if isSecurityScoped { url.stopAccessingSecurityScopedResource() }
         fileError = error
-        fileLoadingFailed = true
       } catch {
         if isSecurityScoped { url.stopAccessingSecurityScopedResource() }
         fileError = VMError.failedToCreateFile
-        fileLoadingFailed = true
       }
+    }
+  }
+}
+
+private extension Optional {
+  var isPresented: Bool {
+    get { self != nil }
+    set {
+      guard !newValue else { return }
+      self = nil
     }
   }
 }

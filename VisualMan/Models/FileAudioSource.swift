@@ -14,7 +14,7 @@ private struct ITunesMetadataResult {
   var albumArt: UIImage?
 }
 
-struct FileAudioSource: AudioSource {
+struct FileAudioSource: AudioSource, Hashable {
   let url: URL
   let title: String?
   let artist: String?

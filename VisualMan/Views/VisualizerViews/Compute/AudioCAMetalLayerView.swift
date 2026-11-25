@@ -9,13 +9,13 @@
 import SwiftUI
 import MetalKit
 import QuartzCore
+import Dependencies
 import os
 
 private nonisolated let blitLogger = Logger(subsystem: "com.VisualMan", category: "AudioMetalView")
 
 struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   let renderer: R
-  let audioLevels: [1024 of Float]
   var config: MetalViewConfig = MetalViewConfig()
 
   func makeUIView(context: Context) -> CAMetalHostView {
@@ -41,7 +41,6 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   }
 
   func updateUIView(_ uiView: CAMetalHostView, context: Context) {
-    context.coordinator.audioLevels = audioLevels
     context.coordinator.clearColor = config.clearColor
     context.coordinator.maxFPS = config.maxFramesPerSecond
   }
@@ -62,7 +61,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   @MainActor
   final class Coordinator: NSObject {
     let renderer: R
-    var audioLevels: [1024 of Float] = .init(repeating: 0.0)
+    @Dependency(AudioEngineManager.self) private var audioManager
     var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
     private var lastFrameTime: CFTimeInterval = 0
     private let config: MetalViewConfig
@@ -75,13 +74,14 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var presentCount: UInt64 = 0
     private var firstFrameState: OSSignpostIntervalState?
 
-    nonisolated(unsafe) private var thermalObserver: (any NSObjectProtocol)?
+    private var thermalObserver: (any NSObjectProtocol)?
     private var lifecycle: AppLifecycleObserver?
     private var currentThermalState: ProcessInfo.ThermalState = .nominal
     private var drawableScaleFactor: CGFloat = 1.0
     private weak var hostView: CAMetalHostView?
     private var displayLink: CADisplayLink?
     private var isInBackground = false
+    private var isInWindow = false
     private var targetFPS: Int = 120
     private let pacer = FramePacer()
     private var pacedFPS: Int = 120
@@ -128,7 +128,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         onForeground: { [weak self] in self?.setBackgrounded(false) })
     }
 
-    deinit {
+    isolated deinit {
       if let observer = thermalObserver {
         NotificationCenter.default.removeObserver(observer)
       }
@@ -136,7 +136,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
     private func setBackgrounded(_ background: Bool) {
       isInBackground = background
-      displayLink?.isPaused = background
+      displayLink?.isPaused = background || !isInWindow
       if !background {
         pacer.reset()
         renderer.recoverFromStalledGPU()
@@ -150,13 +150,26 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       self.hostView = view
       renderer.commandQueue.addResidencySet(view.metalLayer.residencySet)
       view.onWindowAttach = { [weak self] in
-        self?.configureDrawable()
-        self?.startDisplayLinkIfNeeded()
+        self?.windowAttached()
+      }
+      view.onWindowDetach = { [weak self] in
+        self?.windowDetached()
       }
       if view.window != nil {
-        configureDrawable()
-        startDisplayLinkIfNeeded()
+        windowAttached()
       }
+    }
+
+    private func windowAttached() {
+      isInWindow = true
+      configureDrawable()
+      startDisplayLinkIfNeeded()
+      displayLink?.isPaused = isInBackground
+    }
+
+    private func windowDetached() {
+      isInWindow = false
+      displayLink?.isPaused = true
     }
 
     private func configureDrawable() {
@@ -183,6 +196,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
         self.firstFrameState = nil
       }
       hostView?.onWindowAttach = nil
+      hostView?.onWindowDetach = nil
       if let hostView {
         presentEvent?.wait(untilSignaledValue: presentCount, timeoutMS: 100)
         renderer.commandQueue.removeResidencySet(hostView.metalLayer.residencySet)
@@ -247,6 +261,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 
       updatePacing()
 
+      let audioLevels = audioManager.audioLevels
       let intermediateTex = renderer.encodeFrame(
         bass: audioLevels.bassLevel,
         mid: audioLevels.midLevel,

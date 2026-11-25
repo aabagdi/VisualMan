@@ -13,8 +13,10 @@ struct ArtistDetailView: View {
   let albums: [MPMediaItemCollection]
 
   var body: some View {
-    List(albums, id: \.representativeItem?.persistentID) { album in
-      NavigationLink(destination: AlbumDetailView(album: album)) {
+    List(albums, id: \.persistentID) { album in
+      NavigationLink {
+        AlbumDetailView(album: album)
+      } label: {
         AlbumRowView(album: album)
       }
     }

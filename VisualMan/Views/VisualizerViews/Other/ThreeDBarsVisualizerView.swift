@@ -9,14 +9,13 @@ import SwiftUI
 import RealityKit
 
 struct ThreeDBarsVisualizerView: View {
-  let visualizerBars: [32 of Float]
   @State private var model = ThreeDBarsVisualizerViewModel()
 
   var body: some View {
     RealityView { content in
       content.camera = .virtual
       content.environment = .default
-      content.add(await model.makeScene(barCount: visualizerBars.count))
+      content.add(await model.makeScene())
     }
     .background(.black)
     .ignoresSafeArea()
@@ -28,9 +27,6 @@ struct ThreeDBarsVisualizerView: View {
     }
     .onDisappear {
       model.stopSmoothing()
-    }
-    .onChange(of: visualizerBars) { _, newValues in
-      model.targetValues = newValues
     }
   }
 

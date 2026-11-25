@@ -35,6 +35,10 @@ extension MPMediaItem: AudioSource {
     return albumArt
   }
   
+  var cachedThumbnailImage: UIImage? {
+    thumbnailCache.object(forKey: NSNumber(value: persistentID))
+  }
+
   var thumbnailImage: UIImage? {
     let key = NSNumber(value: persistentID)
     

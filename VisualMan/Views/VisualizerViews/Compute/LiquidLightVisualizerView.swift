@@ -10,19 +10,18 @@ import SwiftUI
 import MetalKit
 
 struct LiquidLightVisualizerView: View {
-  let audioLevels: [1024 of Float]
+  private static let config = MetalViewConfig(
+    clearColor: MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1),
+    backgroundColor: .black,
+    colorSpace: LiquidLightRenderer.outputColorSpace,
+    pixelFormat: LiquidLightRenderer.outputPixelFormat,
+    wantsExtendedDynamicRange: LiquidLightRenderer.outputExtendedRange,
+    standardRangeColorSpace: LiquidLightRenderer.standardRangeColorSpace,
+    standardRangePixelFormat: LiquidLightRenderer.standardRangePixelFormat)
 
   var body: some View {
-    MetalVisualizerContainerView<LiquidLightRenderer>(
-      audioLevels: audioLevels,
-      config: MetalViewConfig(
-        clearColor: MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1),
-        backgroundColor: .black,
-        colorSpace: LiquidLightRenderer.outputColorSpace,
-        pixelFormat: LiquidLightRenderer.outputPixelFormat,
-        wantsExtendedDynamicRange: LiquidLightRenderer.outputExtendedRange,
-        standardRangeColorSpace: LiquidLightRenderer.standardRangeColorSpace,
-        standardRangePixelFormat: LiquidLightRenderer.standardRangePixelFormat),
+    MetalVisualizerContainerView(
+      config: Self.config,
       factory: { device in await LiquidLightRenderer.create(device: device) })
   }
 }

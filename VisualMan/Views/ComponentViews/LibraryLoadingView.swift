@@ -10,10 +10,8 @@ import SwiftUI
 struct LibraryLoadingView: View {
   var body: some View {
     ProgressView {
-      VStack {
-        Text("Library loading!")
-          .font(.headline)
-      }
+      Text("Library loading!")
+        .font(.headline)
     }
   }
 }

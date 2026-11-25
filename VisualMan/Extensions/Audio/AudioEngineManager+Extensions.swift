@@ -11,50 +11,104 @@ import Dependencies
 import os
 
 extension AudioEngineManager {
+  func playbackCompletions() -> AsyncStream<Void> {
+    let (stream, continuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    let id = uuid()
+    playbackCompletionContinuations[id] = continuation
+    continuation.onTermination = { [weak self] _ in
+      Task { @MainActor in
+        self?.playbackCompletionContinuations[id] = nil
+      }
+    }
+    return stream
+  }
+
   func handlePlaybackCompleted() {
     guard playbackState != .completed else { return }
     playbackState = .completed
 
     currentTime = duration
     stopDisplayLink()
-    playbackContinuation?.yield()
+    for continuation in playbackCompletionContinuations.values {
+      continuation.yield()
+    }
   }
 
   func pause() {
-    player?.pause()
-    engine?.pause()
+    resumesAfterInterruption = false
+    engineLock.withLock {
+      engineShouldRun.withLock { $0 = false }
+      player?.pause()
+      engine?.pause()
+    }
     playbackState = .paused
     stopDisplayLink()
     startPauseDecay()
   }
 
   func resume() async {
-    stopPauseDecay()
     if let engine, !engine.isRunning {
       let stateBeforeStart = playbackState
       do {
-        try await Self.startEngine(engine)
+        try await startEngine(engine)
       } catch {
         do {
           try await activateAudioSession()
-          try await Self.startEngine(engine)
+          try await startEngine(engine)
         } catch {
           audioLogger.error("Failed to restart audio engine on resume: \(error.localizedDescription)")
         }
       }
       guard playbackState == stateBeforeStart else { return }
     }
-    player?.play()
+    guard startPlayerIfEngineRunning() else { return }
+    stopPauseDecay()
     playbackState = .playing
     startDisplayLink()
+  }
+
+  @discardableResult
+  func startPlayerIfEngineRunning() -> Bool {
+    engineLock.withLock {
+      guard let engine, let player, engine.isRunning else { return false }
+      do {
+        try player.playCatchingExceptions()
+        return true
+      } catch {
+        audioLogger.error("Player failed to start: \(error.localizedDescription)")
+        return false
+      }
+    }
+  }
+
+  func startEngine(_ engine: AVAudioEngine) async throws {
+    engineShouldRun.withLock { $0 = true }
+    try await Self.startEngine(engine, lock: engineLock, shouldRun: engineShouldRun)
+  }
+
+  @concurrent
+  nonisolated private static func startEngine(_ engine: AVAudioEngine,
+                                              lock: NSRecursiveLock,
+                                              shouldRun: OSAllocatedUnfairLock<Bool>) async throws {
+    try lock.withLock {
+      guard shouldRun.withLock({ $0 }) else { return }
+      try pointsOfInterest.withIntervalSignpost("Start Audio Engine") {
+        engine.prepare()
+        if !engine.isRunning {
+          try engine.start()
+        }
+      }
+    }
   }
 
   func stopForTransition() {
     let wasSeeking = playbackState == .seeking
     currentPlaybackID = uuid()
-    player?.stop()
+    engineLock.withLock {
+      player?.stop()
+      engine?.mainMixerNode.removeTap(onBus: 0)
+    }
     stopPauseDecay()
-    engine?.mainMixerNode.removeTap(onBus: 0)
     playbackState = .idle
     currentTime = 0
     stopDisplayLink()
@@ -67,9 +121,14 @@ extension AudioEngineManager {
 
   func stop() {
     stopForTransition()
-    engine?.stop()
+    engineLock.withLock {
+      engineShouldRun.withLock { $0 = false }
+      engine?.stop()
+    }
     stopNowPlayingTimer()
-    Task { [weak self] in
+    sessionDeactivationTask?.cancel()
+    sessionDeactivationTask = Task { [weak self] in
+      guard !Task.isCancelled else { return }
       do {
         try await self?.deactivateAudioSession()
       } catch {
@@ -231,116 +290,12 @@ extension AudioEngineManager {
 }
 
 extension AudioEngineManager {
-  func observeAudioSessionInterruptions() {
-    interruptionObserver = NotificationCenter.default.addObserver(
-      forName: AVAudioSession.interruptionNotification,
-      object: AVAudioSession.sharedInstance(),
-      queue: .main
-    ) { [weak self] notification in
-      guard let userInfo = notification.userInfo,
-            let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-            let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
-      let options: AVAudioSession.InterruptionOptions? = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt)
-        .map { AVAudioSession.InterruptionOptions(rawValue: $0) }
-      Task { @MainActor in
-        self?.handleInterruption(type: type, options: options)
-      }
-    }
-
-    routeChangeObserver = NotificationCenter.default.addObserver(
-      forName: AVAudioSession.routeChangeNotification,
-      object: AVAudioSession.sharedInstance(),
-      queue: .main
-    ) { [weak self] notification in
-      guard let userInfo = notification.userInfo,
-            let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
-            let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else { return }
-      Task { @MainActor in
-        self?.handleRouteChange(reason: reason)
-      }
-    }
-
-    configChangeObserver = NotificationCenter.default.addObserver(
-      forName: .AVAudioEngineConfigurationChange,
-      object: engine,
-      queue: .main
-    ) { [weak self] _ in
-      Task { @MainActor in
-        self?.handleEngineConfigChange()
-      }
-    }
-  }
-  
-  private func handleInterruption(type: AVAudioSession.InterruptionType, options: AVAudioSession.InterruptionOptions?) {
-    switch type {
-    case .began:
-      if playbackState == .playing {
-        pause()
-      }
-    case .ended:
-      Task { [weak self] in
-        await self?.reactivateAfterInterruption(options: options)
-      }
-    @unknown default:
-      break
-    }
-  }
-
-  private func reactivateAfterInterruption(options: AVAudioSession.InterruptionOptions?) async {
-    do {
-      try await activateAudioSession()
-    } catch {
-      audioLogger.error("Failed to reactivate audio session after interruption: \(error.localizedDescription)")
-    }
-    if let engine, !engine.isRunning {
-      do {
-        try await Self.startEngine(engine)
-      } catch {
-        audioLogger.error("Failed to restart engine after interruption: \(error.localizedDescription)")
-      }
-    }
-    if let options, options.contains(.shouldResume) {
-      stopPauseDecay()
-      player?.play()
-      playbackState = .playing
-      startDisplayLink()
-    }
-  }
-
-  private func handleRouteChange(reason: AVAudioSession.RouteChangeReason) {
-    switch reason {
-    case .oldDeviceUnavailable:
-      if playbackState == .playing {
-        pause()
-      }
-    case .newDeviceAvailable:
-      break
-    default:
-      break
-    }
-  }
-
-  private func handleEngineConfigChange() {
-    guard let engine else { return }
-    guard playbackState == .playing else { return }
-    player?.pause()
-    stopDisplayLink()
-    do {
-      try engine.start()
-    } catch {
-      audioLogger.error("Failed to restart engine after config change: \(error.localizedDescription)")
-    }
-    engine.mainMixerNode.removeTap(onBus: 0)
-    installAudioTap(on: engine)
-    player?.play()
-    playbackState = .playing
-    startDisplayLink()
-  }
-
   func seek(to time: TimeInterval) {
     guard let player,
           let audioFile else { return }
-    
+    engineLock.lock()
+    defer { engineLock.unlock() }
+
     let wasPlaying = playbackState == .playing
     playbackState = .seeking
     
@@ -370,15 +325,14 @@ extension AudioEngineManager {
       }
       
       if wasPlaying {
-        if let engine, !engine.isRunning {
-          do {
-            try engine.start()
-          } catch {
-            audioLogger.error("Failed to restart engine during seek: \(error.localizedDescription)")
+        if startPlayerIfEngineRunning() {
+          playbackState = .playing
+        } else {
+          pause()
+          Task { [weak self] in
+            await self?.resume()
           }
         }
-        player.play()
-        playbackState = .playing
       } else {
         playbackState = .paused
       }

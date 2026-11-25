@@ -22,14 +22,11 @@ struct SettingsView: View {
         Toggle(
           "Bass Haptics",
           systemImage: "iphone.radiowaves.left.and.right",
-          isOn: Binding(
-            get: { hapticsManager.isSupported && hapticsManager.isEnabled },
-            set: { hapticsManager.isEnabled = $0 }
-          )
+          isOn: $hapticsManager.isActive
         )
         .disabled(!hapticsManager.isSupported)
 
-        if hapticsManager.isSupported && hapticsManager.isEnabled {
+        if hapticsManager.isActive {
           VStack(alignment: .leading) {
             Label("Haptic Strength", systemImage: "dial.medium")
               .accessibilityHidden(true)

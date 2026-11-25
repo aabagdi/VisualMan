@@ -19,30 +19,32 @@ struct GenreListView: View {
     filteredGenres ?? genres
   }
 
-  private var albumsByGenre: [String: [MPMediaItemCollection]] {
-    Dictionary(grouping: albums) { $0.representativeItem?.genre ?? "Unknown" }
-  }
-
   var body: some View {
     Group {
       if !genres.isEmpty {
         List(displayedGenres, id: \.representativeItem?.persistentID) { genre in
-          let genreName = genre.representativeItem?.genre ?? "Unknown"
-          let genreAlbums = albumsByGenre[genreName] ?? []
-          NavigationLink(destination: GenreDetailView(genre: genreName, albums: genreAlbums)) {
-            Text(genre.representativeItem?.genre ?? "Unknown")
+          let genreName = genre.representativeItem?.genre ?? String(localized: "Unknown")
+          NavigationLink {
+            GenreDetailView(genre: genreName, albums: albums(for: genre))
+          } label: {
+            Text(genreName)
           }
         }
         .debouncedSearchable(text: $searchText, results: $filteredGenres, source: genres) {
           [$0.representativeItem?.genre]
         }
-        .navigationTitle("Genres")
       } else {
-        Text("No genres found!")
-          .font(.caption)
+        ContentUnavailableView("No Genres", systemImage: "guitars.fill",
+                               description: Text("Your music library has no genres."))
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
+    .navigationTitle("Genres")
+  }
+
+  private func albums(for genre: MPMediaItemCollection) -> [MPMediaItemCollection] {
+    let genreName = genre.representativeItem?.genre
+    return albums.filter { $0.representativeItem?.genre == genreName }
   }
 }

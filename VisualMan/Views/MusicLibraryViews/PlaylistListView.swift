@@ -21,17 +21,19 @@ struct PlaylistListView: View {
   var body: some View {
     Group {
       if !playlists.isEmpty {
-        List(displayedPlaylists, id: \.representativeItem?.persistentID) { playlist in
-          NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
-            Text(playlist.value(forProperty: MPMediaPlaylistPropertyName) as? String ?? "Unknown")
+        List(displayedPlaylists, id: \.persistentID) { playlist in
+          NavigationLink {
+            PlaylistDetailView(playlist: playlist)
+          } label: {
+            Text(playlist.value(forProperty: MPMediaPlaylistPropertyName) as? String ?? String(localized: "Unknown"))
           }
         }
         .debouncedSearchable(text: $searchText, results: $filteredPlaylists, source: playlists) {
           [$0.value(forProperty: MPMediaPlaylistPropertyName) as? String]
         }
       } else {
-        Text("No playlists found!")
-          .font(.caption)
+        ContentUnavailableView("No Playlists", systemImage: "list.number",
+                               description: Text("Your music library has no playlists."))
       }
     }
     .navigationTitle("Playlists")

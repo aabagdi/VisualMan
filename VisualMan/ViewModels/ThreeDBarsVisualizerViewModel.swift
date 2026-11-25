@@ -9,11 +9,12 @@ import Foundation
 import QuartzCore
 import RealityKit
 import SwiftUI
+import Dependencies
 
 extension ThreeDBarsVisualizerView {
   @MainActor
   final class ThreeDBarsVisualizerViewModel {
-    var targetValues: [32 of Float] = .init(repeating: 0.0)
+    @Dependency(AudioEngineManager.self) private var audioManager
     var barEntities: [Entity] = []
 
     private var smoothedValues: [32 of Float] = .init(repeating: minimumBarScale)
@@ -33,7 +34,8 @@ extension ThreeDBarsVisualizerView {
     private var pinchStartDistance: Float?
     private var orbitStartAngles: SIMD2<Float>?
 
-    func makeScene(barCount: Int) async -> Entity {
+    func makeScene() async -> Entity {
+      let barCount = smoothedValues.count
       let root = Entity()
 
       var cameraComponent = PerspectiveCameraComponent()
@@ -164,7 +166,6 @@ extension ThreeDBarsVisualizerView {
       let stream = DisplayLinkStream()
       displayLinkStream = stream
       smoothingTask = Task { [weak self] in
-        defer { self?.smoothingTask = nil }
         for await _ in stream.frames {
           guard !Task.isCancelled else { break }
           self?.updateSmoothedValues()
@@ -185,6 +186,7 @@ extension ThreeDBarsVisualizerView {
       lastFrameTime = now
 
       let entities = barEntities
+      let targetValues = audioManager.visualizerBars
       for index in 0..<min(targetValues.count, smoothedValues.count) {
         let targetHeight = max(Self.minimumBarScale, targetValues[index] * 10)
 

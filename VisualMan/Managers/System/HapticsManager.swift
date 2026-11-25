@@ -57,6 +57,11 @@ final class HapticsManager {
 
   var isSupported: Bool { engine != nil }
 
+  var isActive: Bool {
+    get { isSupported && isEnabled }
+    set { isEnabled = newValue }
+  }
+
   @ObservationIgnored private let logger = Logger(subsystem: "com.VisualMan", category: "HapticsManager")
   @ObservationIgnored private let engine: CHHapticEngine?
 
@@ -96,7 +101,7 @@ final class HapticsManager {
       object: AVAudioSession.sharedInstance(),
       queue: .main
     ) { [weak self] _ in
-      Task { @MainActor in
+      MainActor.assumeIsolated {
         self?.handleRouteChange()
       }
     }

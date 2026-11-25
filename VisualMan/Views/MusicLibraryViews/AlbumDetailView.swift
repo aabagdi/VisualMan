@@ -11,31 +11,26 @@ import MediaPlayer
 
 struct AlbumDetailView: View {
   let album: MPMediaItemCollection
-  let sortedSongs: [MPMediaItem]
 
   @Dependency(AudioEngineManager.self) private var audioManager
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-  private let placeholder = UIImage(resource: .artPlaceholder)
+  private static let placeholder = UIImage(resource: .artPlaceholder)
 
   private var year: String {
     if let year = album.representativeItem?.value(forProperty: "year") as? Int, year > 0 {
       return String(year)
     } else {
-      return "Unknown"
+      return String(localized: "Unknown")
     }
   }
 
-  init(album: MPMediaItemCollection) {
-    self.album = album
-    self.sortedSongs = album.items.sorted {
+  var body: some View {
+    let albumArt = album.representativeItem?.albumArt ?? Self.placeholder
+    let sortedSongs = album.items.sorted {
       ($0.discNumber, $0.albumTrackNumber) < ($1.discNumber, $1.albumTrackNumber)
     }
-  }
-  
-  var body: some View {
-    let albumArt = album.representativeItem?.albumArt ?? placeholder
     
     List {
       Section {
@@ -50,7 +45,7 @@ struct AlbumDetailView: View {
             .accessibilityIgnoresInvertColors()
           
           VStack(spacing: 4) {
-            Text(album.representativeItem?.albumTitle ?? "Unknown")
+            Text(album.representativeItem?.albumTitle ?? String(localized: "Unknown"))
               .font(.title2)
               .fontWeight(.semibold)
               .multilineTextAlignment(.center)
@@ -60,13 +55,13 @@ struct AlbumDetailView: View {
                 .font(.body)
                 .foregroundStyle(.secondary)
             } else {
-              Text(album.representativeItem?.albumArtist ?? "Unknown")
+              Text(album.representativeItem?.albumArtist ?? String(localized: "Unknown"))
                 .font(.body)
                 .foregroundStyle(.secondary)
             }
             
             HStack {
-              Text(album.representativeItem?.genre ?? "Unknown")
+              Text(album.representativeItem?.genre ?? String(localized: "Unknown"))
               Text("•")
               Text(year)
             }
@@ -83,7 +78,9 @@ struct AlbumDetailView: View {
       Section {
         ForEach(sortedSongs.enumerated(), id: \.element.persistentID) { index, song in
           let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
-          NavigationLink(destination: MusicPlayerView(sortedSongs, startingIndex: index)) {
+          NavigationLink {
+            MusicPlayerView(sortedSongs, startingIndex: index)
+          } label: {
             HStack(spacing: 12) {
               if isCurrentSong {
                 NowPlayingIndicatorView(isAnimating: audioManager.isPlaying)
@@ -97,7 +94,7 @@ struct AlbumDetailView: View {
               }
               
               VStack(alignment: .leading, spacing: 2) {
-                Text(song.title ?? "Unknown")
+                Text(song.title ?? String(localized: "Unknown"))
                   .font(.body)
                   .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                   .foregroundStyle(isCurrentSong ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))

@@ -26,7 +26,9 @@ struct SongsListView: View {
       if !songs.isEmpty {
         List(displayedSongs.enumerated(), id: \.element.persistentID) { index, song in
           let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
-          NavigationLink(destination: MusicPlayerView(displayedSongs, startingIndex: index)) {
+          NavigationLink {
+            MusicPlayerView(displayedSongs, startingIndex: index)
+          } label: {
             SongRowView(song: song, isCurrentSong: isCurrentSong, isPlaying: audioManager.isPlaying)
           }
         }
@@ -34,8 +36,8 @@ struct SongsListView: View {
           [$0.title, $0.artist]
         }
       } else {
-        Text("No songs found!")
-          .font(.caption)
+        ContentUnavailableView("No Songs", systemImage: "music.note",
+                               description: Text("Your music library has no songs."))
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)

@@ -20,10 +20,10 @@ struct SongRowView: View {
           .foregroundStyle(.tint)
       }
       VStack(alignment: .leading) {
-        Text(song.title ?? "Unknown")
+        Text(song.title ?? String(localized: "Unknown"))
           .font(.headline)
           .foregroundStyle(isCurrentSong ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-        Text("\(song.artist ?? "Unknown") • \(song.albumTitle ?? "Unknown")")
+        Text("\(song.artist ?? String(localized: "Unknown")) • \(song.albumTitle ?? String(localized: "Unknown"))")
           .font(.caption2)
       }
     }

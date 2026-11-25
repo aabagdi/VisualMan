@@ -13,8 +13,6 @@ struct AlbumListView: View {
   @State private var searchText: String = ""
   @State private var filteredAlbums: [MPMediaItemCollection]?
 
-  @ScaledMetric(relativeTo: .title3) private var iconSize: CGFloat = 30
-
   @Dependency(MusicLibraryAccessManager.self) private var library
   
   let albums: [MPMediaItemCollection]
@@ -33,100 +31,36 @@ struct AlbumListView: View {
           List {
             if searchText.isEmpty {
               Section {
-                NavigationLink(destination: SongsListView(songs: library.songs)) {
-                  HStack {
-                    Image(systemName: "music.note")
-                      .font(.title3)
-                      .frame(width: iconSize, height: iconSize)
-                      .padding(.trailing, 8)
-                      .accessibilityHidden(true)
-                    
-                    Text("Songs")
-                    
-                    Spacer()
-                    
-                    Text("\(library.songs.count)")
-                      .foregroundStyle(.secondary)
-                      .font(.subheadline)
-                  }
-                  .padding(.vertical, 4)
+                NavigationLink {
+                  SongsListView(songs: library.songs)
+                } label: {
+                  LibraryCategoryRow(title: "Songs", systemImage: "music.note", count: library.songs.count)
                 }
-                
-                NavigationLink(destination: ArtistListView(artists: library.artists,
-                                                             albums: library.albums + library.compilations)) {
-                  HStack {
-                    Image(systemName: "music.microphone")
-                      .font(.title3)
-                      .frame(width: iconSize, height: iconSize)
-                      .padding(.trailing, 8)
-                      .accessibilityHidden(true)
-                    
-                    Text("Artists")
-                    
-                    Spacer()
-                    
-                    Text("\(library.artists.count)")
-                      .foregroundStyle(.secondary)
-                      .font(.subheadline)
-                  }
-                  .padding(.vertical, 4)
+
+                NavigationLink {
+                  ArtistListView(artists: library.artists, albums: library.albums + library.compilations)
+                } label: {
+                  LibraryCategoryRow(title: "Artists", systemImage: "music.microphone", count: library.artists.count)
                 }
-                
-                NavigationLink(destination: GenreListView(genres: library.genres, albums: library.albums)) {
-                  HStack {
-                    Image(systemName: "guitars.fill")
-                      .font(.title3)
-                      .frame(width: iconSize, height: iconSize)
-                      .padding(.trailing, 8)
-                      .accessibilityHidden(true)
-                    
-                    Text("Genres")
-                    
-                    Spacer()
-                    
-                    Text("\(library.genres.count)")
-                      .foregroundStyle(.secondary)
-                      .font(.subheadline)
-                  }
-                  .padding(.vertical, 4)
+
+                NavigationLink {
+                  GenreListView(genres: library.genres, albums: library.albums)
+                } label: {
+                  LibraryCategoryRow(title: "Genres", systemImage: "guitars.fill", count: library.genres.count)
                 }
-                
-                NavigationLink(destination: PlaylistListView(playlists: library.playlists)) {
-                  HStack {
-                    Image(systemName: "list.number")
-                      .font(.title3)
-                      .frame(width: iconSize, height: iconSize)
-                      .padding(.trailing, 8)
-                      .accessibilityHidden(true)
-                    
-                    Text("Playlists")
-                    
-                    Spacer()
-                    
-                    Text("\(library.playlists.count)")
-                      .foregroundStyle(.secondary)
-                      .font(.subheadline)
-                  }
-                  .padding(.vertical, 4)
+
+                NavigationLink {
+                  PlaylistListView(playlists: library.playlists)
+                } label: {
+                  LibraryCategoryRow(title: "Playlists", systemImage: "list.number", count: library.playlists.count)
                 }
-                
-                NavigationLink(destination: CompilationListView(compilations: library.compilations)) {
-                  HStack {
-                    Image(systemName: "person.2.crop.square.stack.fill")
-                      .font(.title3)
-                      .frame(width: iconSize, height: iconSize)
-                      .padding(.trailing, 8)
-                      .accessibilityHidden(true)
-                    
-                    Text("Compilations")
-                    
-                    Spacer()
-                    
-                    Text("\(library.compilations.count)")
-                      .foregroundStyle(.secondary)
-                      .font(.subheadline)
-                  }
-                  .padding(.vertical, 4)
+
+                NavigationLink {
+                  CompilationListView(compilations: library.compilations)
+                } label: {
+                  LibraryCategoryRow(title: "Compilations",
+                                     systemImage: "person.2.crop.square.stack.fill",
+                                     count: library.compilations.count)
                 }
               }
             }
@@ -134,7 +68,9 @@ struct AlbumListView: View {
             Section {
               if !displayedAlbums.isEmpty {
                 ForEach(displayedAlbums, id: \.persistentID) { album in
-                  NavigationLink(destination: AlbumDetailView(album: album)) {
+                  NavigationLink {
+                    AlbumDetailView(album: album)
+                  } label: {
                     AlbumRowView(album: album)
                   }
                 }
@@ -151,7 +87,7 @@ struct AlbumListView: View {
       }
       .listStyle(.insetGrouped)
       .debouncedSearchable(text: $searchText, results: $filteredAlbums, source: albums) {
-        [$0.representativeItem?.albumTitle, $0.representativeItem?.artist]
+        [$0.representativeItem?.albumTitle, $0.representativeItem?.albumArtist, $0.representativeItem?.artist]
       }
       .navigationTitle("Library")
     case .denied, .notDetermined:
@@ -167,5 +103,32 @@ struct AlbumListView: View {
         Text("An unknown error occurred. Please try again.")
       }
     }
+  }
+}
+
+private struct LibraryCategoryRow: View {
+  let title: LocalizedStringKey
+  let systemImage: String
+  let count: Int
+
+  @ScaledMetric(relativeTo: .title3) private var iconSize: CGFloat = 30
+
+  var body: some View {
+    HStack {
+      Image(systemName: systemImage)
+        .font(.title3)
+        .frame(width: iconSize, height: iconSize)
+        .padding(.trailing, 8)
+        .accessibilityHidden(true)
+
+      Text(title)
+
+      Spacer()
+
+      Text("\(count)")
+        .foregroundStyle(.secondary)
+        .font(.subheadline)
+    }
+    .padding(.vertical, 4)
   }
 }

@@ -9,7 +9,7 @@ import SwiftUI
 import Dependencies
 
 extension View {
-  func debouncedSearchable<T>(
+  func debouncedSearchable<T: Equatable>(
     text: Binding<String>,
     results: Binding<[T]?>,
     source: [T],
@@ -17,7 +17,7 @@ extension View {
   ) -> some View {
     self
       .searchable(text: text, placement: .navigationBarDrawer(displayMode: .always))
-      .task(id: text.wrappedValue) {
+      .task(id: DebouncedSearchKey(text: text.wrappedValue, source: source)) {
         @Dependency(\.continuousClock) var clock
         if text.wrappedValue.isEmpty {
           results.wrappedValue = nil
@@ -28,4 +28,9 @@ extension View {
         results.wrappedValue = source.filtered(by: text.wrappedValue, matching: keyPaths)
       }
   }
+}
+
+private struct DebouncedSearchKey<Element: Equatable>: Equatable {
+  let text: String
+  let source: [Element]
 }

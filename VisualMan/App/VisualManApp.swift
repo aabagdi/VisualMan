@@ -19,24 +19,10 @@ struct VisualManApp: App {
   var body: some Scene {
     WindowGroup {
       HomeScreenView()
-        .onAppear {
-          musicLibraryManager.requestMusicLibraryAccess()
-          if ProcessInfo.processInfo.isLowPowerModeEnabled {
-            showLowPowerAlert = true
-          }
+        .task {
+          await musicLibraryManager.requestMusicLibraryAccess()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
-          showLowPowerAlert = ProcessInfo.processInfo.isLowPowerModeEnabled
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIScene.willConnectNotification)) { note in
-          let scene = note.object as? UIScene
-          print("[ExternalDisplay] scene willConnect role=\(scene?.session.role.rawValue ?? "nil") delegate=\(String(describing: scene?.delegate))")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-          let roles = UIApplication.shared.connectedScenes.map { $0.session.role.rawValue }
-          let config = Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest") ?? "missing"
-          print("[ExternalDisplay] active; scenes=\(roles) manifest=\(config)")
-        }
+        .task { await powerStateChanged() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
           rendererCache.purge()
         }
@@ -46,6 +32,13 @@ struct VisualManApp: App {
           Text("VisualMan performs best with Low Power Mode turned off.")
         }
         .environment(rendererCache)
+    }
+  }
+
+  private func powerStateChanged() async {
+    showLowPowerAlert = ProcessInfo.processInfo.isLowPowerModeEnabled
+    for await _ in NotificationCenter.default.notifications(named: .NSProcessInfoPowerStateDidChange) {
+      showLowPowerAlert = ProcessInfo.processInfo.isLowPowerModeEnabled
     }
   }
 }

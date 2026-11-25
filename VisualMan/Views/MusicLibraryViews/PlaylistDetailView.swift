@@ -15,13 +15,16 @@ struct PlaylistDetailView: View {
   @Dependency(AudioEngineManager.self) private var audioManager
   
   var body: some View {
-    List(playlist.items.enumerated(), id: \.1.persistentID) { index, song in
+    List(playlist.items.enumerated(), id: \.offset) { index, song in
       let isCurrentSong = song.assetURL == audioManager.currentAudioSourceURL
-      NavigationLink(destination: MusicPlayerView(playlist.items, startingIndex: index)) {
+      NavigationLink {
+        MusicPlayerView(playlist.items, startingIndex: index)
+      } label: {
         SongRowView(song: song, isCurrentSong: isCurrentSong, isPlaying: audioManager.isPlaying)
       }
     }
-    .navigationTitle(playlist.value(forProperty: MPMediaPlaylistPropertyName) as? String ?? "Unknown")
+    .navigationTitle(playlist.value(forProperty: MPMediaPlaylistPropertyName) as? String
+                     ?? String(localized: "Unknown"))
     .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
   }

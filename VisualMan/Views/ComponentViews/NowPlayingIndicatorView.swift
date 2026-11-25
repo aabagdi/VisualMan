@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct NowPlayingIndicatorView: View {
-  var isAnimating: Bool
+  let isAnimating: Bool
   
   @State private var barHeights: [CGFloat] = [0.3, 0.5, 0.4]
 

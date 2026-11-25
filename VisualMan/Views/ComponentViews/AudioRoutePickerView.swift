@@ -8,6 +8,7 @@
 import SwiftUI
 import AVKit
 import Dependencies
+import Sharing
 
 struct AudioRoutePickerView: View {
   var tintColor: UIColor = .label
@@ -16,7 +17,7 @@ struct AudioRoutePickerView: View {
   @Dependency(ExternalDisplayManager.self) private var externalDisplay
   @Dependency(\.continuousClock) private var clock
 
-  @AppStorage("hideScreenMirroringHint") private var hideScreenMirroringHint = false
+  @Shared(.hidesScreenMirroringHint) private var hidesScreenMirroringHint
 
   @State private var isRoutedToAirPlay = false
   @State private var airPlaySwitchCount = 0
@@ -31,7 +32,7 @@ struct AudioRoutePickerView: View {
         }
       }
       .task(id: airPlaySwitchCount) {
-        guard airPlaySwitchCount > 0, !hideScreenMirroringHint else { return }
+        guard airPlaySwitchCount > 0, !hidesScreenMirroringHint else { return }
         do {
           try await clock.sleep(for: .seconds(1.5))
         } catch {
@@ -42,10 +43,7 @@ struct AudioRoutePickerView: View {
       }
       .alert("Show the Visualizer on Your TV", isPresented: $showScreenMirroringHint) {
         Button("OK") { }
-        Button("Cancel", role: .close) {}
-        Button("Don't Show Again") {
-          hideScreenMirroringHint = true
-        }
+        Button("Don't Show Again") { $hidesScreenMirroringHint.withLock { $0 = true } }
       } message: {
         Text("If this AirPlay device is a TV, turn on screen mirroring. VisualMan will then stream the visualizer to the external display.")
       }

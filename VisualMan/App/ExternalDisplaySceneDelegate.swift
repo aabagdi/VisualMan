@@ -16,7 +16,6 @@ final class ExternalDisplaySceneDelegate: NSObject, UIWindowSceneDelegate {
   func scene(_ scene: UIScene,
              willConnectTo session: UISceneSession,
              options connectionOptions: UIScene.ConnectionOptions) {
-    print("[ExternalDisplay] delegate willConnect role=\(session.role.rawValue) bounds=\(scene.debugDescription)")
     guard let windowScene = scene as? UIWindowScene else { return }
     let window = UIWindow(windowScene: windowScene)
     let controller = UIHostingController(rootView: ExternalDisplayView())

@@ -6,13 +6,14 @@
 //
 
 import SwiftUI
+import Dependencies
 
 struct BarsVisualizerView: View {
-  let visualizerBars: [32 of Float]
+  @Dependency(AudioEngineManager.self) private var audioManager
 
   @State private var smoothedBars: [32 of Float] = .init(repeating: 0.0)
 
-  var barCount: Int { visualizerBars.count }
+  var barCount: Int { smoothedBars.count }
   let barSpacing: CGFloat = 2
   let minBarHeight: CGFloat = 4
 
@@ -52,8 +53,9 @@ struct BarsVisualizerView: View {
     let attackFactor = 1 - exp(-dt / attackTime)
     let releaseFactor = 1 - exp(-dt / releaseTime)
     var bars = smoothedBars
+    let targets = audioManager.visualizerBars
     for i in 0..<barCount {
-      let target = visualizerBars[i]
+      let target = targets[i]
       let factor = target > bars[i] ? attackFactor : releaseFactor
       bars[i] += (target - bars[i]) * factor
     }

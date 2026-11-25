@@ -10,30 +10,23 @@ import SwiftUI
 import MetalKit
 
 struct NavierStokesVisualizerView: View {
-  let audioLevels: [1024 of Float]
-
   @Environment(VisualizerSelection.self) private var visualizerSelection
-  @Environment(VisualizerRendererCache.self) private var cache
+
+  private static let config = MetalViewConfig(
+    clearColor: MTLClearColor(red: 0, green: 0, blue: 0.0015, alpha: 1),
+    pacesFrameRate: true,
+    colorSpace: NavierStokesRenderer.outputColorSpace,
+    pixelFormat: NavierStokesRenderer.outputPixelFormat,
+    wantsExtendedDynamicRange: NavierStokesRenderer.outputExtendedRange,
+    standardRangeColorSpace: NavierStokesRenderer.standardRangeColorSpace,
+    standardRangePixelFormat: NavierStokesRenderer.standardRangePixelFormat)
 
   var body: some View {
-    MetalVisualizerContainerView<NavierStokesRenderer>(
-      audioLevels: audioLevels,
-      config: MetalViewConfig(
-        clearColor: MTLClearColor(red: 0, green: 0, blue: 0.0015, alpha: 1),
-        pacesFrameRate: true,
-        colorSpace: NavierStokesRenderer.outputColorSpace,
-        pixelFormat: NavierStokesRenderer.outputPixelFormat,
-        wantsExtendedDynamicRange: NavierStokesRenderer.outputExtendedRange,
-        standardRangeColorSpace: NavierStokesRenderer.standardRangeColorSpace,
-        standardRangePixelFormat: NavierStokesRenderer.standardRangePixelFormat),
+    MetalVisualizerContainerView(
+      config: Self.config,
+      configuration: visualizerSelection.navierStokesSolver,
+      configure: { renderer, solver in renderer.solver = solver },
       factory: { device in await NavierStokesRenderer.create(device: device) })
-    .task(id: visualizerSelection.navierStokesSolver) {
-      let renderer = await cache.renderer(NavierStokesRenderer.self) {
-        guard let device = cache.sharedDevice ?? MTLCreateSystemDefaultDevice() else { return nil }
-        return await NavierStokesRenderer.create(device: device)
-      }
-      renderer?.solver = visualizerSelection.navierStokesSolver
-    }
   }
 }
 

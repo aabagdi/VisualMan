@@ -13,7 +13,6 @@ struct MusicPlayerView: View {
   @State private var viewModel = MusicPlayerViewModel()
   @State private var isTapped: Bool = false
   @State private var showScreenshotToast = false
-  @State private var toastDismissTask: Task<Void, Never>?
 
   @Environment(\.colorSchemeContrast) private var colorSchemeContrast
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -26,22 +25,21 @@ struct MusicPlayerView: View {
   @Dependency(VisualizerSnapshotter.self) private var snapshotter
   @Dependency(ExternalDisplayManager.self) private var externalDisplay
   
-  private let _audioSources: [any AudioSource]
-  private let _startingIndex: Int
+  private let audioSources: [any AudioSource]
+  private let startingIndex: Int
 
   private var currentAudioSource: (any AudioSource)? {
     playlistManager.currentAudioSource
   }
   
   init(_ audioSources: [any AudioSource], startingIndex: Int) {
-    _audioSources = audioSources
-    _startingIndex = startingIndex
+    self.audioSources = audioSources
+    self.startingIndex = startingIndex
   }
   
   init(fileAudioSource: FileAudioSource) {
-    let sources = [fileAudioSource]
-    _audioSources = sources
-    _startingIndex = 0
+    audioSources = [fileAudioSource]
+    startingIndex = 0
   }
   
   var body: some View {
@@ -57,11 +55,7 @@ struct MusicPlayerView: View {
         }
       }
       .ignoresSafeArea()
-      .onTapGesture {
-        withAnimation(.easeInOut) {
-          isTapped.toggle()
-        }
-      }
+      .onTapGesture { visualizerTapped() }
 
       PlayerControlsLayer(
         viewModel: viewModel,
@@ -85,12 +79,12 @@ struct MusicPlayerView: View {
     .accessibilityAction(.magicTap) {
       viewModel.togglePlayback()
     }
-    .toolbar(.hidden, for: .tabBar)
+    .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(ExternalDisplayAccessory())
     .modifier(SettingsToolbarButton())
     .environment(snapshotter)
     .onAppear {
-      viewModel.start(audioSources: _audioSources, startingIndex: _startingIndex)
+      viewModel.start(audioSources: audioSources, startingIndex: startingIndex)
     }
     .task {
       let preWarmState = pointsOfInterest.beginInterval("Pre-Warm Renderers")
@@ -104,19 +98,16 @@ struct MusicPlayerView: View {
     .onDisappear {
       viewModel.cleanup()
     }
-    .alert(viewModel.playingError?.errorDescription ?? "An unknown error occurred during playback.",
+    .task(id: showScreenshotToast) { await screenshotToastChanged() }
+    .alert(viewModel.playingError?.errorDescription
+           ?? String(localized: "An unknown error occurred during playback."),
            isPresented: $viewModel.failedPlaying) {
-      Button("Okay", role: .cancel) {
-        viewModel.failedPlaying = false
-        viewModel.playingError = nil
-      }
+      Button("Okay", role: .cancel) { playingErrorOkayTapped() }
     }
-    .alert(audioManager.initializationError?.errorDescription ?? "An unknown error occurred during initialization.",
+    .alert(audioManager.initializationError?.errorDescription
+           ?? String(localized: "An unknown error occurred during initialization."),
            isPresented: Bindable(audioManager).failedToInitialize) {
-      Button("Okay", role: .cancel) {
-        audioManager.failedToInitialize = false
-        audioManager.initializationError = nil
-      }
+      Button("Okay", role: .cancel) { initializationErrorOkayTapped() }
     }
     .toolbar {
       ToolbarItemGroup(placement: .topBarTrailing) {
@@ -134,7 +125,7 @@ struct MusicPlayerView: View {
           Menu {
             Picker("Solver", selection: Bindable(visualizerSelection).navierStokesSolver) {
               ForEach(NavierStokesSolver.allCases, id: \.self) { mode in
-                Text(mode.rawValue)
+                Text(mode.displayName)
               }
             }
           } label: {
@@ -145,7 +136,7 @@ struct MusicPlayerView: View {
         #endif
 
         Button {
-          captureScreenshot()
+          Task { await screenshotButtonTapped() }
         } label: {
           Image(systemName: "camera")
         }
@@ -164,8 +155,7 @@ struct MusicPlayerView: View {
     Menu {
       ForEach(VMVisualizer.allCases, id: \.self) { type in
         Button {
-          pointsOfInterest.emitEvent("Visualizer Selected", "\(String(describing: type), privacy: .public)")
-          visualizerSelection.current = type
+          visualizerSelected(type)
         } label: {
           if type == visualizerSelection.current {
             Label(type.displayName, systemImage: "checkmark")
@@ -193,22 +183,41 @@ struct MusicPlayerView: View {
     }
   }
 
-  private func captureScreenshot() {
-    Task { @MainActor in
-      guard await snapshotter.capture() else { return }
-
-      var announcement = AttributedString(localized: "Screenshot Saved")
-      announcement.accessibilitySpeechAnnouncementPriority = .high
-      AccessibilityNotification.Announcement(announcement).post()
-
-      toastDismissTask?.cancel()
-      showScreenshotToast = true
-      toastDismissTask = Task { @MainActor in
-        try? await clock.sleep(for: .seconds(2))
-        guard !Task.isCancelled else { return }
-        showScreenshotToast = false
-      }
+  private func visualizerTapped() {
+    withAnimation(.easeInOut) {
+      isTapped.toggle()
     }
+  }
+
+  private func visualizerSelected(_ type: VMVisualizer) {
+    pointsOfInterest.emitEvent("Visualizer Selected", "\(String(describing: type), privacy: .public)")
+    visualizerSelection.current = type
+  }
+
+  private func playingErrorOkayTapped() {
+    viewModel.failedPlaying = false
+    viewModel.playingError = nil
+  }
+
+  private func initializationErrorOkayTapped() {
+    audioManager.failedToInitialize = false
+    audioManager.initializationError = nil
+  }
+
+  private func screenshotButtonTapped() async {
+    guard await snapshotter.capture() else { return }
+
+    var announcement = AttributedString(localized: "Screenshot Saved")
+    announcement.accessibilitySpeechAnnouncementPriority = .high
+    AccessibilityNotification.Announcement(announcement).post()
+
+    showScreenshotToast = true
+  }
+
+  private func screenshotToastChanged() async {
+    guard showScreenshotToast else { return }
+    try? await clock.sleep(for: .seconds(2))
+    showScreenshotToast = false
   }
 
   #if !targetEnvironment(simulator)
@@ -262,9 +271,6 @@ private struct AudioReactiveVisualizerLayer: View {
   var body: some View {
     VisualizerContainerView(
       currentVisualizer: currentVisualizer,
-      visualizerBars: audioManager.visualizerBars,
-      audioLevels: audioManager.audioLevels,
-      waveform: audioManager.waveform,
       albumArt: albumArt,
       isPlaying: audioManager.isPlaying
     )
@@ -298,7 +304,7 @@ private struct PlayerControlsLayer: View {
       Spacer()
       if let current = playlistManager.currentAudioSource {
         MarqueeTextView(
-          "\(current.title ?? "Unknown") • \(current.artist ?? "Unknown")",
+          "\(current.title ?? String(localized: "Unknown")) • \(current.artist ?? String(localized: "Unknown"))",
           resetID: playlistManager.currentIndex
         )
         .font(.title2)
@@ -314,11 +320,7 @@ private struct PlayerControlsLayer: View {
                          fillColor: normalFillColor,
                          emptyColor: emptyColor,
                          height: 8,
-                         onEditingChanged: { isDragging in
-        if !isDragging {
-          audioManager.seek(to: audioManager.currentTime)
-        }
-      })
+                         onEditingChanged: progressSliderEditingChanged)
       .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
       .frame(height: 60)
       .padding(.horizontal)
@@ -368,14 +370,30 @@ private struct PlayerControlsLayer: View {
       )
     )
     .contentShape(Rectangle())
-    .onTapGesture {
-      withAnimation(.easeInOut) {
-        isTapped.toggle()
-      }
-    }
+    .onTapGesture { controlsTapped() }
     .zIndex(1)
     .opacity(controlsHidden ? 0 : 1)
     .allowsHitTesting(!controlsHidden)
     .accessibilityHidden(controlsHidden)
+  }
+
+  private func controlsTapped() {
+    withAnimation(.easeInOut) {
+      isTapped.toggle()
+    }
+  }
+
+  private func progressSliderEditingChanged(_ isDragging: Bool) {
+    guard !isDragging else { return }
+    audioManager.seek(to: audioManager.currentTime)
+  }
+}
+
+extension NavierStokesSolver {
+  var displayName: LocalizedStringResource {
+    switch self {
+    case .pressureMultigrid: "V-grid solver (more realistic)"
+    case .jacobi: "Jacobi solver (more efficient)"
+    }
   }
 }

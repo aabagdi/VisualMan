@@ -23,9 +23,10 @@ struct ArtistListView: View {
     Group {
       if !artists.isEmpty {
         List(displayedArtists, id: \.representativeItem?.persistentID) { artist in
-          let artistName = artist.representativeItem?.artist ?? "Unknown"
-          NavigationLink(destination: ArtistDetailView(artistName: artistName,
-                                                       albums: albums(for: artist))) {
+          let artistName = artist.representativeItem?.artist ?? String(localized: "Unknown")
+          NavigationLink {
+            ArtistDetailView(artistName: artistName, albums: albums(for: artist))
+          } label: {
             Text(artistName)
           }
         }
@@ -33,8 +34,8 @@ struct ArtistListView: View {
           [$0.representativeItem?.artist]
         }
       } else {
-        Text("No artists found!")
-          .font(.caption)
+        ContentUnavailableView("No Artists", systemImage: "music.microphone",
+                               description: Text("Your music library has no artists."))
       }
     }
     .toolbarVisibility(.hidden, for: .tabBar)

@@ -9,9 +9,6 @@ import SwiftUI
 
 struct VisualizerContainerView: View {
   let currentVisualizer: VMVisualizer
-  let visualizerBars: [32 of Float]
-  let audioLevels: [1024 of Float]
-  let waveform: [1024 of Float]
   let albumArt: UIImage?
   let isPlaying: Bool
 
@@ -24,47 +21,47 @@ struct VisualizerContainerView: View {
     .accessibilityIgnoresInvertColors()
   }
 
-  private var resolvedView: AnyView {
+  @ViewBuilder
+  private var resolvedView: some View {
     switch currentVisualizer {
     case .bars:
-      return AnyView(BarsVisualizerView(visualizerBars: visualizerBars))
+      BarsVisualizerView()
     case .threeD:
-      return AnyView(ThreeDBarsVisualizerView(visualizerBars: visualizerBars))
+      ThreeDBarsVisualizerView()
     case .album:
-      return AnyView(AlbumArtWaveVisualizerView(audioLevels: audioLevels, albumArt: albumArt))
+      AlbumArtWaveVisualizerView(albumArt: albumArt)
     case .julia:
-      return AnyView(JuliaVisualizerView(audioLevels: audioLevels))
+      JuliaVisualizerView()
     case .fireworks:
-      return AnyView(FireworksVisualizerView(audioLevels: audioLevels))
+      FireworksVisualizerView()
     case .interference:
-      return AnyView(InterferenceVisualizerView(audioLevels: audioLevels))
+      InterferenceVisualizerView()
     case .voronoi:
-      return AnyView(VoronoiVisualizerView(audioLevels: audioLevels))
+      VoronoiVisualizerView()
     case .aurora:
-      return AnyView(AuroraBorealisVisualizerView(audioLevels: audioLevels))
+      AuroraBorealisVisualizerView()
     case .oscilloscope:
-      return AnyView(OscilloscopeVisualizerView(audioLevels: audioLevels, waveform: waveform))
+      OscilloscopeVisualizerView()
     case .plasma:
-      return AnyView(PlasmaVisualizerView(audioLevels: audioLevels))
+      PlasmaVisualizerView()
     case .metaball:
-      return AnyView(MetaballVisualizerView(audioLevels: audioLevels))
+      MetaballVisualizerView()
     #if targetEnvironment(simulator)
     case .navierStokes, .liquidLight, .gameOfLife, .abstractExpressionism:
-      return AnyView(
-        ContentUnavailableView("Not Available in Simulator",
-                               systemImage: "cpu",
-                               description: Text("This visualizer uses Metal 4. Run on a device to see it."))
-          .background(Color.black)
-          .ignoresSafeArea())
+      ContentUnavailableView("Not Available in Simulator",
+                             systemImage: "cpu",
+                             description: Text("This visualizer uses Metal 4. Run on a device to see it."))
+        .background(Color.black)
+        .ignoresSafeArea()
     #else
     case .navierStokes:
-      return AnyView(NavierStokesVisualizerView(audioLevels: audioLevels))
+      NavierStokesVisualizerView()
     case .liquidLight:
-      return AnyView(LiquidLightVisualizerView(audioLevels: audioLevels))
+      LiquidLightVisualizerView()
     case .gameOfLife:
-      return AnyView(GameOfLifeVisualizerView(audioLevels: audioLevels))
+      GameOfLifeVisualizerView()
     case .abstractExpressionism:
-      return AnyView(AbstractExpressionismVisualizerView(audioLevels: audioLevels, isPlaying: isPlaying))
+      AbstractExpressionismVisualizerView(isPlaying: isPlaying)
     #endif
     }
   }

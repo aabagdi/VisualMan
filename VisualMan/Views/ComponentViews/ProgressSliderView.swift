@@ -96,23 +96,8 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
       .contentShape(Rectangle())
       .gesture(
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
-          .onChanged { gesture in
-            if !isDragging {
-              isDragging = true
-              onEditingChanged(true)
-            }
-            
-            let progress = T(gesture.location.x / bounds.size.width)
-            let clampedProgress = max(min(progress, 1), 0)
-            
-            tempValue = clampedProgress * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
-          }
-          .onEnded { _ in
-            setValue(tempValue)
-            playedSeconds = tempValue.rounded(.down)
-            isDragging = false
-            onEditingChanged(false)
-          }
+          .onChanged { dragChanged($0, width: bounds.size.width) }
+          .onEnded { _ in dragEnded() }
       )
     }
     .frame(height: sliderHeight)
@@ -125,20 +110,41 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     .accessibilityShowsLargeContentViewer {
       Text("\(elapsedSeconds.asTimeString()) of \((inRange.upperBound).asTimeString())")
     }
-    .accessibilityAdjustableAction { direction in
-      let range = inRange.upperBound - inRange.lowerBound
-      let step = range * 0.05
-      let current = value()
-      switch direction {
-      case .increment:
-        setValue(min(current + step, inRange.upperBound))
-      case .decrement:
-        setValue(max(current - step, inRange.lowerBound))
-      @unknown default:
-        break
-      }
-      onEditingChanged(false)
+    .accessibilityAdjustableAction { adjustableActionPerformed($0) }
+  }
+
+  private func dragChanged(_ gesture: DragGesture.Value, width: CGFloat) {
+    if !isDragging {
+      isDragging = true
+      onEditingChanged(true)
     }
+
+    let progress = T(gesture.location.x / width)
+    let clampedProgress = max(min(progress, 1), 0)
+
+    tempValue = clampedProgress * (inRange.upperBound - inRange.lowerBound) + inRange.lowerBound
+  }
+
+  private func dragEnded() {
+    setValue(tempValue)
+    playedSeconds = tempValue.rounded(.down)
+    isDragging = false
+    onEditingChanged(false)
+  }
+
+  private func adjustableActionPerformed(_ direction: AccessibilityAdjustmentDirection) {
+    let range = inRange.upperBound - inRange.lowerBound
+    let step = range * 0.05
+    let current = value()
+    switch direction {
+    case .increment:
+      setValue(min(current + step, inRange.upperBound))
+    case .decrement:
+      setValue(max(current - step, inRange.lowerBound))
+    @unknown default:
+      break
+    }
+    onEditingChanged(false)
   }
 }
 

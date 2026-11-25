@@ -9,7 +9,7 @@ import UIKit
 
 @MainActor
 final class AppLifecycleObserver {
-  nonisolated(unsafe) private var tokens: [any NSObjectProtocol] = []
+  private var tokens: [any NSObjectProtocol] = []
 
   init(onBackground: @escaping @MainActor () -> Void,
        onForeground: @escaping @MainActor () -> Void) {
@@ -26,7 +26,7 @@ final class AppLifecycleObserver {
     ]
   }
 
-  deinit {
+  isolated deinit {
     tokens.forEach { NotificationCenter.default.removeObserver($0) }
   }
 }

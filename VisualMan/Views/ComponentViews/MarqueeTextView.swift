@@ -18,10 +18,10 @@ struct MarqueeTextView<ResetID: Equatable>: View {
   @State private var scrollToEnd = false
   @State private var textSize: CGSize = .zero
   @State private var containerSize: CGSize = .zero
-  @State private var scrollAnimationKey: UUID
-  
-  @Dependency(\.uuid) var uuid
-  @Dependency(\.continuousClock) var clock
+  @State private var scrollGeneration = 0
+  @State private var resetCount = 0
+
+  @Dependency(\.continuousClock) private var clock
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -32,14 +32,11 @@ struct MarqueeTextView<ResetID: Equatable>: View {
     initialDelay: Duration = .seconds(2),
     speed: Double = 20.0
   ) {
-    @Dependency(\.uuid) var uuid
-    
     self.text = text
     self.resetID = resetID
     self.spacing = spacing
     self.initialDelay = initialDelay
     self.speed = speed
-    self.scrollAnimationKey = uuid()
   }
   
   private var shouldScroll: Bool {
@@ -66,7 +63,7 @@ struct MarqueeTextView<ResetID: Equatable>: View {
             }
         }
       }
-      .id("\(String(describing: resetID))-\(scrollAnimationKey)")
+      .id("\(String(describing: resetID))-\(scrollGeneration)")
       .padding(.horizontal)
       .offset(x: shouldScroll ? (scrollToEnd ? -textSize.width - spacing : 0) : 0)
       .animation(
@@ -80,71 +77,55 @@ struct MarqueeTextView<ResetID: Equatable>: View {
     .disabled(true)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(text)
-    .onChange(of: reduceMotion) { _, reduceMotion in
-      if reduceMotion {
-        scrollTask?.cancel()
-        scrollToEnd = false
-      } else if shouldScroll {
-        startScrollAfterDelay()
-      }
-    }
     .onGeometryChange(for: CGSize.self) { proxy in
       proxy.size
     } action: { newSize in
       containerSize = newSize
     }
-    .onChange(of: shouldScroll) { _, shouldScroll in
-      if shouldScroll {
-        startScrollAfterDelay()
-      } else {
-        scrollTask?.cancel()
-        scrollToEnd = false
-      }
-    }
-    .onChange(of: textSize) { oldSize, newSize in
-      if scrollToEnd && oldSize != .zero && newSize != .zero && shouldScroll {
-        scrollToEnd = false
-        startScrollAfterDelay()
-      }
-    }
     .onChange(of: resetID) { _, _ in
-      resetMarquee()
+      resetIDChanged()
     }
-    .onChange(of: scrollAnimationKey) { _, _ in
-      if textSize.width > containerSize.width {
-        startScrollAfterDelay()
-      }
+    .task(id: resetCount) {
+      await resetCountChanged()
     }
-    .onDisappear {
-      resetTask?.cancel()
-      scrollTask?.cancel()
+    .task(id: ScrollTrigger(generation: scrollGeneration,
+                             textWidth: textSize.width,
+                             canScroll: shouldScroll && !reduceMotion)) {
+      await scrollTriggerChanged()
     }
   }
-  
-  @State private var resetTask: Task<Void, Never>?
-  @State private var scrollTask: Task<Void, Never>?
 
-  private func resetMarquee() {
+  private func resetIDChanged() {
     scrollToEnd = false
     textSize = .zero
-    scrollAnimationKey = uuid()
-
-    resetTask?.cancel()
-    scrollTask?.cancel()
-    resetTask = Task {
-      try? await clock.sleep(for: .milliseconds(100))
-      guard !Task.isCancelled else { return }
-      scrollAnimationKey = uuid()
-    }
+    scrollGeneration += 1
+    resetCount += 1
   }
 
-  private func startScrollAfterDelay() {
-    scrollTask?.cancel()
-    guard !reduceMotion else { return }
-    scrollTask = Task {
-      try? await clock.sleep(for: initialDelay)
-      guard !Task.isCancelled else { return }
-      scrollToEnd = true
+  private func resetCountChanged() async {
+    guard resetCount > 0 else { return }
+    do {
+      try await clock.sleep(for: .milliseconds(100))
+    } catch {
+      return
     }
+    scrollGeneration += 1
   }
+
+  private func scrollTriggerChanged() async {
+    scrollToEnd = false
+    guard shouldScroll, !reduceMotion else { return }
+    do {
+      try await clock.sleep(for: initialDelay)
+    } catch {
+      return
+    }
+    scrollToEnd = true
+  }
+}
+
+private struct ScrollTrigger: Equatable {
+  let generation: Int
+  let textWidth: CGFloat
+  let canScroll: Bool
 }
