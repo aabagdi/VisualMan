@@ -10,18 +10,31 @@ import QuartzCore
 
 struct VisualizerAudioConditioner {
   enum Constants {
-    static let flashLimitSeconds: Float = 0.35
+    static let flashLimitSeconds: Float = 0.5
     static let defaultFrameInterval: Float = 1.0 / 60.0
     static let maxFrameInterval: Float = 0.1
+    static let transientAverageSeconds: Float = 0.25
+  }
+
+  private struct Stage {
+    var gain: Float
+    var transientBoost: Float
+    var averageAlpha: Float
+    var maxRise: Float
+    var maxFall: Float
   }
 
   private var levels: [1024 of Float] = .init(repeating: 0)
   private var bars: [32 of Float] = .init(repeating: 0)
+  private var levelAverages: [1024 of Float] = .init(repeating: 0)
+  private var barAverages: [32 of Float] = .init(repeating: 0)
   private var lastTime: CFTimeInterval?
 
   mutating func reset() {
     levels = .init(repeating: 0)
     bars = .init(repeating: 0)
+    levelAverages = .init(repeating: 0)
+    barAverages = .init(repeating: 0)
     lastTime = nil
   }
 
@@ -37,40 +50,59 @@ struct VisualizerAudioConditioner {
       ?? Constants.defaultFrameInterval
     lastTime = now
 
-    let riseSeconds = max(intensity.riseSeconds, limitsFlashing ? Constants.flashLimitSeconds : 0)
-    let maxRise = riseSeconds > 0 ? dt / riseSeconds : .infinity
-    let maxFall = limitsFlashing ? dt / Constants.flashLimitSeconds : .infinity
-    let gain = intensity.gain
+    let flashSeconds = limitsFlashing ? Constants.flashLimitSeconds : 0
+    let riseSeconds = max(intensity.riseSeconds, flashSeconds)
+    let fallSeconds = max(intensity.fallSeconds, flashSeconds)
+    let stage = Stage(
+      gain: intensity.gain,
+      transientBoost: intensity.transientBoost,
+      averageAlpha: 1 - exp(-dt / Constants.transientAverageSeconds),
+      maxRise: riseSeconds > 0 ? dt / riseSeconds : .infinity,
+      maxFall: fallSeconds > 0 ? dt / fallSeconds : .infinity
+    )
 
     inputLevels.withUnsafeElementPointer { input in
       levels.withUnsafeElementPointer { state in
-        Self.apply(to: input, state: state, count: 1024, gain: gain, maxRise: maxRise, maxFall: maxFall)
+        levelAverages.withUnsafeElementPointer { average in
+          Self.apply(stage, to: input, state: state, average: average, count: 1024)
+        }
       }
     }
     inputBars.withUnsafeElementPointer { input in
       bars.withUnsafeElementPointer { state in
-        Self.apply(to: input, state: state, count: 32, gain: gain, maxRise: maxRise, maxFall: maxFall)
+        barAverages.withUnsafeElementPointer { average in
+          Self.apply(stage, to: input, state: state, average: average, count: 32)
+        }
       }
     }
-    if gain != 1 {
+    let waveformGain = intensity.waveformGain
+    if waveformGain != 1 {
       waveform.withUnsafeElementPointer { samples in
-        Self.scale(samples, count: 1024, by: gain, lower: -1, upper: 1)
+        Self.scale(samples, count: 1024, by: waveformGain, lower: -1, upper: 1)
       }
     }
   }
 
   private static func apply(
+    _ stage: Stage,
     to input: UnsafeMutablePointer<Float>,
     state: UnsafeMutablePointer<Float>,
-    count: Int,
-    gain: Float,
-    maxRise: Float,
-    maxFall: Float
+    average: UnsafeMutablePointer<Float>,
+    count: Int
   ) {
     let n = vDSP_Length(count)
-    if gain != 1 {
-      scale(input, count: count, by: gain, lower: 0, upper: 1)
+    for i in 0..<count {
+      let deviation = input[i] - average[i]
+      average[i] += deviation * stage.averageAlpha
+      if stage.transientBoost > 0 {
+        input[i] = min(max(input[i] + deviation * stage.transientBoost, 0), 1)
+      }
     }
+    if stage.gain != 1 {
+      scale(input, count: count, by: stage.gain, lower: 0, upper: 1)
+    }
+    let maxRise = stage.maxRise
+    let maxFall = stage.maxFall
     if maxRise.isFinite || maxFall.isFinite {
       var lower = -maxFall
       var upper = maxRise

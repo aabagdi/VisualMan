@@ -26,6 +26,20 @@ nonisolated enum VisualizerIntensity: String, CaseIterable, Sendable {
   var gain: Float {
     switch self {
     case .calm: 0.6
+    case .normal, .intense: 1.0
+    }
+  }
+
+  var transientBoost: Float {
+    switch self {
+    case .intense: 0.6
+    case .calm, .normal: 0
+    }
+  }
+
+  var waveformGain: Float {
+    switch self {
+    case .calm: 0.6
     case .normal: 1.0
     case .intense: 1.3
     }
@@ -33,7 +47,14 @@ nonisolated enum VisualizerIntensity: String, CaseIterable, Sendable {
 
   var riseSeconds: Float {
     switch self {
-    case .calm: 0.15
+    case .calm: 0.3
+    case .normal, .intense: 0
+    }
+  }
+
+  var fallSeconds: Float {
+    switch self {
+    case .calm: 0.5
     case .normal, .intense: 0
     }
   }
