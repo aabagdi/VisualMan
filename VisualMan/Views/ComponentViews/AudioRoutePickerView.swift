@@ -45,7 +45,10 @@ struct AudioRoutePickerView: View {
         Button("OK") { }
         Button("Don't Show Again") { $hidesScreenMirroringHint.withLock { $0 = true } }
       } message: {
-        Text("If this AirPlay device is a TV, turn on screen mirroring. VisualMan will then stream the visualizer to the external display.")
+        Text("""
+          If this AirPlay device is a TV, turn on screen mirroring. \
+          VisualMan will then stream the visualizer to the external display.
+          """)
       }
   }
 

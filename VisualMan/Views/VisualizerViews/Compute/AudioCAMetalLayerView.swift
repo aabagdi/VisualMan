@@ -64,15 +64,15 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     @Dependency(AudioEngineManager.self) private var audioManager
     var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
     private var lastFrameTime: CFTimeInterval = 0
-    private let config: MetalViewConfig
+    let config: MetalViewConfig
     private var tracksDisplayHeadroom = false
     private var blitPipeline: (any MTLRenderPipelineState)?
-    private let blitArgumentTables: [any MTL4ArgumentTable]
-    private let presentCommandBuffer: (any MTL4CommandBuffer)?
-    private let presentAllocators: [any MTL4CommandAllocator]
-    private let presentEvent: MTLSharedEvent?
-    private var presentCount: UInt64 = 0
-    private var firstFrameState: OSSignpostIntervalState?
+    let blitArgumentTables: [any MTL4ArgumentTable]
+    let presentCommandBuffer: (any MTL4CommandBuffer)?
+    let presentAllocators: [any MTL4CommandAllocator]
+    let presentEvent: MTLSharedEvent?
+    var presentCount: UInt64 = 0
+    var firstFrameState: OSSignpostIntervalState?
 
     private var thermalObserver: (any NSObjectProtocol)?
     private var lifecycle: AppLifecycleObserver?
@@ -83,7 +83,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     private var isInBackground = false
     private var isInWindow = false
     private var targetFPS: Int = 120
-    private let pacer = FramePacer()
+    let pacer = FramePacer()
     private var pacedFPS: Int = 120
     var maxFPS: Int = 120 {
       didSet {
@@ -271,17 +271,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
       )
 
       let submitted = CACurrentMediaTime()
-      if intermediateTex != nil {
-        renderer.commitCompute()
-        consecutiveSkippedFrames = 0
-      } else {
-        consecutiveSkippedFrames += 1
-        if consecutiveSkippedFrames >= stalledGPUFrameThreshold {
-          consecutiveSkippedFrames = 0
-          renderer.recoverFromStalledGPU()
-          recoverFromStalledPresents()
-        }
-      }
+      commitOrTrackSkippedFrame(encoded: intermediateTex != nil)
 
       guard intermediateTex != nil || !hasEverPresented,
             let drawable = pacer.acquireDrawable(skipsAfterWait: config.pacesFrameRate && hasEverPresented,
@@ -297,6 +287,20 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
 }
 
 extension AudioCAMetalLayerView.Coordinator {
+  private func commitOrTrackSkippedFrame(encoded: Bool) {
+    if encoded {
+      renderer.commitCompute()
+      consecutiveSkippedFrames = 0
+      return
+    }
+    consecutiveSkippedFrames += 1
+    if consecutiveSkippedFrames >= stalledGPUFrameThreshold {
+      consecutiveSkippedFrames = 0
+      renderer.recoverFromStalledGPU()
+      recoverFromStalledPresents()
+    }
+  }
+
   private func thermalStateChanged() {
     let newState = ProcessInfo.processInfo.thermalState
     guard newState != currentThermalState else { return }
@@ -340,69 +344,6 @@ extension AudioCAMetalLayerView.Coordinator {
     pacedFPS = rate
     link.preferredFrameRateRange = makeFrameRateRange()
     pacer.reset()
-  }
-}
-
-extension AudioCAMetalLayerView.Coordinator {
-  private func recoverFromStalledPresents() {
-    guard let presentEvent, presentEvent.signaledValue < presentCount else { return }
-    presentEvent.wait(untilSignaledValue: presentCount, timeoutMS: 250)
-    if presentEvent.signaledValue < presentCount {
-      presentEvent.signaledValue = presentCount
-    }
-  }
-
-  private func presentFrame(pipeline: any MTLRenderPipelineState,
-                            intermediateTex: MTLTexture?,
-                            drawable: CAMetalDrawable,
-                            submitted: CFTimeInterval) {
-    guard let presentCommandBuffer, let presentEvent else { return }
-    let queue = renderer.commandQueue
-    let inFlight = R.maxFramesInFlight
-
-    let nextPresent = presentCount + 1
-    if nextPresent > inFlight {
-      let waitValue = nextPresent - inFlight
-      if presentEvent.signaledValue < waitValue {
-        presentEvent.wait(untilSignaledValue: waitValue, timeoutMS: 16)
-        guard presentEvent.signaledValue >= waitValue else { return }
-      }
-    }
-    presentCount = nextPresent
-    let slot = Int(presentCount % inFlight)
-    let allocator = presentAllocators[slot]
-    allocator.reset()
-
-    Self.encodeBlitPass(into: presentCommandBuffer,
-                        allocator: allocator,
-                        target: drawable.texture,
-                        clearColor: clearColor,
-                        pipeline: pipeline,
-                        table: blitArgumentTables[slot],
-                        source: intermediateTex)
-
-    nonisolated(unsafe) let drawable = drawable
-    let pacer = config.pacesFrameRate ? pacer : nil
-    let firstFrameState = intermediateTex != nil ? firstFrameState : nil
-    if firstFrameState != nil { self.firstFrameState = nil }
-    let gate = PresentGate()
-    let commitOptions = MTL4CommitOptions()
-    commitOptions.addFeedbackHandler { @Sendable feedback in
-      if let firstFrameState {
-        pointsOfInterest.endInterval("Time to First Frame", firstFrameState)
-      }
-      guard feedback.error == nil, gate.markGPUCompleted() else { return }
-      drawable.present()
-      pacer?.frameCompleted(submitted: submitted)
-    }
-
-    queue.waitForDrawable(drawable)
-    queue.commit([presentCommandBuffer], options: commitOptions)
-    queue.signalDrawable(drawable)
-    queue.signalEvent(presentEvent, value: presentCount)
-    guard gate.markDrawableSignaled() else { return }
-    drawable.present()
-    pacer?.frameCompleted(submitted: submitted)
   }
 }
 
