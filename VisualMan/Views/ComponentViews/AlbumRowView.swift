@@ -13,34 +13,47 @@ struct AlbumRowView: View {
 
   private let placeholder = UIImage(resource: .artPlaceholder)
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @ScaledMetric(relativeTo: .body) private var artSize: CGFloat = 60
+
+  private var lineLimit: Int {
+    dynamicTypeSize.isAccessibilitySize ? 3 : 1
+  }
+
   var body: some View {
-    HStack {
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading))
+      : AnyLayout(HStackLayout())
+
+    layout {
       Image(uiImage: album.representativeItem?.thumbnailImage ?? placeholder)
         .resizable()
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .frame(width: 60, height: 60)
+        .frame(width: artSize, height: artSize)
+        .accessibilityHidden(true)
+        .accessibilityIgnoresInvertColors()
 
       VStack(alignment: .leading, spacing: 2) {
         Text(album.representativeItem?.albumTitle ?? "Unknown")
-          .font(.system(size: 16))
+          .font(.body)
           .foregroundStyle(.primary)
-          .lineLimit(1)
+          .lineLimit(lineLimit)
 
         if album.representativeItem?.isCompilation == true {
           Text("Various Artists")
-            .font(.system(size: 14))
+            .font(.subheadline)
             .foregroundStyle(.secondary)
-            .lineLimit(1)
+            .lineLimit(lineLimit)
         } else {
           Text(album.representativeItem?.albumArtist ?? "Unknown")
-            .font(.system(size: 14))
+            .font(.subheadline)
             .foregroundStyle(.secondary)
-            .lineLimit(1)
+            .lineLimit(lineLimit)
         }
       }
-      .padding(.leading, 8)
+      .padding(.leading, dynamicTypeSize.isAccessibilitySize ? 0 : 8)
 
-      Spacer()
+      Spacer(minLength: 0)
     }
     .padding(.vertical, 2)
     .accessibilityElement(children: .combine)

@@ -44,6 +44,8 @@ final class AudioEngineManager {
   
   @ObservationIgnored @Dependency(\.uuid) var uuid
   @ObservationIgnored @Dependency(HapticsManager.self) var hapticsManager
+  @ObservationIgnored @Dependency(AccessibilityManager.self) var accessibilityManager
+  @ObservationIgnored var audioConditioner = VisualizerAudioConditioner()
   
   @ObservationIgnored private(set) var engine: AVAudioEngine?
   @ObservationIgnored private var securityScopedURL: URL?
@@ -136,6 +138,7 @@ final class AudioEngineManager {
     audioLevels = [1024 of Float](repeating: 0.0)
     visualizerBars = [32 of Float](repeating: 0.0)
     waveform = [1024 of Float](repeating: 0.0)
+    audioConditioner.reset()
     await audioTapProcessor.reset()
     lastSeekFrame = 0
 

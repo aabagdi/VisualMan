@@ -88,11 +88,27 @@ struct CreditsView: View {
           url: URL(string: "https://github.com/pointfreeco/swift-dependencies"),
           note: nil
         )
+
+        CreditRow(
+          title: "Sharing",
+          role: "Persistent settings library",
+          attribution: "Special thanks to Point-Free",
+          license: nil,
+          url: URL(string: "https://github.com/pointfreeco/swift-sharing"),
+          note: nil
+        )
       }
 
       Section {
         LicenseLink(title: "VisualMan", license: "MIT License", text: LicenseText.visualMan)
         LicenseLink(title: "spectral_film_lut", license: "MIT License", text: LicenseText.spectralFilmLUT)
+        LicenseLink(title: "Dependencies", license: "MIT License", text: LicenseText.dependencies)
+        LicenseLink(title: "Sharing", license: "MIT License", text: LicenseText.sharing)
+        LicenseLink(
+          title: "Supporting Libraries",
+          license: "MIT, Apache 2.0",
+          text: LicenseText.supportingLibraries
+        )
         LicenseLink(title: "Mixbox", license: "CC BY-NC 4.0", text: LicenseText.mixbox)
         LicenseLink(
           title: "Timeline of Historical Film Colors",
@@ -109,7 +125,10 @@ struct CreditsView: View {
           spectral_film_lut (MIT) and the Timeline of Historical Film \
           Colors (CC BY-NC-ND 4.0), used with the written permission \
           of Prof. Dr. Barbara Flückiger for this non-commercial \
-          project.
+          project. The Dependencies and Sharing libraries by Point-Free, \
+          and the Point-Free libraries they build on, are used under the \
+          MIT License; Swift Collections is used under the Apache License \
+          2.0 with the Runtime Library Exception.
           """)
       }
     }
@@ -206,6 +225,40 @@ private enum LicenseText {
     Copyright © 2026 Jan Lohse
 
     \(mitBody)
+    """
+
+  static let dependencies: LocalizedStringKey = """
+    Copyright © 2022 Point-Free, Inc.
+
+    \(mitBody)
+    """
+
+  static let sharing: LocalizedStringKey = """
+    Copyright © 2024 Point-Free, Inc.
+
+    \(mitBody)
+    """
+
+  static let supportingLibraries: LocalizedStringKey = """
+    VisualMan also includes these libraries, which Dependencies and \
+    Sharing are built on.
+
+    Point-Free libraries (MIT License):
+      • Combine Schedulers — Copyright © 2020 Point-Free, Inc.
+      • Custom Dump — Copyright © 2021 Point-Free, Inc.
+      • Identified Collections — Copyright © 2021 Point-Free, Inc.
+      • Issue Reporting (formerly XCTest Dynamic Overlay) — \
+    Copyright © 2021 Point-Free, Inc.
+      • Clocks — Copyright © 2022 Point-Free
+      • Concurrency Extras — Copyright © 2023 Point-Free
+      • Perception — Copyright © 2023 Point-Free
+
+    \(mitBody)
+
+    Swift Collections — Copyright © 2021–2026 Apple Inc. and the Swift \
+    project authors. Licensed under the Apache License 2.0 with the \
+    Runtime Library Exception. The full license text is available at \
+    [github.com/apple/swift-collections](https://github.com/apple/swift-collections/blob/main/LICENSE.txt).
     """
 
   private static let mitBody = """

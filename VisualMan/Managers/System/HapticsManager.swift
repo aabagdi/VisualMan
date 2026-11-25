@@ -8,6 +8,7 @@
 import AVFoundation
 import CoreHaptics
 import os
+import Sharing
 
 @Observable
 @MainActor
@@ -20,7 +21,9 @@ final class HapticsManager {
     static let playerLinger: TimeInterval = 0.5
     static let engineRetryDelay: TimeInterval = 1.0
     static let curvePointLimit = 16
-    static let enabledKey = "hapticsEnabled"
+    static let strengthRange: ClosedRange<Double> = 0.2...1.8
+    nonisolated static let defaultStrength: Double = 1
+    static let strengthSnapDistance: Double = 0.05
   }
 
   private enum EngineState {
@@ -34,13 +37,22 @@ final class HapticsManager {
     let endTime: TimeInterval
   }
 
+  @ObservationIgnored @Shared(.hapticsEnabled) private var storedIsEnabled
+  @ObservationIgnored @Shared(.hapticsStrength) private var storedStrength
+
   var isEnabled: Bool {
-    didSet {
-      UserDefaults.standard.set(isEnabled, forKey: Constants.enabledKey)
-      if !isEnabled {
+    get { storedIsEnabled }
+    set {
+      $storedIsEnabled.withLock { $0 = newValue }
+      if !newValue {
         halt()
       }
     }
+  }
+
+  var strength: Double {
+    get { min(max(storedStrength, Constants.strengthRange.lowerBound), Constants.strengthRange.upperBound) }
+    set { $storedStrength.withLock { $0 = newValue } }
   }
 
   var isSupported: Bool { engine != nil }
@@ -60,7 +72,6 @@ final class HapticsManager {
   @ObservationIgnored private var routeChangeObserver: (any NSObjectProtocol)?
 
   init() {
-    isEnabled = UserDefaults.standard.object(forKey: Constants.enabledKey) as? Bool ?? true
     guard CHHapticEngine.capabilitiesForHardware().supportsHaptics,
           let engine = try? CHHapticEngine(audioSession: .sharedInstance()) else {
       engine = nil
@@ -188,20 +199,23 @@ final class HapticsManager {
         CHHapticEvent(
           eventType: .hapticContinuous,
           parameters: [
-            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(min(strength, 1))),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: pulse.sharpness)
           ],
           relativeTime: offset,
           duration: pulse.duration
         )
       )
-      curves.append(contentsOf: intensityCurves(for: pulse, at: offset))
+      curves.append(contentsOf: intensityCurves(for: pulse, at: offset, gain: Float(max(strength, 1))))
       if let transient = pulse.transient {
         transients.append(
           CHHapticEvent(
             eventType: .hapticTransient,
             parameters: [
-              CHHapticEventParameter(parameterID: .hapticIntensity, value: transient.intensity),
+              CHHapticEventParameter(
+                parameterID: .hapticIntensity,
+                value: min(transient.intensity * Float(strength), 1)
+              ),
               CHHapticEventParameter(parameterID: .hapticSharpness, value: transient.sharpness)
             ],
             relativeTime: offset
@@ -222,30 +236,6 @@ final class HapticsManager {
     let transientPlayer = try engine.makePlayer(with: CHHapticPattern(events: transients, parameters: []))
     try transientPlayer.start(atTime: startTime)
     scheduledPlayers.append(ScheduledPlayer(player: transientPlayer, endTime: endTime))
-  }
-
-  private func intensityCurves(for pulse: BassPulse, at offset: TimeInterval) -> [CHHapticParameterCurve] {
-    let points = pulse.envelope
-    var curves: [CHHapticParameterCurve] = []
-    var index = 0
-
-    while index < points.count - 1 {
-      let end = min(index + Constants.curvePointLimit, points.count)
-      let first = points[index]
-      let controlPoints = points[index ..< end].map {
-        CHHapticParameterCurve.ControlPoint(relativeTime: $0.time - first.time, value: $0.intensity)
-      }
-      curves.append(
-        CHHapticParameterCurve(
-          parameterID: .hapticIntensityControl,
-          controlPoints: controlPoints,
-          relativeTime: offset + first.time
-        )
-      )
-      index = end - 1
-    }
-
-    return curves
   }
 
   private func startEngine(at now: TimeInterval) {
@@ -292,5 +282,34 @@ final class HapticsManager {
     scheduledPlayers.removeAll()
     scheduledThrough = nil
     lastTick = nil
+  }
+}
+
+private extension HapticsManager {
+  func intensityCurves(for pulse: BassPulse, at offset: TimeInterval, gain: Float) -> [CHHapticParameterCurve] {
+    let points = pulse.envelope
+    var curves: [CHHapticParameterCurve] = []
+    var index = 0
+
+    while index < points.count - 1 {
+      let end = min(index + Constants.curvePointLimit, points.count)
+      let first = points[index]
+      let controlPoints = points[index ..< end].map {
+        CHHapticParameterCurve.ControlPoint(
+          relativeTime: $0.time - first.time,
+          value: min($0.intensity * gain, 1)
+        )
+      }
+      curves.append(
+        CHHapticParameterCurve(
+          parameterID: .hapticIntensityControl,
+          controlPoints: controlPoints,
+          relativeTime: offset + first.time
+        )
+      )
+      index = end - 1
+    }
+
+    return curves
   }
 }

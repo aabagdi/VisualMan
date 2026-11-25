@@ -29,6 +29,7 @@ struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
     layer.backgroundColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
     view.backgroundColor = config.backgroundColor ?? .black
     view.isOpaque = true
+    view.accessibilityIgnoresInvertColors = true
 
     context.coordinator.clearColor = config.clearColor
     context.coordinator.maxFPS = config.maxFramesPerSecond

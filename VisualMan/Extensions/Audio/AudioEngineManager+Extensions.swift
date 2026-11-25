@@ -102,9 +102,19 @@ extension AudioEngineManager {
         guard !Task.isCancelled, let self else { break }
         self.updateTime()
         await self.audioTapProcessor.tick { result in
-          self.audioLevels = result.audioLevels
-          self.visualizerBars = result.visualizerBars
-          self.waveform = result.waveform
+          var levels = result.audioLevels
+          var bars = result.visualizerBars
+          var waveform = result.waveform
+          self.audioConditioner.condition(
+            levels: &levels,
+            bars: &bars,
+            waveform: &waveform,
+            intensity: self.accessibilityManager.intensity,
+            limitsFlashing: self.accessibilityManager.reducesFlashing
+          )
+          self.audioLevels = levels
+          self.visualizerBars = bars
+          self.waveform = waveform
         }
       }
     }

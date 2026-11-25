@@ -22,7 +22,9 @@ struct MarqueeTextView<ResetID: Equatable>: View {
   
   @Dependency(\.uuid) var uuid
   @Dependency(\.continuousClock) var clock
-  
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
   init(
     _ text: String,
     resetID: ResetID,
@@ -51,7 +53,7 @@ struct MarqueeTextView<ResetID: Equatable>: View {
   var body: some View {
     ScrollView(.horizontal) {
       HStack(spacing: shouldScroll ? spacing : 0) {
-        ForEach(0..<(shouldScroll ? 3 : 1), id: \.self) { _ in
+        ForEach(0..<(shouldScroll && !reduceMotion ? 3 : 1), id: \.self) { _ in
           Text(text)
             .lineLimit(1)
             .fixedSize()
@@ -76,13 +78,32 @@ struct MarqueeTextView<ResetID: Equatable>: View {
     }
     .scrollIndicators(.hidden)
     .disabled(true)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(text)
+    .onChange(of: reduceMotion) { _, reduceMotion in
+      if reduceMotion {
+        scrollTask?.cancel()
+        scrollToEnd = false
+      } else if shouldScroll {
+        startScrollAfterDelay()
+      }
+    }
     .onGeometryChange(for: CGSize.self) { proxy in
       proxy.size
     } action: { newSize in
       containerSize = newSize
     }
+    .onChange(of: shouldScroll) { _, shouldScroll in
+      if shouldScroll {
+        startScrollAfterDelay()
+      } else {
+        scrollTask?.cancel()
+        scrollToEnd = false
+      }
+    }
     .onChange(of: textSize) { oldSize, newSize in
-      if oldSize == .zero && newSize.width > containerSize.width && !scrollToEnd {
+      if scrollToEnd && oldSize != .zero && newSize != .zero && shouldScroll {
+        scrollToEnd = false
         startScrollAfterDelay()
       }
     }
@@ -119,6 +140,7 @@ struct MarqueeTextView<ResetID: Equatable>: View {
 
   private func startScrollAfterDelay() {
     scrollTask?.cancel()
+    guard !reduceMotion else { return }
     scrollTask = Task {
       try? await clock.sleep(for: initialDelay)
       guard !Task.isCancelled else { return }

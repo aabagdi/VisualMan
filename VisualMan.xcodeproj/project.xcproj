@@ -17,6 +17,12 @@
       "version": {
         "up-to-next-major-version": "1.17.1",
       },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/pointfreeco/swift-sharing",
+      "version": {
+        "up-to-next-major-version": "2.0.0",
+      },
     },
   ],
   "files": [
@@ -75,6 +81,10 @@
         {
           "package": "swift-dependencies",
           "product-name": "Dependencies",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": "swift-sharing",
+          "product-name": "Sharing",
           "build-phase": { "build-phase": "frameworks" },
         },
       ],

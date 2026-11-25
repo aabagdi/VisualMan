@@ -27,6 +27,10 @@ extension HapticsManager: DependencyKey {
   static var liveValue: HapticsManager { HapticsManager() }
 }
 
+extension AccessibilityManager: DependencyKey {
+  static var liveValue: AccessibilityManager { AccessibilityManager() }
+}
+
 extension ExternalDisplayManager: DependencyKey {
   static var liveValue: ExternalDisplayManager { ExternalDisplayManager() }
 }

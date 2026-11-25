@@ -3,7 +3,9 @@ License. The Mixbox component is separately licensed under CC BY-NC 4.0.
 The Technicolor dye spectra come from spectral_film_lut (MIT) and the
 Timeline of Historical Film Colors (CC BY-NC-ND 4.0), used with the
 written permission of Prof. Dr. Barbara Flückiger for this
-non-commercial project. These licenses follow.
+non-commercial project. The app also links Swift packages by Point-Free
+(MIT) and Swift Collections by Apple (Apache 2.0 with the Runtime
+Library Exception). These licenses follow.
 
 ===============================================================================
 
@@ -86,6 +88,42 @@ source code from the authors' reference implementation is included.
 
 ===============================================================================
 
+THIRD-PARTY SWIFT PACKAGES
+The app is built with the following Swift packages, which are fetched by
+Swift Package Manager and are not included in this repository.
+
+Point-Free libraries, licensed under the MIT License (full text below):
+  - Dependencies          Copyright (c) 2022 Point-Free, Inc.
+    https://github.com/pointfreeco/swift-dependencies
+  - Sharing               Copyright (c) 2024 Point-Free, Inc.
+    https://github.com/pointfreeco/swift-sharing
+  - Combine Schedulers    Copyright (c) 2020 Point-Free, Inc.
+    https://github.com/pointfreeco/combine-schedulers
+  - Custom Dump           Copyright (c) 2021 Point-Free, Inc.
+    https://github.com/pointfreeco/swift-custom-dump
+  - Identified Collections  Copyright (c) 2021 Point-Free, Inc.
+    https://github.com/pointfreeco/swift-identified-collections
+  - Issue Reporting (formerly XCTest Dynamic Overlay)
+                          Copyright (c) 2021 Point-Free, Inc.
+    https://github.com/pointfreeco/swift-issue-reporting
+  - Clocks                Copyright (c) 2022 Point-Free
+    https://github.com/pointfreeco/swift-clocks
+  - Concurrency Extras    Copyright (c) 2023 Point-Free
+    https://github.com/pointfreeco/swift-concurrency-extras
+  - Perception            Copyright (c) 2023 Point-Free
+    https://github.com/pointfreeco/swift-perception
+
+Swift Collections
+Copyright (c) 2021-2026 Apple Inc. and the Swift project authors
+Licensed under the Apache License 2.0 with the Runtime Library
+Exception, under which compiled apps need not provide attribution.
+https://github.com/apple/swift-collections/blob/main/LICENSE.txt
+
+swift-syntax is used only at build time for macros and is not part of
+the app.
+
+===============================================================================
+
 ALL OTHER FILES IN THIS PROJECT
 Copyright (c) 2025 Aadit Bagdi
 Licensed under the MIT License (full text below).
@@ -119,6 +157,38 @@ SOFTWARE.
 SPECTRAL_FILM_LUT — MIT License
 
 Copyright (c) 2026 Jan Lohse
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+===============================================================================
+
+POINT-FREE LIBRARIES — MIT License
+
+Dependencies: Copyright (c) 2022 Point-Free, Inc.
+Sharing: Copyright (c) 2024 Point-Free, Inc.
+Combine Schedulers: Copyright (c) 2020 Point-Free, Inc.
+Custom Dump: Copyright (c) 2021 Point-Free, Inc.
+Identified Collections: Copyright (c) 2021 Point-Free, Inc.
+Issue Reporting: Copyright (c) 2021 Point-Free, Inc.
+Clocks: Copyright (c) 2022 Point-Free
+Concurrency Extras: Copyright (c) 2023 Point-Free
+Perception: Copyright (c) 2023 Point-Free
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

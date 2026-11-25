@@ -15,6 +15,8 @@ struct AlbumDetailView: View {
 
   @Dependency(AudioEngineManager.self) private var audioManager
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
   private let placeholder = UIImage(resource: .artPlaceholder)
 
   private var year: String {
@@ -44,6 +46,8 @@ struct AlbumDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .shadow(radius: 4)
             .frame(maxWidth: 300)
+            .accessibilityHidden(true)
+            .accessibilityIgnoresInvertColors()
           
           VStack(spacing: 4) {
             Text(album.representativeItem?.albumTitle ?? "Unknown")
@@ -87,23 +91,23 @@ struct AlbumDetailView: View {
                   .frame(minWidth: 20, alignment: .trailing)
               } else {
                 Text("\(song.albumTrackNumber)")
-                  .font(.system(size: 15))
+                  .font(.subheadline)
                   .foregroundStyle(.secondary)
                   .frame(minWidth: 20, alignment: .trailing)
               }
               
               VStack(alignment: .leading, spacing: 2) {
                 Text(song.title ?? "Unknown")
-                  .font(.system(size: 16))
-                  .lineLimit(1)
+                  .font(.body)
+                  .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                   .foregroundStyle(isCurrentSong ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                 
                 if album.representativeItem?.isCompilation == true,
                    let artist = song.artist {
                   Text(artist)
-                    .font(.system(size: 14))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                 }
               }
               
@@ -111,12 +115,13 @@ struct AlbumDetailView: View {
               
               if let duration = song.playbackDuration.formattedDuration() {
                 Text(duration)
-                  .font(.system(size: 14))
+                  .font(.subheadline)
                   .foregroundStyle(.secondary)
               }
             }
             .padding(.vertical, 4)
           }
+          .accessibilityAddTraits(isCurrentSong ? .isSelected : [])
         }
       }
     }

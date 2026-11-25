@@ -21,6 +21,7 @@ struct VisualizerContainerView: View {
     VisualizerSnapshotHost(snapshotter: snapshotter) {
       resolvedView
     }
+    .accessibilityIgnoresInvertColors()
   }
 
   private var resolvedView: AnyView {

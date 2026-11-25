@@ -14,6 +14,9 @@ struct MusicPlayerView: View {
   @State private var showScreenshotToast = false
   @State private var toastDismissTask: Task<Void, Never>?
 
+  @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
   @Environment(VisualizerSelection.self) private var visualizerSelection
   @Dependency(AudioEngineManager.self) private var audioManager
   @Dependency(AudioPlaylistManager.self) private var playlistManager
@@ -70,12 +73,16 @@ struct MusicPlayerView: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(toastBackground, in: Capsule())
         .opacity(showScreenshotToast ? 1 : 0)
         .animation(.easeInOut(duration: 0.35), value: showScreenshotToast)
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(.top, 12)
         .allowsHitTesting(false)
+        .accessibilityHidden(!showScreenshotToast)
+    }
+    .accessibilityAction(.magicTap) {
+      viewModel.togglePlayback()
     }
     .toolbar(.hidden, for: .tabBar)
     .modifier(ExternalDisplayAccessory())
@@ -157,22 +164,38 @@ struct MusicPlayerView: View {
           visualizerSelection.current = type
         } label: {
           if type == visualizerSelection.current {
-            Label(type.rawValue, systemImage: "checkmark")
+            Label(type.displayName, systemImage: "checkmark")
           } else {
-            Text(type.rawValue)
+            Text(type.displayName)
           }
         }
       }
     } label: {
       Text(visualizerSelection.current.toolbarName)
         .fixedSize(horizontal: true, vertical: true)
-        .accessibilityLabel(visualizerSelection.current.rawValue)
+        .accessibilityLabel(Text(visualizerSelection.current.displayName))
+        .accessibilityInputLabels([
+          Text(visualizerSelection.current.toolbarName),
+          Text(visualizerSelection.current.displayName),
+        ])
+    }
+  }
+
+  private var toastBackground: AnyShapeStyle {
+    if colorSchemeContrast == .increased || reduceTransparency {
+      AnyShapeStyle(.black.opacity(0.85))
+    } else {
+      AnyShapeStyle(.ultraThinMaterial)
     }
   }
 
   private func captureScreenshot() {
     Task { @MainActor in
       guard await snapshotter.capture() else { return }
+
+      var announcement = AttributedString(localized: "Screenshot Saved")
+      announcement.accessibilitySpeechAnnouncementPriority = .high
+      AccessibilityNotification.Announcement(announcement).post()
 
       toastDismissTask?.cancel()
       showScreenshotToast = true
@@ -201,6 +224,8 @@ struct MusicPlayerView: View {
 private struct ExternalDisplayPlaceholderView: View {
   let albumArt: UIImage?
 
+  @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
   var body: some View {
     Color.black
       .overlay {
@@ -209,14 +234,16 @@ private struct ExternalDisplayPlaceholderView: View {
             .resizable()
             .scaledToFill()
             .blur(radius: 40)
-            .opacity(0.5)
+            .opacity(colorSchemeContrast == .increased ? 0.3 : 0.5)
+            .accessibilityHidden(true)
+            .accessibilityIgnoresInvertColors()
         }
       }
       .overlay {
         Label("Audio output source", systemImage: "airplay.audio")
           .font(.title3)
           .fontWeight(.semibold)
-          .foregroundStyle(.white.opacity(0.8))
+          .foregroundStyle(.white.opacity(colorSchemeContrast == .increased ? 1 : 0.8))
       }
       .clipped()
   }
@@ -247,10 +274,20 @@ private struct PlayerControlsLayer: View {
   @Dependency(AudioEngineManager.self) private var audioManager
   @Dependency(AudioPlaylistManager.self) private var playlistManager
 
+  @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+  @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+  @Environment(\.accessibilitySwitchControlEnabled) private var switchControlEnabled
+  @Dependency(AccessibilityManager.self) private var accessibilityManager
+  @ScaledMetric(relativeTo: .title2) private var titleHeight: CGFloat = 40
+
   private let sliderColor: Color = .white
 
-  private var normalFillColor: Color { sliderColor.opacity(0.5) }
-  private var emptyColor: Color { sliderColor.opacity(0.3) }
+  private var increasedContrast: Bool { colorSchemeContrast == .increased }
+  private var normalFillColor: Color { increasedContrast ? sliderColor : sliderColor.opacity(0.5) }
+  private var emptyColor: Color { sliderColor.opacity(increasedContrast ? 0.5 : 0.35) }
+  private var controlsHidden: Bool {
+    isTapped && !voiceOverEnabled && !switchControlEnabled && !accessibilityManager.keepsControlsVisible
+  }
 
   var body: some View {
     @Bindable var audioManager = audioManager
@@ -265,7 +302,7 @@ private struct PlayerControlsLayer: View {
         .font(.title2)
         .fontWeight(.semibold)
         .foregroundStyle(.white)
-        .frame(height: 40)
+        .frame(height: titleHeight)
       }
 
       ProgressSliderView(value: $audioManager.currentTime,
@@ -279,6 +316,7 @@ private struct PlayerControlsLayer: View {
           audioManager.seek(to: audioManager.currentTime)
         }
       }
+      .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
       .frame(height: 60)
       .padding(.horizontal)
 
@@ -289,7 +327,7 @@ private struct PlayerControlsLayer: View {
           Image(systemName: "backward")
             .foregroundStyle(normalFillColor)
         }
-        .accessibilityLabel(audioManager.currentTime >= 3 ? "Restart" : "Previous")
+        .accessibilityLabel(audioManager.currentTime >= 3 ? Text("Restart") : Text("Previous"))
         .padding()
 
         Spacer()
@@ -300,7 +338,7 @@ private struct PlayerControlsLayer: View {
           Image(systemName: audioManager.isPlaying ? "pause" : "play")
             .foregroundStyle(normalFillColor)
         }
-        .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
+        .accessibilityLabel(audioManager.isPlaying ? Text("Pause") : Text("Play"))
         .padding()
 
         Spacer()
@@ -318,7 +356,7 @@ private struct PlayerControlsLayer: View {
       .padding(.horizontal)
 
       AudioRoutePickerView(tintColor: UIColor(normalFillColor))
-        .frame(width: 30, height: 30)
+        .frame(width: 44, height: 44)
         .accessibilityLabel("Audio Output")
         .padding(.bottom)
     }
@@ -326,7 +364,7 @@ private struct PlayerControlsLayer: View {
       LinearGradient(
         stops: [
           .init(color: .clear, location: 0.4),
-          .init(color: .black.opacity(0.7), location: 1.0),
+          .init(color: .black.opacity(increasedContrast ? 0.9 : 0.7), location: 1.0),
         ],
         startPoint: .top,
         endPoint: .bottom
@@ -339,8 +377,8 @@ private struct PlayerControlsLayer: View {
       }
     }
     .zIndex(1)
-    .opacity(isTapped ? 0 : 1)
-    .allowsHitTesting(!isTapped)
-    .accessibilityHidden(isTapped)
+    .opacity(controlsHidden ? 0 : 1)
+    .allowsHitTesting(!controlsHidden)
+    .accessibilityHidden(controlsHidden)
   }
 }

@@ -12,7 +12,9 @@ import MediaPlayer
 struct AlbumListView: View {
   @State private var searchText: String = ""
   @State private var filteredAlbums: [MPMediaItemCollection]?
-  
+
+  @ScaledMetric(relativeTo: .title3) private var iconSize: CGFloat = 30
+
   @Dependency(MusicLibraryAccessManager.self) private var library
   
   let albums: [MPMediaItemCollection]
@@ -34,9 +36,10 @@ struct AlbumListView: View {
                 NavigationLink(destination: SongsListView(songs: library.songs)) {
                   HStack {
                     Image(systemName: "music.note")
-                      .font(.system(size: 20))
-                      .frame(width: 30, height: 30)
+                      .font(.title3)
+                      .frame(width: iconSize, height: iconSize)
                       .padding(.trailing, 8)
+                      .accessibilityHidden(true)
                     
                     Text("Songs")
                     
@@ -44,7 +47,7 @@ struct AlbumListView: View {
                     
                     Text("\(library.songs.count)")
                       .foregroundStyle(.secondary)
-                      .font(.system(size: 15))
+                      .font(.subheadline)
                   }
                   .padding(.vertical, 4)
                 }
@@ -53,9 +56,10 @@ struct AlbumListView: View {
                                                              albums: library.albums + library.compilations)) {
                   HStack {
                     Image(systemName: "music.microphone")
-                      .font(.system(size: 20))
-                      .frame(width: 30, height: 30)
+                      .font(.title3)
+                      .frame(width: iconSize, height: iconSize)
                       .padding(.trailing, 8)
+                      .accessibilityHidden(true)
                     
                     Text("Artists")
                     
@@ -63,7 +67,7 @@ struct AlbumListView: View {
                     
                     Text("\(library.artists.count)")
                       .foregroundStyle(.secondary)
-                      .font(.system(size: 15))
+                      .font(.subheadline)
                   }
                   .padding(.vertical, 4)
                 }
@@ -71,9 +75,10 @@ struct AlbumListView: View {
                 NavigationLink(destination: GenreListView(genres: library.genres, albums: library.albums)) {
                   HStack {
                     Image(systemName: "guitars.fill")
-                      .font(.system(size: 20))
-                      .frame(width: 30, height: 30)
+                      .font(.title3)
+                      .frame(width: iconSize, height: iconSize)
                       .padding(.trailing, 8)
+                      .accessibilityHidden(true)
                     
                     Text("Genres")
                     
@@ -81,7 +86,7 @@ struct AlbumListView: View {
                     
                     Text("\(library.genres.count)")
                       .foregroundStyle(.secondary)
-                      .font(.system(size: 15))
+                      .font(.subheadline)
                   }
                   .padding(.vertical, 4)
                 }
@@ -89,9 +94,10 @@ struct AlbumListView: View {
                 NavigationLink(destination: PlaylistListView(playlists: library.playlists)) {
                   HStack {
                     Image(systemName: "list.number")
-                      .font(.system(size: 20))
-                      .frame(width: 30, height: 30)
+                      .font(.title3)
+                      .frame(width: iconSize, height: iconSize)
                       .padding(.trailing, 8)
+                      .accessibilityHidden(true)
                     
                     Text("Playlists")
                     
@@ -99,7 +105,7 @@ struct AlbumListView: View {
                     
                     Text("\(library.playlists.count)")
                       .foregroundStyle(.secondary)
-                      .font(.system(size: 15))
+                      .font(.subheadline)
                   }
                   .padding(.vertical, 4)
                 }
@@ -107,9 +113,10 @@ struct AlbumListView: View {
                 NavigationLink(destination: CompilationListView(compilations: library.compilations)) {
                   HStack {
                     Image(systemName: "person.2.crop.square.stack.fill")
-                      .font(.system(size: 20))
-                      .frame(width: 30, height: 30)
+                      .font(.title3)
+                      .frame(width: iconSize, height: iconSize)
                       .padding(.trailing, 8)
+                      .accessibilityHidden(true)
                     
                     Text("Compilations")
                     
@@ -117,7 +124,7 @@ struct AlbumListView: View {
                     
                     Text("\(library.compilations.count)")
                       .foregroundStyle(.secondary)
-                      .font(.system(size: 15))
+                      .font(.subheadline)
                   }
                   .padding(.vertical, 4)
                 }

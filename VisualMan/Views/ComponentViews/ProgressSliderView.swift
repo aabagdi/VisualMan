@@ -18,7 +18,10 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
   
   @State private var isDragging: Bool = false
   @State private var tempValue: T = 0
-  
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ScaledMetric(relativeTo: .caption) private var sliderHeight: CGFloat = 30
+
   init(
     value: Binding<T>,
     inRange: ClosedRange<T>,
@@ -76,20 +79,20 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
             Text(elapsedSeconds.asTimeString())
               .font(.caption)
               .monospacedDigit()
-              .foregroundStyle(isDragging ? fillColor : emptyColor)
+              .foregroundStyle(isDragging ? activeFillColor : fillColor)
             
             Spacer(minLength: 0)
             
             Text("-" + remainingTime.asTimeString())
               .font(.caption)
               .monospacedDigit()
-              .foregroundStyle(isDragging ? fillColor : emptyColor)
+              .foregroundStyle(isDragging ? activeFillColor : fillColor)
           }
         }
-        .frame(width: isDragging ? bounds.size.width * 1.04 : bounds.size.width)
-        .scaleEffect(isDragging ? 1.02 : 1.0)
+        .frame(width: isDragging && !reduceMotion ? bounds.size.width * 1.04 : bounds.size.width)
+        .scaleEffect(isDragging && !reduceMotion ? 1.02 : 1.0)
         .shadow(color: .black.opacity(isDragging ? 0.2 : 0), radius: isDragging ? 10 : 0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragging)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: isDragging)
       }
       .frame(width: bounds.size.width, height: bounds.size.height, alignment: .center)
       .contentShape(Rectangle())
@@ -113,12 +116,16 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
           }
       )
     }
-    .frame(height: 30)
+    .frame(height: sliderHeight)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("Playback position")
     .accessibilityValue(
       "\(displayTime.asTimeString()) of \((inRange.upperBound).asTimeString())"
     )
+    .accessibilityAddTraits(.updatesFrequently)
+    .accessibilityShowsLargeContentViewer {
+      Text("\(elapsedSeconds.asTimeString()) of \((inRange.upperBound).asTimeString())")
+    }
     .accessibilityAdjustableAction { direction in
       let range = inRange.upperBound - inRange.lowerBound
       let step = range * 0.05
