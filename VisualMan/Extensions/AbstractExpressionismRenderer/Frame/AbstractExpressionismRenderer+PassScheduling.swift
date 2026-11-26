@@ -19,7 +19,7 @@ extension AbstractExpressionismRenderer {
                    hwSrc: hwSrc, hwDst: tex.hwIn,
                    drySrc: dSrc, dryDst: tex.dryColorIn,
                    subSrc: sSrc, subDst: tex.substrateIn,
-                   velDst: tex.velocityIn)
+                   velDst: tex.velocityIn, baseDst: tex.base)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
 
     for t in [cSrc, hwSrc, dSrc, sSrc] {

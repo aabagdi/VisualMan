@@ -26,7 +26,52 @@ extension AbstractExpressionismRenderer {
     }
   }
 
-  func strokeAabb(_ s: AbExStroke) -> SIMD4<Float> {
+  struct StrokeBox {
+    var center: SIMD2<Float>
+    var dir: SIMD2<Float>
+    var halfAlong: Float
+    var halfAcross: Float
+
+    var aabb: SIMD4<Float> {
+      let cs = abs(dir.x)
+      let sn = abs(dir.y)
+      let halfX = halfAlong * cs + halfAcross * sn
+      let halfY = halfAlong * sn + halfAcross * cs
+      return SIMD4((center.x - halfX) + 0.5, (center.x + halfX) + 0.5,
+                   (center.y - halfY) + 0.5, (center.y + halfY) + 0.5)
+    }
+
+    func padded(by pad: Float) -> StrokeBox {
+      StrokeBox(center: center, dir: dir, halfAlong: halfAlong + pad, halfAcross: halfAcross + pad)
+    }
+
+    func touchesTile(x: Int, y: Int, dim: Int) -> Bool {
+      let half = 0.5 / Float(dim)
+      let slack = half + 1e-4
+      let d = SIMD2<Float>((Float(x) + 0.5) / Float(dim), (Float(y) + 0.5) / Float(dim)) - 0.5 - center
+      let reach = slack * (abs(dir.x) + abs(dir.y))
+      return abs(d.x * dir.x + d.y * dir.y) <= halfAlong + reach
+          && abs(d.y * dir.x - d.x * dir.y) <= halfAcross + reach
+    }
+
+    func forEachTile(dim: Int, _ body: (Int) -> Void) {
+      let bb = aabb
+      if bb.y < 0 || bb.x > 1 || bb.w < 0 || bb.z > 1 { return }
+      let dimF = Float(dim)
+      let dimMax = dim - 1
+      let minTileX = max(0, min(dimMax, Int(floor(bb.x * dimF))))
+      let maxTileX = max(0, min(dimMax, Int(floor(bb.y * dimF))))
+      let minTileY = max(0, min(dimMax, Int(floor(bb.z * dimF))))
+      let maxTileY = max(0, min(dimMax, Int(floor(bb.w * dimF))))
+      for ty in minTileY...maxTileY {
+        for tx in minTileX...maxTileX where touchesTile(x: tx, y: ty, dim: dim) {
+          body(ty * dim + tx)
+        }
+      }
+    }
+  }
+
+  func strokeBox(_ s: AbExStroke) -> StrokeBox {
     let center = SIMD2<Float>(s.posAngle.x, s.posAngle.y)
     let angle = s.posAngle.z
     let dir = SIMD2<Float>(cos(angle), sin(angle))
@@ -48,8 +93,8 @@ extension AbstractExpressionismRenderer {
       let trailLen = max(s.posAngle.w, 0.02)
       let topWidth = max(s.sizeOpacity.x, 0.003)
       alongOffset = trailLen * 0.5
-      halfAlong = trailLen * 0.54
-      halfAcross = trailLen * 0.13 + topWidth * 2.0
+      halfAlong = trailLen * 0.54 + topWidth * 11.0
+      halfAcross = trailLen * 0.13 + topWidth * 14.0
     case .scumble:
       halfAlong = max(s.posAngle.w, 0.01) * 1.05
       halfAcross = max(s.sizeOpacity.x, 0.01) * 1.05
@@ -69,49 +114,28 @@ extension AbstractExpressionismRenderer {
       halfAcross = halfWd * 1.5 + abs(amp) * halfLen * 0.5
     }
 
-    let boxCenter = center + dir * alongOffset
-    let cs = abs(dir.x)
-    let sn = abs(dir.y)
-    let aabbHalfX = halfAlong * cs + halfAcross * sn
-    let aabbHalfY = halfAlong * sn + halfAcross * cs
+    return StrokeBox(center: center + dir * alongOffset, dir: dir,
+                     halfAlong: halfAlong, halfAcross: halfAcross)
+  }
 
-    let minU = (boxCenter.x - aabbHalfX) + 0.5
-    let maxU = (boxCenter.x + aabbHalfX) + 0.5
-    let minV = (boxCenter.y - aabbHalfY) + 0.5
-    let maxV = (boxCenter.y + aabbHalfY) + 0.5
-    return SIMD4(minU, maxU, minV, maxV)
+  func strokeAabb(_ s: AbExStroke) -> SIMD4<Float> {
+    strokeBox(s).aabb
   }
 
   func buildTileMap(strokes: [AbExStroke]) -> TileMap {
     var map = TileMap.empty
     if strokes.isEmpty { return map }
 
-    let dim = Self.tileGridDim
-    let dimF = Float(dim)
     let cap = Self.maxStrokesPerTile
-
-    let dimMax = dim - 1
 
     for (idx, s) in strokes.enumerated() {
       if idx >= 65535 { break }
-      let bb = strokeAabb(s)
-
-      let minTileX = max(0, min(dimMax, Int(floor(bb.x * dimF))))
-      let maxTileX = max(0, min(dimMax, Int(floor(bb.y * dimF))))
-      let minTileY = max(0, min(dimMax, Int(floor(bb.z * dimF))))
-      let maxTileY = max(0, min(dimMax, Int(floor(bb.w * dimF))))
-
-      if bb.y < 0 || bb.x > 1 || bb.w < 0 || bb.z > 1 { continue }
-
       let strokeIdx = UInt32(idx)
-      for ty in minTileY...maxTileY {
-        for tx in minTileX...maxTileX {
-          let tileIdx = ty * dim + tx
-          let count = Int(map.counts[tileIdx])
-          if count < cap {
-            map.indices[tileIdx * cap + count] = strokeIdx
-            map.counts[tileIdx] = UInt32(count + 1)
-          }
+      strokeBox(s).forEachTile(dim: Self.tileGridDim) { tileIdx in
+        let count = Int(map.counts[tileIdx])
+        if count < cap {
+          map.indices[tileIdx * cap + count] = strokeIdx
+          map.counts[tileIdx] = UInt32(count + 1)
         }
       }
     }

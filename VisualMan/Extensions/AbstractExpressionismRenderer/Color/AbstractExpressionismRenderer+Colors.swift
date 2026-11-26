@@ -23,24 +23,59 @@ extension AbstractExpressionismRenderer {
     let value: Float
     let saturation: Float
     let name: String
+    var finish: Finish = .neutral
+    var hiding: Hiding = .opaque
+
+    var strokeBits: Float { finish.strokeBits + hiding.strokeBits }
+  }
+
+  enum Finish: Float {
+    case neutral = 0
+    case matte = 1
+    case satin = 2
+    case gloss = 3
+
+    var strokeBits: Float { rawValue * 8 }
+  }
+
+  enum Hiding: Float {
+    case opaque = 0
+    case semiOpaque = 1
+    case semiTransparent = 2
+    case transparent = 3
+
+    var strokeBits: Float { rawValue * 32 }
   }
 
   static let mixboxPigments: [Pigment] = [
-    Pigment(linearRgb: SIMD3(0.991, 0.839, 0.0), hue: 0.141, value: 0.99, saturation: 1.00, name: "Cadmium Yellow"),
-    Pigment(linearRgb: SIMD3(0.973, 0.651, 0.0), hue: 0.112, value: 0.97, saturation: 1.00, name: "Hansa Yellow"),
-    Pigment(linearRgb: SIMD3(1.0, 0.141, 0.0), hue: 0.024, value: 1.00, saturation: 1.00, name: "Cadmium Orange"),
-    Pigment(linearRgb: SIMD3(1.0, 0.02, 0.001), hue: 0.000, value: 1.00, saturation: 1.00, name: "Cadmium Red"),
+    Pigment(linearRgb: SIMD3(0.991, 0.839, 0.0), hue: 0.141, value: 0.99, saturation: 1.00,
+            name: "Cadmium Yellow", finish: .satin),
+    Pigment(linearRgb: SIMD3(0.973, 0.651, 0.0), hue: 0.112, value: 0.97, saturation: 1.00,
+            name: "Hansa Yellow", finish: .gloss, hiding: .semiTransparent),
+    Pigment(linearRgb: SIMD3(1.0, 0.141, 0.0), hue: 0.024, value: 1.00, saturation: 1.00,
+            name: "Cadmium Orange", finish: .satin),
+    Pigment(linearRgb: SIMD3(1.0, 0.02, 0.001), hue: 0.000, value: 1.00, saturation: 1.00,
+            name: "Cadmium Red", finish: .satin),
     Pigment(linearRgb: SIMD3(0.216, 0.001, 0.027), hue: 0.951, value: 0.22, saturation: 1.00,
-            name: "Quinacridone Magenta"),
-    Pigment(linearRgb: SIMD3(0.076, 0.0, 0.054), hue: 0.864, value: 0.08, saturation: 1.00, name: "Cobalt Violet"),
-    Pigment(linearRgb: SIMD3(0.01, 0.0, 0.1), hue: 0.717, value: 0.10, saturation: 1.00, name: "Ultramarine Blue"),
-    Pigment(linearRgb: SIMD3(0.0, 0.015, 0.235), hue: 0.677, value: 0.24, saturation: 1.00, name: "Cobalt Blue"),
-    Pigment(linearRgb: SIMD3(0.004, 0.011, 0.058), hue: 0.658, value: 0.06, saturation: 0.93, name: "Phthalo Blue"),
-    Pigment(linearRgb: SIMD3(0.0, 0.045, 0.032), hue: 0.452, value: 0.05, saturation: 1.00, name: "Phthalo Green"),
-    Pigment(linearRgb: SIMD3(0.002, 0.153, 0.008), hue: 0.339, value: 0.15, saturation: 0.99, name: "Permanent Green"),
-    Pigment(linearRgb: SIMD3(0.147, 0.296, 0.001), hue: 0.250, value: 0.30, saturation: 1.00, name: "Sap Green"),
-    Pigment(linearRgb: SIMD3(0.198, 0.065, 0.0), hue: 0.055, value: 0.20, saturation: 1.00, name: "Burnt Sienna"),
-    Pigment(linearRgb: SIMD3(1.0, 1.0, 1.0), hue: -1, value: 1.00, saturation: 0.00, name: "Titanium White"),
+            name: "Quinacridone Magenta", finish: .gloss, hiding: .transparent),
+    Pigment(linearRgb: SIMD3(0.076, 0.0, 0.054), hue: 0.864, value: 0.08, saturation: 1.00,
+            name: "Cobalt Violet", finish: .matte, hiding: .semiTransparent),
+    Pigment(linearRgb: SIMD3(0.01, 0.0, 0.1), hue: 0.717, value: 0.10, saturation: 1.00,
+            name: "Ultramarine Blue", finish: .matte, hiding: .transparent),
+    Pigment(linearRgb: SIMD3(0.0, 0.015, 0.235), hue: 0.677, value: 0.24, saturation: 1.00,
+            name: "Cobalt Blue", hiding: .semiTransparent),
+    Pigment(linearRgb: SIMD3(0.004, 0.011, 0.058), hue: 0.658, value: 0.06, saturation: 0.93,
+            name: "Phthalo Blue", finish: .gloss, hiding: .transparent),
+    Pigment(linearRgb: SIMD3(0.0, 0.045, 0.032), hue: 0.452, value: 0.05, saturation: 1.00,
+            name: "Phthalo Green", finish: .gloss, hiding: .transparent),
+    Pigment(linearRgb: SIMD3(0.002, 0.153, 0.008), hue: 0.339, value: 0.15, saturation: 0.99,
+            name: "Permanent Green", hiding: .semiOpaque),
+    Pigment(linearRgb: SIMD3(0.147, 0.296, 0.001), hue: 0.250, value: 0.30, saturation: 1.00,
+            name: "Sap Green", finish: .gloss, hiding: .transparent),
+    Pigment(linearRgb: SIMD3(0.198, 0.065, 0.0), hue: 0.055, value: 0.20, saturation: 1.00,
+            name: "Burnt Sienna", finish: .matte, hiding: .transparent),
+    Pigment(linearRgb: SIMD3(1.0, 1.0, 1.0), hue: -1, value: 1.00, saturation: 0.00,
+            name: "Titanium White", finish: .satin),
   ]
 
   static var titaniumWhite: Pigment { mixboxPigments[13] }
@@ -98,10 +133,11 @@ extension AbstractExpressionismRenderer {
     return 0
   }
 
-  func paletteColor(nearHue hue: Float, valueBias: Float = 0.0) -> SIMD3<Float> {
+  func paletteColor(nearHue hue: Float, valueBias: Float = 0.0) -> SIMD4<Float> {
     let first = weightedPigmentIndex(nearHue: hue, valueBias: valueBias)
+    let strokeBits = Self.mixboxPigments[first].strokeBits
     guard !paletteMixes.isEmpty, nextSeed() < Self.paletteMixChance else {
-      return Self.mixboxPigments[first].linearRgb
+      return SIMD4(Self.mixboxPigments[first].linearRgb, strokeBits)
     }
     let weights = currentPigmentWeights()
     var total: Float = 0
@@ -115,7 +151,7 @@ extension AbstractExpressionismRenderer {
     }
     let shares = Self.paletteMixShares.count
     let share = min(Int(nextSeed() * Float(shares)), shares - 1)
-    return paletteMixes[Self.paletteMixIndex(first, second, share)]
+    return SIMD4(paletteMixes[Self.paletteMixIndex(first, second, share)], strokeBits)
   }
 
   static func paletteMixIndex(_ first: Int, _ second: Int, _ share: Int) -> Int {
@@ -157,9 +193,9 @@ extension AbstractExpressionismRenderer {
     paletteMixes = (0..<Self.paletteMixCount).map { SIMD3(ptr[$0].x, ptr[$0].y, ptr[$0].z) }
   }
 
-  func pickColorBiased(at pos: SIMD2<Float>) -> SIMD3<Float> {
+  func pickColorBiased(at pos: SIMD2<Float>) -> SIMD4<Float> {
     if nextSeed() < Self.brushWhiteChance, whiteAllowed(at: pos) {
-      return Self.titaniumWhite.linearRgb
+      return SIMD4(Self.titaniumWhite.linearRgb, Self.titaniumWhite.strokeBits)
     }
     var baseHue = (time * 0.0042 + songSeed * 0.7)
       .truncatingRemainder(dividingBy: 1.0)
@@ -185,9 +221,9 @@ extension AbstractExpressionismRenderer {
     return paletteColor(nearHue: hue)
   }
 
-  func pickKnifeColor(at pos: SIMD2<Float>) -> SIMD3<Float> {
+  func pickKnifeColor(at pos: SIMD2<Float>) -> SIMD4<Float> {
     if nextSeed() < Self.knifeWhiteChance, whiteAllowed(at: pos) {
-      return Self.titaniumWhite.linearRgb
+      return SIMD4(Self.titaniumWhite.linearRgb, Self.titaniumWhite.strokeBits)
     }
     var baseHue = (time * 0.0042 + songSeed * 0.7)
       .truncatingRemainder(dividingBy: 1.0)
@@ -213,7 +249,7 @@ extension AbstractExpressionismRenderer {
     return paletteColor(nearHue: hue, valueBias: 0.4)
   }
 
-  func pickStainColor() -> SIMD3<Float> {
+  func pickStainColor() -> SIMD4<Float> {
     var baseHue = (time * 0.0042 + songSeed * 0.7)
       .truncatingRemainder(dividingBy: 1.0)
     if baseHue < 0 { baseHue += 1 }

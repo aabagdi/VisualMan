@@ -10,7 +10,7 @@ import SwiftUI
 struct CreditsView: View {
   var body: some View {
     List {
-      Section("Abstract Expressionism") {
+      Section {
         CreditRow(
           title: "Mixbox",
           role: "Pigment mixing",
@@ -24,6 +24,18 @@ struct CreditsView: View {
             without warranty of any kind.
             """
         )
+
+        PaintSurfaceCredits()
+        PaintFlowCredits()
+        PaintLayerCredits()
+      } header: {
+        Text("Abstract Expressionism")
+      } footer: {
+        Text("""
+          The paint surface papers listed here informed simplified, \
+          real-time approximations written for this app. No source \
+          code or data from their authors is included.
+          """)
       }
 
       Section("Navier-Stokes") {
@@ -138,7 +150,7 @@ struct CreditsView: View {
   }
 }
 
-private struct CreditRow: View {
+struct CreditRow: View {
   let title: String
   let role: LocalizedStringResource
   let attribution: LocalizedStringResource

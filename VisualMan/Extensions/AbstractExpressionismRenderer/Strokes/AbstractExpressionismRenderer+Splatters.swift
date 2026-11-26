@@ -83,7 +83,8 @@ extension AbstractExpressionismRenderer {
     return AbExStroke(
       posAngle: SIMD4(x, y, angle, radius),
       sizeOpacity: SIMD4(burstTypeRoll, opacity, bristleSeed, AbExStrokeType.splatter.shaderValue),
-      color: SIMD4(color.x, color.y, color.z, packColorW(shape: shapeVariant, durability: dur)),
+      color: SIMD4(color.x, color.y, color.z,
+                   packColorW(shape: shapeVariant, durability: dur) + color.w),
       animation: SIMD4(0, 1, 0, 0))
   }
 

@@ -45,12 +45,14 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   let commandQueue: any MTL4CommandQueue
 
   var paintPipeline: MTLComputePipelineState
+  var filmPipeline: MTLComputePipelineState
   var composePipeline: MTLComputePipelineState
   var velocityPipeline: MTLComputePipelineState
   var resamplePipeline: MTLComputePipelineState
   var pigmentPipeline: MTLComputePipelineState
   var mixboxSelfTestPipeline: MTLComputePipelineState
   var paletteMixPipeline: MTLComputePipelineState
+  var noiseBakePipeline: MTLComputePipelineState
 
   var pendingResample: Bool = false
   var resampleColorSrc: MTLTexture?
@@ -172,9 +174,14 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
   var pigmentTexture: MTLTexture?
   var materialTexture: MTLTexture?
   var shadowTexture: MTLTexture?
+  var filmFluxTexture: MTLTexture?
+  var filmBaseTexture: MTLTexture?
+  var grainNoiseTexture: MTLTexture?
+  var fieldNoiseTexture: MTLTexture?
+  var noiseBakePending = false
   var pigmentFullRefreshFrames: Int = 0
   var pigmentBandIndex: Int = 0
-  var pigmentDirtyHistory: [SIMD4<Float>] = []
+  var pigmentDirtyTiles: [UInt8] = []
   var pigmentRegionsThisFrame: [CanvasRegion] = []
   var recentSplats: [SIMD2<Float>] = []
 
@@ -277,12 +284,14 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
     self.currentUniformBuffer = firstUniformBuffer
     self.argumentTables = argumentTables
     self.paintPipeline   = pipelines.paint
+    self.filmPipeline = pipelines.film
     self.composePipeline = pipelines.compose
     self.velocityPipeline = pipelines.velocity
     self.resamplePipeline = pipelines.resample
     self.pigmentPipeline = pipelines.pigment
     self.mixboxSelfTestPipeline = pipelines.mixboxSelfTest
     self.paletteMixPipeline = pipelines.paletteMixes
+    self.noiseBakePipeline = pipelines.noiseBake
     self.residencySet = residencySet
 
     guard let lut = Self.makeMixboxLUT(device: device, pixels: textureData.mixboxLUT) else { return nil }

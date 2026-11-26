@@ -88,6 +88,173 @@ source code from the authors' reference implementation is included.
 
 ===============================================================================
 
+PAINT SURFACE MODEL
+The paint surface in the Abstract Expressionism visualizer (levelling,
+canvas tooth, sag, bristle texture, gloss, cracks, highlight
+antialiasing, runs and drips, glazes, washes, poured lines, and the
+clear coat) is informed by the following papers.
+
+Wet paint levelling and its yield threshold:
+
+  Orchard, S.E. On surface levelling in viscous liquids and gels.
+  Appl. sci. Res. 11, 451–464 (1963).
+  https://doi.org/10.1007/BF03184629
+
+  N.J. Balmforth and R.V. Craster. A consistent thin-layer theory for
+  Bingham plastics. Journal of Non-Newtonian Fluid Mechanics, Volume
+  84, Issue 1, 1999, Pages 65–81.
+  https://doi.org/10.1016/S0377-0257(98)00133-5
+
+Canvas weave tooth:
+
+  William Baxter, Jeremy Wendt, and Ming C. Lin. 2004. IMPaSTo: a
+  realistic, interactive model for paint. In Proceedings of the 3rd
+  international symposium on Non-photorealistic animation and rendering
+  (NPAR '04). Association for Computing Machinery, New York, NY, USA,
+  45–148. https://doi.org/10.1145/987657.987665
+
+Paint sag under gravity:
+
+  Stuyck, T., Da, F., Hadap, S. and Dutré, P. (2017), Real-Time Oil
+  Painting on Mobile Hardware. Computer Graphics Forum, 36: 69–79.
+  https://doi.org/10.1111/cgf.12995
+
+Bristle stroke texture:
+
+  Zhili Chen, Byungmoon Kim, Daichi Ito, and Huamin Wang. 2015.
+  Wetbrush: GPU-based 3D painting simulation at the bristle level. ACM
+  Trans. Graph. 34, 6, Article 200 (November 2015), 11 pages.
+  https://doi.org/10.1145/2816795.2818066
+
+Gloss as a separate surface map:
+
+  Willemijn Elkhuizen, Tessa Essers, Yu Song, Jo Geraedts, Clemens
+  Weijkamp, Joris Dik, and Sylvia Pont. 2019. Gloss, Color, and
+  Topography Scanning for Reproducing a Painting’s Appearance Using 3D
+  Printing. J. Comput. Cult. Herit. 12, 4, Article 27 (December 2019),
+  22 pages. https://doi.org/10.1145/3317949
+
+Stress-driven cracks:
+
+  Eric Paquette, Pierre Poulin, and George Drettakis. 2002. The
+  Simulation of Paint Cracking and Peeling. In Proceedings of Graphics
+  Interface 2002, Calgary, Alberta, Canada, 27–29 May 2002, 59–68.
+  https://doi.org/10.20380/GI2002.08
+
+  Hayley N. Iben and James F. O'Brien. 2006. Generating Surface Crack
+  Patterns. In ACM SIGGRAPH / Eurographics Symposium on Computer
+  Animation, Marie-Paule Cani and James O'Brien (Eds.). The
+  Eurographics Association, 177–185.
+  https://doi.org/10.2312/SCA/SCA06/177-185
+
+Highlight antialiasing:
+
+  Marc Olano and Dan Baker. 2010. LEAN mapping. In Proceedings of the
+  2010 ACM SIGGRAPH symposium on Interactive 3D Graphics and Games
+  (I3D '10). Association for Computing Machinery, New York, NY, USA,
+  181–188. https://doi.org/10.1145/1730804.1730834
+
+  Anton S. Kaplanyan, Stephen Hill, Anjul Patney, and Aaron Lefohn.
+  2016. Filtering Distributions of Normals for Shading Antialiasing. In
+  Eurographics/ ACM SIGGRAPH Symposium on High Performance Graphics,
+  Ulf Assarsson and Warren Hunt (Eds.). The Eurographics Association,
+  151–162. https://doi.org/10.2312/hpg.20161201
+
+Runs, drips, and surface tension in wet paint (viscous thin film):
+
+  Orestis Vantzos, Saar Raz, and Mirela Ben-Chen. 2018. Real-time
+  Viscous Thin Films. ACM Trans. Graph. 37, 6, Article 281 (November
+  2018), 10 pages. https://doi.org/10.1145/3272127.3275086
+
+  Alexander Oron, Stephen H. Davis, and S. George Bankoff. Long-scale
+  evolution of thin liquid films. Rev. Mod. Phys. 69, 931–980 (1997).
+  https://doi.org/10.1103/RevModPhys.69.931
+
+Thin-film flow between neighbouring cells:
+
+  Grün, G., Rumpf, M. Nonnegativity preserving convergent schemes for
+  the thin film equation. Numer. Math. 87, 113–152 (2000).
+  https://doi.org/10.1007/s002110000197
+
+  L. Zhornitskaya and A. L. Bertozzi. Positivity-Preserving Numerical
+  Schemes for Lubrication-Type Equations. SIAM J. Numer. Anal., Vol.
+  37, No. 2, pp. 523–555 (2000).
+  https://doi.org/10.1137/S0036142998335698
+
+Paint runs under gravity and the thickness a wet layer holds:
+
+  Huppert, H. Flow and instability of a viscous current down a slope.
+  Nature 300, 427–429 (1982). https://doi.org/10.1038/300427a0
+
+  N.J. Balmforth, R.V. Craster, A.C. Rust, and R. Sassi. Viscoplastic
+  flow over an inclined surface. Journal of Non-Newtonian Fluid
+  Mechanics, Volume 139, Issues 1–2, 2006, Pages 103–127.
+  https://doi.org/10.1016/j.jnnfm.2006.07.010
+
+Fingers at drip fronts:
+
+  S. M. Troian, E. Herbolzheimer, S. A. Safran, and J. F. Joanny.
+  Fingering Instabilities of Driven Spreading Films. Europhys. Lett.,
+  10 (1), pp. 25–30 (1989).
+  https://doi.org/10.1209/0295-5075/10/1/005
+
+  L. Kondic. Instabilities in Gravity Driven Flow of Thin Fluid Films.
+  SIAM Rev., Vol. 45, No. 1, pp. 95–115 (2003).
+  https://doi.org/10.1137/S003614450240135
+
+  T.-S. Lin, L. Kondic, and A. Filippov. Thin films flowing down
+  inverted substrates: Three-dimensional flow. Phys. Fluids 24, 022105
+  (2012). https://doi.org/10.1063/1.3682001
+
+Glazes, darker wash edges, and washes wicking into the canvas:
+
+  Cassidy J. Curtis, Sean E. Anderson, Joshua E. Seims, Kurt W.
+  Fleischer, and David H. Salesin. 1997. Computer-generated watercolor.
+  In Proceedings of the 24th annual conference on Computer graphics and
+  interactive techniques (SIGGRAPH '97). ACM Press, 421–430.
+  https://doi.org/10.1145/258734.258896
+
+  Nelson S.-H. Chu and Chiew-Lan Tai. 2005. MoXi: real-time ink
+  dispersion in absorbent paper. ACM Trans. Graph. 24, 3 (July 2005),
+  504–511. https://doi.org/10.1145/1073204.1073221
+
+Poured paint lines, coils, and drops:
+
+  Andrzej Herczyński, Claude Cernuschi, and L. Mahadevan. 2011.
+  Painting with drops, jets, and sheets. Physics Today 64(6): 31–36.
+  https://doi.org/10.1063/1.3603916
+
+  Palacios B, Rosario A, Wilhelmus MM, Zetina S, Zenit R (2019) Pollock
+  avoided hydrodynamic instabilities to paint with his dripping
+  technique. PLoS ONE 14(10): e0223706.
+  https://doi.org/10.1371/journal.pone.0223706
+
+Clear coat over paint:
+
+  Andrea Weidlich and Alexander Wilkie. 2007. Arbitrarily layered
+  micro-facet surfaces. In Proceedings of the 5th international
+  conference on Computer graphics and interactive techniques in
+  Australia and Southeast Asia (GRAPHITE '07). Association for
+  Computing Machinery, New York, NY, USA, 171–178.
+  https://doi.org/10.1145/1321261.1321292
+
+Highlight shape:
+
+  Bruce Walter, Stephen R. Marschner, Hongsong Li, and Kenneth E.
+  Torrance. 2007. Microfacet Models for Refraction through Rough
+  Surfaces. In Eurographics Symposium on Rendering, Jan Kautz and
+  Sumanta Pattanaik (Eds.). The Eurographics Association, 195–206.
+  https://doi.org/10.2312/EGWR/EGSR07/195-206
+
+These are simplified, real-time approximations written independently in
+Metal for this project, not implementations of the full methods; no
+source code or data from the authors is included. The reference
+implementation published with Real-time Viscous Thin Films (ISC
+license) was consulted while writing the thin-film pass; none of its
+code is included.
+
+===============================================================================
+
 THIRD-PARTY SWIFT PACKAGES
 The app is built with the following Swift packages, which are fetched by
 Swift Package Manager and are not included in this repository.

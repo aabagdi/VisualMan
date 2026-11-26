@@ -12,12 +12,14 @@ import os
 extension AbstractExpressionismRenderer {
   struct Pipelines {
     let paint: MTLComputePipelineState
+    let film: MTLComputePipelineState
     let compose: MTLComputePipelineState
     let velocity: MTLComputePipelineState
     let resample: MTLComputePipelineState
     let pigment: MTLComputePipelineState
     let mixboxSelfTest: MTLComputePipelineState
     let paletteMixes: MTLComputePipelineState
+    let noiseBake: MTLComputePipelineState
   }
 
   nonisolated static func createPipelines(device: MTLDevice, compiler: any MTL4Compiler) -> Pipelines? {
@@ -29,20 +31,22 @@ extension AbstractExpressionismRenderer {
       Self.makePipeline(name, library: library, compiler: compiler)
     }
     guard let paint        = makePipeline("abexPaint"),
+          let film         = makePipeline("abexFilm"),
           let compose      = makePipeline("abexCompose"),
           let velocity     = makePipeline("abexVelocityDeposit"),
           let resample     = makePipeline("abexResample"),
           let pigment      = makePipeline("abexPigment"),
           let selfTest     = makePipeline("abexMixboxSelfTest"),
-          let mixes        = makePipeline("abexPaletteMixes") else { return nil }
-    return Pipelines(paint: paint, compose: compose, velocity: velocity,
+          let mixes        = makePipeline("abexPaletteMixes"),
+          let noiseBake    = makePipeline("abexBakeNoise") else { return nil }
+    return Pipelines(paint: paint, film: film, compose: compose, velocity: velocity,
                      resample: resample, pigment: pigment, mixboxSelfTest: selfTest,
-                     paletteMixes: mixes)
+                     paletteMixes: mixes, noiseBake: noiseBake)
   }
 
   static func createArgumentTables(device: MTLDevice) -> [any MTL4ArgumentTable]? {
     let desc = MTL4ArgumentTableDescriptor()
-    desc.maxTextureBindCount = 10
+    desc.maxTextureBindCount = 13
     desc.maxBufferBindCount = 5
     var tables = [any MTL4ArgumentTable]()
     for _ in 0..<maxFramesInFlight {

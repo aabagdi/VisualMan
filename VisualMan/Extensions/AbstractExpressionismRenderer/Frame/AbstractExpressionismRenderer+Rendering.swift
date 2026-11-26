@@ -13,6 +13,7 @@ extension AbstractExpressionismRenderer {
   func renderPaint(encoder: any MTL4ComputeCommandEncoder,
                    colorIn: MTLTexture, colorOut: MTLTexture,
                    hwIn: MTLTexture, hwOut: MTLTexture,
+                   flux: MTLTexture, base: MTLTexture,
                    velocityIn: MTLTexture,
                    dryColorIn: MTLTexture, dryColorOut: MTLTexture,
                    substrateIn: MTLTexture, substrateOut: MTLTexture,
@@ -32,6 +33,11 @@ extension AbstractExpressionismRenderer {
     if let lut = mixboxLUT {
       argumentTable.setTexture(lut.gpuResourceID, index: 9)
     }
+    if let cracks = crackTexture {
+      argumentTable.setTexture(cracks.gpuResourceID, index: 10)
+    }
+    argumentTable.setTexture(flux.gpuResourceID, index: 11)
+    argumentTable.setTexture(base.gpuResourceID, index: 12)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     if strokes.isEmpty {
@@ -82,7 +88,7 @@ extension AbstractExpressionismRenderer {
                       hwSrc: MTLTexture, hwDst: MTLTexture,
                       drySrc: MTLTexture, dryDst: MTLTexture,
                       subSrc: MTLTexture, subDst: MTLTexture,
-                      velDst: MTLTexture) {
+                      velDst: MTLTexture, baseDst: MTLTexture) {
     encoder.setComputePipelineState(resamplePipeline)
     argumentTable.setTexture(colorSrc.gpuResourceID, index: 0)
     argumentTable.setTexture(colorDst.gpuResourceID, index: 1)
@@ -93,6 +99,7 @@ extension AbstractExpressionismRenderer {
     argumentTable.setTexture(subSrc.gpuResourceID, index: 6)
     argumentTable.setTexture(subDst.gpuResourceID, index: 7)
     argumentTable.setTexture(velDst.gpuResourceID, index: 8)
+    argumentTable.setTexture(baseDst.gpuResourceID, index: 9)
 
     dispatch(encoder: encoder, pipeline: resamplePipeline,
              width: colorDst.width, height: colorDst.height)
@@ -118,6 +125,7 @@ extension AbstractExpressionismRenderer {
     argumentTable.setTexture((pigmentTexture ?? color).gpuResourceID, index: 7)
     argumentTable.setTexture((materialTexture ?? color).gpuResourceID, index: 8)
     argumentTable.setTexture((shadowTexture ?? color).gpuResourceID, index: 9)
+    argumentTable.setTexture((fieldNoiseTexture ?? color).gpuResourceID, index: 10)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     dispatch(encoder: encoder, pipeline: composePipeline,
@@ -131,6 +139,7 @@ extension AbstractExpressionismRenderer {
     let velocityIn: MTLTexture, velocityOut: MTLTexture
     let dryColorIn: MTLTexture, dryColorOut: MTLTexture, dryColorMid: MTLTexture
     let substrateIn: MTLTexture, substrateOut: MTLTexture, substrateMid: MTLTexture
+    let flux: MTLTexture, base: MTLTexture
     let display: MTLTexture
   }
 
@@ -150,6 +159,8 @@ extension AbstractExpressionismRenderer {
           let hwMid = heightWetMid,
           let dcMid = dryColorMid,
           let sMid  = substrateMid,
+          let flux  = filmFluxTexture,
+          let base  = filmBaseTexture,
           displayTextures.count == 2 else { return nil }
     let disp = displayTextures[displayIsA ? 0 : 1]
     return PingPongTextures(colorIn: cIn, colorOut: cOut,
@@ -159,7 +170,7 @@ extension AbstractExpressionismRenderer {
                             dryColorIn: dcIn, dryColorOut: dcOut,
                             dryColorMid: dcMid,
                             substrateIn: sIn, substrateOut: sOut, substrateMid: sMid,
-                            display: disp)
+                            flux: flux, base: base, display: disp)
   }
 
   func buildFrameParams(smoothed: SIMD3<Float>, strokeCount: Int) -> AbExParams {
@@ -218,6 +229,7 @@ extension AbstractExpressionismRenderer {
       renderPaint(encoder: encoder,
                   colorIn: tex.colorMid, colorOut: tex.colorOut,
                   hwIn: tex.hwMid, hwOut: tex.hwOut,
+                  flux: tex.flux, base: tex.base,
                   velocityIn: tex.velocityOut,
                   dryColorIn: tex.dryColorMid, dryColorOut: tex.dryColorOut,
                   substrateIn: tex.substrateMid, substrateOut: tex.substrateOut,
@@ -268,9 +280,13 @@ extension AbstractExpressionismRenderer {
     let pass1Params = buildFrameParams(smoothed: smoothed,
                                         strokeCount: strokes.deposit.count)
     gpuMark(encoder, .frameStart)
+    renderFilm(encoder: encoder, heightWet: tex.hwIn, flux: tex.flux, base: tex.base,
+               params: pass1Params, region: region)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
+    gpuMark(encoder, .afterFilm)
     renderPaint(encoder: encoder,
                 colorIn: tex.colorIn, colorOut: pass1Color,
-                hwIn: tex.hwIn, hwOut: pass1HW,
+                hwIn: tex.hwIn, hwOut: pass1HW, flux: tex.flux, base: tex.base,
                 velocityIn: tex.velocityIn,
                 dryColorIn: tex.dryColorIn, dryColorOut: pass1DryCol,
                 substrateIn: tex.substrateIn, substrateOut: tex.substrateOut,
@@ -314,6 +330,7 @@ extension AbstractExpressionismRenderer {
     gpuTiming?.beginFrame(frameNumber: frameNumber)
 
     runPendingResample(encoder: encoder, tex: tex)
+    bakeNoiseIfNeeded(encoder: encoder)
 
     let isClearing = pendingClearFrames > 0
     if isClearing {

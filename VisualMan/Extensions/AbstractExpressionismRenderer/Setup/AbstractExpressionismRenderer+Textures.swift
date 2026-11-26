@@ -65,6 +65,15 @@ extension AbstractExpressionismRenderer {
     return desc
   }
 
+  private static func makeFilmDescriptor(format: MTLPixelFormat,
+                                         width: Int, height: Int) -> MTLTextureDescriptor {
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: format, width: width / 2, height: height / 2, mipmapped: false)
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+    return desc
+  }
+
   func drainPendingTextureReleases() {
     drainPendingReleases(&pendingTextureReleases)
   }
@@ -73,7 +82,8 @@ extension AbstractExpressionismRenderer {
     for old in [colorA, colorB, heightWetA, heightWetB, colorMid, heightWetMid,
                 velocityA, velocityB,
                 dryColorA, dryColorB, dryColorMid, substrateMid,
-                substrateA, substrateB, pigmentTexture, materialTexture, shadowTexture] {
+                substrateA, substrateB, pigmentTexture, materialTexture, shadowTexture,
+                filmFluxTexture, filmBaseTexture] {
       if let t = old, !excluding.contains(ObjectIdentifier(t as AnyObject)) {
         pendingTextureReleases.append((frame: frameNumber, texture: t))
       }
@@ -103,6 +113,8 @@ extension AbstractExpressionismRenderer {
     pigmentTexture = nil
     materialTexture = nil
     shadowTexture = nil
+    filmFluxTexture = nil
+    filmBaseTexture = nil
     canvasSize = 0
   }
 
@@ -133,6 +145,8 @@ extension AbstractExpressionismRenderer {
     let dryDesc = Self.makeDryColorDescriptor(width: size, height: size)
     let subDesc = dryDesc
     let shadowDesc = Self.makeShadowDescriptor(width: size, height: size)
+    let fluxDesc = Self.makeFilmDescriptor(format: .rg16Float, width: size, height: size)
+    let baseDesc = Self.makeFilmDescriptor(format: .r16Float, width: size, height: size)
 
     guard let cA = device.makeTexture(descriptor: colDesc),
           let cB = device.makeTexture(descriptor: colDesc),
@@ -150,14 +164,16 @@ extension AbstractExpressionismRenderer {
           let sMid = device.makeTexture(descriptor: subDesc),
           let pig = device.makeTexture(descriptor: colDesc),
           let mat = device.makeTexture(descriptor: colDesc),
-          let shadow = device.makeTexture(descriptor: shadowDesc) else {
+          let shadow = device.makeTexture(descriptor: shadowDesc),
+          let flux = device.makeTexture(descriptor: fluxDesc),
+          let base = device.makeTexture(descriptor: baseDesc) else {
       clearResampleSources()
       clearCanvasTextures()
       return false
     }
 
     for t in [cA, cB, cMid, hwA, hwB, hwMid, vA, vB,
-              dcA, dcB, dcMid, sA, sB, sMid, pig, mat, shadow] {
+              dcA, dcB, dcMid, sA, sB, sMid, pig, mat, shadow, flux, base] {
       residencySet.addAllocation(t)
     }
 
@@ -165,11 +181,9 @@ extension AbstractExpressionismRenderer {
     heightWetA = hwA; heightWetB = hwB; heightWetMid = hwMid
     velocityA = vA; velocityB = vB
     dryColorA = dcA; dryColorB = dcB; dryColorMid = dcMid
-    substrateMid = sMid
-    substrateA = sA; substrateB = sB
-    pigmentTexture = pig
-    materialTexture = mat
-    shadowTexture = shadow
+    substrateA = sA; substrateB = sB; substrateMid = sMid
+    pigmentTexture = pig; materialTexture = mat
+    shadowTexture = shadow; filmFluxTexture = flux; filmBaseTexture = base
     pigmentFullRefreshFrames = 3
     canvasSize = size
     isFirstFrame = !preserveContent
@@ -208,7 +222,8 @@ extension AbstractExpressionismRenderer {
         && dryColorA != nil && dryColorB != nil && dryColorMid != nil
         && substrateMid != nil
         && substrateA != nil && substrateB != nil && pigmentTexture != nil
-        && materialTexture != nil && shadowTexture != nil
+        && materialTexture != nil && shadowTexture != nil && filmFluxTexture != nil
+        && filmBaseTexture != nil
 
     let grow = requestedCanvasSize > canvasSize
     let shrink = requestedCanvasSize < canvasSize - max(2, canvasSize / 16)
@@ -217,6 +232,10 @@ extension AbstractExpressionismRenderer {
     if canvasNeedsRebuild {
       guard rebuildCanvasTextures(size: requestedCanvasSize,
                                   preserveContent: canvasExists) else { return false }
+    }
+    let noiseNeedsRebuild = canvasNeedsRebuild || grainNoiseTexture == nil || fieldNoiseTexture == nil
+    if noiseNeedsRebuild {
+      guard rebuildNoiseTextures(size: canvasSize) else { return false }
     }
 
     let displayNeedsRebuild = displayTextures.count != 2
@@ -229,7 +248,7 @@ extension AbstractExpressionismRenderer {
       pigmentFullRefreshFrames = max(pigmentFullRefreshFrames, 2)
     }
 
-    if canvasNeedsRebuild || displayNeedsRebuild {
+    if noiseNeedsRebuild || displayNeedsRebuild {
       residencySet.commit()
     }
 
@@ -243,6 +262,7 @@ extension AbstractExpressionismRenderer {
     let display: MTLTexture
     let dryColor: [MTLTexture]
     let substrate: [MTLTexture]
+    let flux: MTLTexture, base: MTLTexture
   }
 
   private func makeWarmUpTextures() -> WarmUpTextures? {
@@ -251,6 +271,8 @@ extension AbstractExpressionismRenderer {
     let velDesc = Self.makeVelocityDescriptor(width: 64, height: 64)
     let dispDesc = Self.makeDisplayDescriptor(width: 64, height: 64)
     let dryDesc = Self.makeDryColorDescriptor(width: 64, height: 64)
+    let fluxDesc = Self.makeFilmDescriptor(format: .rg16Float, width: 64, height: 64)
+    let baseDesc = Self.makeFilmDescriptor(format: .r16Float, width: 64, height: 64)
 
     guard let cA = device.makeTexture(descriptor: colDesc),
           let cB = device.makeTexture(descriptor: colDesc),
@@ -261,14 +283,17 @@ extension AbstractExpressionismRenderer {
           let dcA = device.makeTexture(descriptor: dryDesc),
           let dcB = device.makeTexture(descriptor: dryDesc),
           let sA = device.makeTexture(descriptor: dryDesc),
-          let sB = device.makeTexture(descriptor: dryDesc) else { return nil }
+          let sB = device.makeTexture(descriptor: dryDesc),
+          let flux = device.makeTexture(descriptor: fluxDesc),
+          let base = device.makeTexture(descriptor: baseDesc) else { return nil }
 
     return WarmUpTextures(color: [cA, cB],
                           heightWet: [hwA, hwB],
                           velocity: vel,
                           display: disp,
                           dryColor: [dcA, dcB],
-                          substrate: [sA, sB])
+                          substrate: [sA, sB],
+                          flux: flux, base: base)
   }
 
   private func encodeWarmUpPasses(encoder: any MTL4ComputeCommandEncoder,
@@ -281,15 +306,20 @@ extension AbstractExpressionismRenderer {
       camera: SIMD4(0, 0, 1, 0),
       atmosphere: .zero)
 
+    let warmUpRegion = CanvasRegion(x: 0, y: 0, width: 64, height: 64)
+    renderFilm(encoder: encoder, heightWet: tex.heightWet[0], flux: tex.flux, base: tex.base,
+               params: params, region: warmUpRegion)
+    encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     renderPaint(encoder: encoder,
                 colorIn: tex.color[0], colorOut: tex.color[1],
                 hwIn: tex.heightWet[0], hwOut: tex.heightWet[1],
+                flux: tex.flux, base: tex.base,
                 velocityIn: tex.velocity,
                 dryColorIn: tex.dryColor[0], dryColorOut: tex.dryColor[1],
                 substrateIn: tex.substrate[0], substrateOut: tex.substrate[1],
                 params: params, strokes: [],
                 tileMap: TileMap.empty,
-                region: CanvasRegion(x: 0, y: 0, width: 64, height: 64))
+                region: warmUpRegion)
     encoder.barrier(afterEncoderStages: .dispatch, beforeEncoderStages: .dispatch)
     renderCompose(encoder: encoder,
                   color: tex.color[1], heightWet: tex.heightWet[1],
@@ -308,7 +338,7 @@ extension AbstractExpressionismRenderer {
 
   func warmUpGPU() {
     guard let tex = makeWarmUpTextures() else { return }
-    let dummies = tex.color + tex.heightWet + [tex.velocity, tex.display]
+    let dummies = tex.color + tex.heightWet + [tex.velocity, tex.display, tex.flux, tex.base]
                 + tex.dryColor + tex.substrate
     for t in dummies { residencySet.addAllocation(t) }
     let selfTestResults = makeMixboxSelfTestBuffer()

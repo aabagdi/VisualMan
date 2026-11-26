@@ -11,7 +11,7 @@ import os
 
 extension AbstractExpressionismRenderer {
   enum GPUMark: Int, CaseIterable {
-    case frameStart, afterPaint, afterVelocity, afterSmear, afterPigment, afterCompose
+    case frameStart, afterFilm, afterPaint, afterVelocity, afterSmear, afterPigment, afterCompose
   }
 
   func gpuMark(_ encoder: any MTL4ComputeCommandEncoder, _ mark: GPUMark) {
@@ -114,7 +114,8 @@ extension AbstractExpressionismRenderer {
     private func report() {
       let n = Double(frames)
       func f(_ v: Double) -> String { String(format: "%.2f", v) }
-      let labels: [(GPUMark, String)] = [(.afterPaint, "paint"), (.afterVelocity, "velocity"),
+      let labels: [(GPUMark, String)] = [(.afterFilm, "film"), (.afterPaint, "paint"),
+                                         (.afterVelocity, "velocity"),
                                          (.afterSmear, "smear"), (.afterPigment, "pigment"),
                                          (.afterCompose, "compose")]
       let parts = labels.map { "\($0.1) \(f(passTotals[$0.0.rawValue] / n))" }.joined(separator: "  ")
