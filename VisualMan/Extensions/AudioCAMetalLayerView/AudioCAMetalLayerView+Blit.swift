@@ -9,8 +9,6 @@
 import Metal
 import os
 
-private nonisolated let blitLogger = Logger(subsystem: "com.VisualMan", category: "AudioMetalView")
-
 extension AudioCAMetalLayerView.Coordinator {
   static func makeBlitResources(device: MTLDevice, pixelFormat: MTLPixelFormat)
   -> (pipeline: (any MTLRenderPipelineState)?, tables: [any MTL4ArgumentTable]) {

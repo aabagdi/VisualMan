@@ -50,6 +50,8 @@ struct MetalVisualizerContainerView<R: MetalVisualizerRenderer, Configuration: E
       }
     }
     .ignoresSafeArea()
+    .onAppear { cache.beginUse(R.self) }
+    .onDisappear { cache.endUse(R.self) }
     .onChange(of: configuration, initial: true) {
       applyConfiguration()
     }

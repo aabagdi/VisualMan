@@ -1,5 +1,5 @@
 //
-//  BarVisualizerView.swift
+//  BarsVisualizerView.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 7/29/25.

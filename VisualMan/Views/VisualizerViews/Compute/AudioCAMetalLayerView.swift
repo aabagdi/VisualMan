@@ -12,7 +12,7 @@ import QuartzCore
 import Dependencies
 import os
 
-private nonisolated let blitLogger = Logger(subsystem: "com.VisualMan", category: "AudioMetalView")
+nonisolated let blitLogger = Logger(subsystem: "com.VisualMan", category: "AudioMetalView")
 
 struct AudioCAMetalLayerView<R: MetalVisualizerRenderer>: UIViewRepresentable {
   let renderer: R

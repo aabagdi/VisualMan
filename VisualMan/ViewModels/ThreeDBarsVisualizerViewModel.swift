@@ -170,6 +170,9 @@ extension ThreeDBarsVisualizerView {
           guard !Task.isCancelled else { break }
           self?.updateSmoothedValues()
         }
+        guard let self, self.displayLinkStream === stream else { return }
+        self.smoothingTask = nil
+        self.displayLinkStream = nil
       }
     }
 

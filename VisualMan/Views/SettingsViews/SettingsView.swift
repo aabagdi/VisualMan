@@ -63,7 +63,7 @@ struct SettingsView: View {
         Text("""
           Intensity sets how strongly the visualizers react to the music. Reduce Flashing slows down \
           sudden brightness changes. Both follow Reduce Motion and Dim Flashing Lights in iOS \
-          Settings until you change them here.
+          Settings until you change them here. Choosing the same setting as iOS makes it follow iOS again.
           """)
       }
 
@@ -80,6 +80,16 @@ struct SettingsView: View {
           Tapping the visualizer won't hide the playback controls. They always stay visible while \
           VoiceOver or Switch Control is on.
           """)
+      }
+
+      Section {
+        NavigationLink {
+          VisualizerStatsView()
+        } label: {
+          Label("Visualizer Stats", systemImage: "chart.bar")
+        }
+      } header: {
+        Text("Stats")
       }
     }
     .navigationTitle("Settings")

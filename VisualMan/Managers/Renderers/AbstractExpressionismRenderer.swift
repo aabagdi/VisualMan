@@ -171,6 +171,7 @@ final class AbstractExpressionismRenderer: MetalVisualizerRenderer {
 
   var pigmentTexture: MTLTexture?
   var materialTexture: MTLTexture?
+  var shadowTexture: MTLTexture?
   var pigmentFullRefreshFrames: Int = 0
   var pigmentBandIndex: Int = 0
   var pigmentDirtyHistory: [SIMD4<Float>] = []

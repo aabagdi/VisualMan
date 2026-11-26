@@ -25,7 +25,6 @@ final class AudioEngineManager {
   }
   
   enum Constants {
-    static let pauseDecayFactor: Float = 0.88
     static let pauseDecayThreshold: Float = 0.001
     static let completionTolerance: TimeInterval = 1.0
   }
@@ -91,9 +90,13 @@ final class AudioEngineManager {
   }
   
   isolated deinit {
-    player?.stop()
-    engine?.mainMixerNode.removeTap(onBus: 0)
-    engine?.stop()
+    sessionDeactivationTask?.cancel()
+    engineLock.withLock {
+      engineShouldRun.withLock { $0 = false }
+      player?.stop()
+      engine?.mainMixerNode.removeTap(onBus: 0)
+      engine?.stop()
+    }
     displayLinkStream?.stop()
     displayLinkTask?.cancel()
     pauseDecayStream?.stop()
@@ -154,10 +157,14 @@ final class AudioEngineManager {
     stopPauseDecay()
     stopDisplayLink()
 
-    audioLevels = [1024 of Float](repeating: 0.0)
-    visualizerBars = [32 of Float](repeating: 0.0)
-    waveform = [1024 of Float](repeating: 0.0)
-    audioConditioner.reset()
+    if accessibilityManager.reducesFlashing || accessibilityManager.intensity.fallSeconds > 0 {
+      startPauseDecay()
+    } else {
+      audioLevels = [1024 of Float](repeating: 0.0)
+      visualizerBars = [32 of Float](repeating: 0.0)
+      waveform = [1024 of Float](repeating: 0.0)
+      audioConditioner.reset()
+    }
     await audioTapProcessor.reset()
     await pendingDeactivation?.value
     guard currentPlaybackID == playbackID else { return }
@@ -264,24 +271,6 @@ final class AudioEngineManager {
       Task { @MainActor in
         self?.handleScheduledAudioFinished(playbackID: playbackID)
       }
-    }
-  }
-  
-  func activateAudioSession() async throws {
-    let session = AVAudioSession.sharedInstance()
-    if #available(iOS 27.0, *) {
-      try await session.activate(options: [])
-    } else {
-      try session.setActive(true)
-    }
-  }
-
-  func deactivateAudioSession() async throws {
-    let session = AVAudioSession.sharedInstance()
-    if #available(iOS 27.0, *) {
-      try await session.deactivate(options: .notifyOthersOnDeactivation)
-    } else {
-      try session.setActive(false, options: .notifyOthersOnDeactivation)
     }
   }
   

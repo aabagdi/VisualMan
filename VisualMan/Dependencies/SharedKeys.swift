@@ -27,6 +27,12 @@ extension SharedKey where Self == AppStorageKey<Double>.Default {
   }
 }
 
+extension SharedKey where Self == AppStorageKey<VisualizerUsage>.Default {
+  static var visualizerUsage: Self {
+    Self[.appStorage("visualizerUsage"), default: VisualizerUsage()]
+  }
+}
+
 extension SharedKey where Self == AppStorageKey<Bool?> {
   static var reducesFlashingOverride: Self {
     .appStorage("reducesFlashing")

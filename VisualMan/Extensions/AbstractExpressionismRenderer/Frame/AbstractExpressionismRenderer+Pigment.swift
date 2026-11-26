@@ -68,8 +68,8 @@ extension AbstractExpressionismRenderer {
                      wet: MTLTexture, dry: MTLTexture,
                      heightWet: MTLTexture, substrate: MTLTexture,
                      params: AbExParams, regions: [CanvasRegion]) {
-    guard let pig = pigmentTexture, let mat = materialTexture, let lut = mixboxLUT,
-          let cracks = crackTexture, !regions.isEmpty else { return }
+    guard let pig = pigmentTexture, let mat = materialTexture, let shadow = shadowTexture,
+          let lut = mixboxLUT, let cracks = crackTexture, !regions.isEmpty else { return }
     encoder.setComputePipelineState(pigmentPipeline)
     argumentTable.setTexture(wet.gpuResourceID, index: 0)
     argumentTable.setTexture(dry.gpuResourceID, index: 1)
@@ -79,6 +79,7 @@ extension AbstractExpressionismRenderer {
     argumentTable.setTexture(substrate.gpuResourceID, index: 5)
     argumentTable.setTexture(cracks.gpuResourceID, index: 6)
     argumentTable.setTexture(mat.gpuResourceID, index: 7)
+    argumentTable.setTexture(shadow.gpuResourceID, index: 8)
     argumentTable.setAddress(writeUniform(params), index: 0)
     for r in regions where r.width > 0 && r.height > 0 {
       argumentTable.setAddress(writeUniform(r.origin), index: 1)

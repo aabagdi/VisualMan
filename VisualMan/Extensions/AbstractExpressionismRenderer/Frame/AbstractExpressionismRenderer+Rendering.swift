@@ -117,6 +117,7 @@ extension AbstractExpressionismRenderer {
     }
     argumentTable.setTexture((pigmentTexture ?? color).gpuResourceID, index: 7)
     argumentTable.setTexture((materialTexture ?? color).gpuResourceID, index: 8)
+    argumentTable.setTexture((shadowTexture ?? color).gpuResourceID, index: 9)
     argumentTable.setAddress(writeUniform(params), index: 0)
 
     dispatch(encoder: encoder, pipeline: composePipeline,

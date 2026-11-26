@@ -20,6 +20,7 @@ final class HapticsManager {
     static let discontinuityTolerance: TimeInterval = 0.04
     static let playerLinger: TimeInterval = 0.5
     static let engineRetryDelay: TimeInterval = 1.0
+    static let analysisRetryDelay: TimeInterval = 5.0
     static let curvePointLimit = 16
     static let strengthRange: ClosedRange<Double> = 0.2...1.8
     nonisolated static let defaultStrength: Double = 1
@@ -44,15 +45,27 @@ final class HapticsManager {
     get { storedIsEnabled }
     set {
       $storedIsEnabled.withLock { $0 = newValue }
-      if !newValue {
+      if newValue {
+        startAnalysis()
+      } else {
         halt()
+        if track == nil {
+          analysisTask?.cancel()
+          analysisTask = nil
+        }
       }
     }
   }
 
   var strength: Double {
     get { min(max(storedStrength, Constants.strengthRange.lowerBound), Constants.strengthRange.upperBound) }
-    set { $storedStrength.withLock { $0 = newValue } }
+    set {
+      let oldValue = strength
+      $storedStrength.withLock { $0 = newValue }
+      if strength != oldValue {
+        cancelScheduledPlayers()
+      }
+    }
   }
 
   var isSupported: Bool { engine != nil }
@@ -69,6 +82,8 @@ final class HapticsManager {
   @ObservationIgnored private var wantsEngine = false
   @ObservationIgnored private var engineRetryTime: TimeInterval = 0
   @ObservationIgnored private var track: BassHapticTrack?
+  @ObservationIgnored private var trackURL: URL?
+  @ObservationIgnored private var analysisRetryTime: TimeInterval = 0
   @ObservationIgnored private var analysisTask: Task<Void, Never>?
   @ObservationIgnored private var scheduledPlayers: [ScheduledPlayer] = []
   @ObservationIgnored private var scheduledThrough: TimeInterval?
@@ -119,30 +134,25 @@ final class HapticsManager {
     analysisTask = nil
     cancelScheduledPlayers()
     track = nil
-
-    guard engine != nil else { return }
+    trackURL = url
+    analysisRetryTime = 0
     outputLatency = AVAudioSession.sharedInstance().outputLatency
+    startAnalysis()
+  }
 
-    analysisTask = Task(priority: .utility) { [weak self] in
-      let analysisState = pointsOfInterest.beginInterval("Bass Haptic Analysis")
-      defer { pointsOfInterest.endInterval("Bass Haptic Analysis", analysisState) }
-      do {
-        let track = try await BassHapticAnalyzer.analyze(url: url)
-        guard !Task.isCancelled else { return }
-        self?.track = track
-      } catch is CancellationError {
-        return
-      } catch {
-        self?.logger.error("Failed to analyze bass for haptics: \(error.localizedDescription)")
-      }
-    }
+  func resync() {
+    cancelScheduledPlayers()
   }
 
   func advance(to position: TimeInterval, hostTime: UInt64) {
-    guard isEnabled, let engine, let track else { return }
+    guard isEnabled, let engine else { return }
+    let now = AVAudioTime.seconds(forHostTime: mach_absolute_time())
+    guard let track else {
+      startAnalysis(at: now)
+      return
+    }
 
     wantsEngine = true
-    let now = AVAudioTime.seconds(forHostTime: mach_absolute_time())
     guard engineState == .running else {
       startEngine(at: now)
       return
@@ -276,13 +286,15 @@ final class HapticsManager {
     scheduledThrough = nil
     lastTick = nil
   }
+}
 
-  private func handleRouteChange() {
+private extension HapticsManager {
+  func handleRouteChange() {
     outputLatency = AVAudioSession.sharedInstance().outputLatency
     cancelScheduledPlayers()
   }
 
-  private func cancelScheduledPlayers() {
+  func cancelScheduledPlayers() {
     for scheduled in scheduledPlayers {
       try? scheduled.player.cancel()
     }
@@ -290,9 +302,30 @@ final class HapticsManager {
     scheduledThrough = nil
     lastTick = nil
   }
-}
 
-private extension HapticsManager {
+  func startAnalysis(at now: TimeInterval = AVAudioTime.seconds(forHostTime: mach_absolute_time())) {
+    guard engine != nil, isEnabled, track == nil, analysisTask == nil, now >= analysisRetryTime,
+          let url = trackURL else { return }
+
+    analysisTask = Task(priority: .utility) { [weak self] in
+      let analysisState = pointsOfInterest.beginInterval("Bass Haptic Analysis")
+      defer { pointsOfInterest.endInterval("Bass Haptic Analysis", analysisState) }
+      do {
+        let track = try await BassHapticAnalyzer.analyze(url: url)
+        guard !Task.isCancelled else { return }
+        self?.track = track
+      } catch is CancellationError {
+        return
+      } catch {
+        guard !Task.isCancelled, let self else { return }
+        self.logger.error("Failed to analyze bass for haptics: \(error.localizedDescription)")
+        self.analysisTask = nil
+        self.analysisRetryTime = AVAudioTime.seconds(forHostTime: mach_absolute_time())
+          + Constants.analysisRetryDelay
+      }
+    }
+  }
+
   func intensityCurves(for pulse: BassPulse, at offset: TimeInterval, gain: Float) -> [CHHapticParameterCurve] {
     let points = pulse.envelope
     var curves: [CHHapticParameterCurve] = []

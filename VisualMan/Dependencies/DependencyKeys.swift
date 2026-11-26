@@ -39,6 +39,10 @@ extension VisualizerSelection: DependencyKey {
   static var liveValue: VisualizerSelection { VisualizerSelection() }
 }
 
+extension VisualizerUsageManager: DependencyKey {
+  static var liveValue: VisualizerUsageManager { VisualizerUsageManager() }
+}
+
 extension VisualizerRendererCache: DependencyKey {
   static var liveValue: VisualizerRendererCache { VisualizerRendererCache() }
 }

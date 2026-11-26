@@ -72,12 +72,16 @@ final class AccessibilityManager {
 
   var reducesFlashing: Bool {
     get { reducesFlashingOverride ?? systemDimsFlashingLights }
-    set { $reducesFlashingOverride.withLock { $0 = newValue } }
+    set { $reducesFlashingOverride.withLock { $0 = newValue == systemDimsFlashingLights ? nil : newValue } }
   }
 
   var intensity: VisualizerIntensity {
-    get { intensityOverride ?? (systemReducesMotion ? .calm : .normal) }
-    set { $intensityOverride.withLock { $0 = newValue } }
+    get { intensityOverride ?? systemIntensity }
+    set { $intensityOverride.withLock { $0 = newValue == systemIntensity ? nil : newValue } }
+  }
+
+  private var systemIntensity: VisualizerIntensity {
+    systemReducesMotion ? .calm : .normal
   }
 
   var keepsControlsVisible: Bool {
@@ -88,6 +92,8 @@ final class AccessibilityManager {
   @ObservationIgnored private var observers: [any NSObjectProtocol] = []
 
   init() {
+    clearOverridesMatchingSystem()
+
     let names = [
       Notification.Name(kMADimFlashingLightsChangedNotification as String),
       UIAccessibility.reduceMotionStatusDidChangeNotification,
@@ -116,6 +122,16 @@ final class AccessibilityManager {
     let reducesMotion = UIAccessibility.isReduceMotionEnabled
     if reducesMotion != systemReducesMotion {
       systemReducesMotion = reducesMotion
+    }
+    clearOverridesMatchingSystem()
+  }
+
+  private func clearOverridesMatchingSystem() {
+    if reducesFlashingOverride == systemDimsFlashingLights {
+      $reducesFlashingOverride.withLock { $0 = nil }
+    }
+    if intensityOverride == systemIntensity {
+      $intensityOverride.withLock { $0 = nil }
     }
   }
 }

@@ -57,6 +57,14 @@ extension AbstractExpressionismRenderer {
     return desc
   }
 
+  private static func makeShadowDescriptor(width: Int, height: Int) -> MTLTextureDescriptor {
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .r8Unorm, width: width, height: height, mipmapped: false)
+    desc.usage = [.shaderRead, .shaderWrite]
+    desc.storageMode = .private
+    return desc
+  }
+
   func drainPendingTextureReleases() {
     drainPendingReleases(&pendingTextureReleases)
   }
@@ -65,7 +73,7 @@ extension AbstractExpressionismRenderer {
     for old in [colorA, colorB, heightWetA, heightWetB, colorMid, heightWetMid,
                 velocityA, velocityB,
                 dryColorA, dryColorB, dryColorMid, substrateMid,
-                substrateA, substrateB, pigmentTexture, materialTexture] {
+                substrateA, substrateB, pigmentTexture, materialTexture, shadowTexture] {
       if let t = old, !excluding.contains(ObjectIdentifier(t as AnyObject)) {
         pendingTextureReleases.append((frame: frameNumber, texture: t))
       }
@@ -94,6 +102,7 @@ extension AbstractExpressionismRenderer {
     substrateA = nil; substrateB = nil
     pigmentTexture = nil
     materialTexture = nil
+    shadowTexture = nil
     canvasSize = 0
   }
 
@@ -123,6 +132,7 @@ extension AbstractExpressionismRenderer {
     let velDesc = Self.makeVelocityDescriptor(width: size, height: size)
     let dryDesc = Self.makeDryColorDescriptor(width: size, height: size)
     let subDesc = dryDesc
+    let shadowDesc = Self.makeShadowDescriptor(width: size, height: size)
 
     guard let cA = device.makeTexture(descriptor: colDesc),
           let cB = device.makeTexture(descriptor: colDesc),
@@ -139,14 +149,15 @@ extension AbstractExpressionismRenderer {
           let sB = device.makeTexture(descriptor: subDesc),
           let sMid = device.makeTexture(descriptor: subDesc),
           let pig = device.makeTexture(descriptor: colDesc),
-          let mat = device.makeTexture(descriptor: colDesc) else {
+          let mat = device.makeTexture(descriptor: colDesc),
+          let shadow = device.makeTexture(descriptor: shadowDesc) else {
       clearResampleSources()
       clearCanvasTextures()
       return false
     }
 
     for t in [cA, cB, cMid, hwA, hwB, hwMid, vA, vB,
-              dcA, dcB, dcMid, sA, sB, sMid, pig, mat] {
+              dcA, dcB, dcMid, sA, sB, sMid, pig, mat, shadow] {
       residencySet.addAllocation(t)
     }
 
@@ -158,6 +169,7 @@ extension AbstractExpressionismRenderer {
     substrateA = sA; substrateB = sB
     pigmentTexture = pig
     materialTexture = mat
+    shadowTexture = shadow
     pigmentFullRefreshFrames = 3
     canvasSize = size
     isFirstFrame = !preserveContent
@@ -196,7 +208,7 @@ extension AbstractExpressionismRenderer {
         && dryColorA != nil && dryColorB != nil && dryColorMid != nil
         && substrateMid != nil
         && substrateA != nil && substrateB != nil && pigmentTexture != nil
-        && materialTexture != nil
+        && materialTexture != nil && shadowTexture != nil
 
     let grow = requestedCanvasSize > canvasSize
     let shrink = requestedCanvasSize < canvasSize - max(2, canvasSize / 16)

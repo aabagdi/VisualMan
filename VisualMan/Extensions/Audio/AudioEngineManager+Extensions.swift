@@ -1,5 +1,5 @@
 //
-//  AudioEngineManager+Timers.swift
+//  AudioEngineManager+Extensions.swift
 //  VisualMan
 //
 //  Created by Aadit Bagdi on 7/13/25.
@@ -156,6 +156,7 @@ extension AudioEngineManager {
   
   func startDisplayLink() {
     stopDisplayLink()
+    stopPauseDecay()
     let stream = DisplayLinkStream()
     displayLinkStream = stream
     displayLinkTask = Task { @MainActor [weak self] in
@@ -232,6 +233,24 @@ extension AudioEngineManager {
 }
 
 extension AudioEngineManager {
+  func activateAudioSession() async throws {
+    let session = AVAudioSession.sharedInstance()
+    if #available(iOS 27.0, *) {
+      try await session.activate(options: [])
+    } else {
+      try session.setActive(true)
+    }
+  }
+
+  func deactivateAudioSession() async throws {
+    let session = AVAudioSession.sharedInstance()
+    if #available(iOS 27.0, *) {
+      try await session.deactivate(options: .notifyOthersOnDeactivation)
+    } else {
+      try session.setActive(false, options: .notifyOthersOnDeactivation)
+    }
+  }
+  
   func startPauseDecay() {
     stopPauseDecay()
     let stream = DisplayLinkStream()
@@ -244,31 +263,27 @@ extension AudioEngineManager {
           break
         }
 
-        var decayFactor = Constants.pauseDecayFactor
         let threshold = Constants.pauseDecayThreshold
 
         var bars = self.visualizerBars
-        var barMax: Float = 0
-        bars.withUnsafeElementPointer { ptr in
-          vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 32)
-          vDSP_maxv(ptr, 1, &barMax, 32)
-        }
-        self.visualizerBars = bars
-
         var levels = self.audioLevels
-        var levelMax: Float = 0
-        levels.withUnsafeElementPointer { ptr in
-          vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 1024)
-          vDSP_maxv(ptr, 1, &levelMax, 1024)
-        }
-        self.audioLevels = levels
-
         var wave = self.waveform
+        self.audioConditioner.fade(
+          levels: &levels,
+          bars: &bars,
+          waveform: &wave,
+          intensity: self.accessibilityManager.intensity,
+          limitsFlashing: self.accessibilityManager.reducesFlashing
+        )
+
+        var barMax: Float = 0
+        bars.withUnsafeElementPointer { vDSP_maxv($0, 1, &barMax, 32) }
+        var levelMax: Float = 0
+        levels.withUnsafeElementPointer { vDSP_maxv($0, 1, &levelMax, 1024) }
         var waveMax: Float = 0
-        wave.withUnsafeElementPointer { ptr in
-          vDSP_vsmul(ptr, 1, &decayFactor, ptr, 1, 1024)
-          vDSP_maxmgv(ptr, 1, &waveMax, 1024)
-        }
+        wave.withUnsafeElementPointer { vDSP_maxmgv($0, 1, &waveMax, 1024) }
+        self.visualizerBars = bars
+        self.audioLevels = levels
         self.waveform = wave
 
         if barMax < threshold && levelMax < threshold && waveMax < threshold {
@@ -307,6 +322,7 @@ extension AudioEngineManager {
     let clampedFrame = max(0, min(newFrame, audioFile.length))
     
     lastSeekFrame = clampedFrame
+    hapticsManager.resync()
     
     player.stop()
     

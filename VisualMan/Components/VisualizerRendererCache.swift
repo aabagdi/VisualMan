@@ -16,6 +16,8 @@ final class VisualizerRendererCache {
   private var renderers = [ObjectIdentifier: any MetalVisualizerRenderer]()
   @ObservationIgnored
   private var inFlightTasks = [ObjectIdentifier: Task<Void, Never>]()
+  @ObservationIgnored
+  private var useCounts = [ObjectIdentifier: Int]()
 
   @ObservationIgnored
   private(set) var sharedDevice: MTLDevice?
@@ -45,14 +47,26 @@ final class VisualizerRendererCache {
                                                        "\(String(describing: type), privacy: .public)")
       let new = await make()
       pointsOfInterest.endInterval("Create Renderer", createState)
-      if let new {
+      if let new, !Task.isCancelled {
         self.renderers[key] = new
       }
     }
     inFlightTasks[key] = task
     await task.value
-    inFlightTasks.removeValue(forKey: key)
+    if inFlightTasks[key] == task {
+      inFlightTasks.removeValue(forKey: key)
+    }
     return renderers[key] as? R
+  }
+
+  func beginUse<R: MetalVisualizerRenderer>(_ type: R.Type) {
+    useCounts[ObjectIdentifier(type), default: 0] += 1
+  }
+
+  func endUse<R: MetalVisualizerRenderer>(_ type: R.Type) {
+    let key = ObjectIdentifier(type)
+    let count = (useCounts[key] ?? 0) - 1
+    useCounts[key] = count > 0 ? count : nil
   }
 
   func preWarm() async {
@@ -73,10 +87,14 @@ final class VisualizerRendererCache {
   }
   
   func purge() {
-    renderers = renderers.filter { _, renderer in
-      renderer.sharedEvent.signaledValue < renderer.frameNumber
+    for (key, task) in inFlightTasks where useCounts[key] == nil {
+      task.cancel()
+      inFlightTasks.removeValue(forKey: key)
     }
-    if renderers.isEmpty {
+    renderers = renderers.filter { key, renderer in
+      useCounts[key] != nil || renderer.sharedEvent.signaledValue < renderer.frameNumber
+    }
+    if renderers.isEmpty && inFlightTasks.isEmpty {
       sharedDevice = nil
     }
   }

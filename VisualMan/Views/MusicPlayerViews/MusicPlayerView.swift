@@ -24,6 +24,7 @@ struct MusicPlayerView: View {
   @Dependency(\.continuousClock) private var clock
   @Dependency(VisualizerSnapshotter.self) private var snapshotter
   @Dependency(ExternalDisplayManager.self) private var externalDisplay
+  @Dependency(VisualizerUsageManager.self) private var usageManager
   
   private let audioSources: [any AudioSource]
   private let startingIndex: Int
@@ -82,6 +83,7 @@ struct MusicPlayerView: View {
     .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(ExternalDisplayAccessory())
     .modifier(SettingsToolbarButton())
+    .modifier(VisualizerUsageTracking(visualizer: visualizerSelection.current))
     .environment(snapshotter)
     .onAppear {
       viewModel.start(audioSources: audioSources, startingIndex: startingIndex)
@@ -191,6 +193,9 @@ struct MusicPlayerView: View {
 
   private func visualizerSelected(_ type: VMVisualizer) {
     pointsOfInterest.emitEvent("Visualizer Selected", "\(String(describing: type), privacy: .public)")
+    if type != visualizerSelection.current {
+      usageManager.recordSelection(type)
+    }
     visualizerSelection.current = type
   }
 
@@ -232,34 +237,6 @@ struct MusicPlayerView: View {
   #else
   private func seedPaletteForCurrentSong() {}
   #endif
-}
-
-private struct ExternalDisplayPlaceholderView: View {
-  let albumArt: UIImage?
-
-  @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-
-  var body: some View {
-    Color.black
-      .overlay {
-        if let albumArt {
-          Image(uiImage: albumArt)
-            .resizable()
-            .scaledToFill()
-            .blur(radius: 40)
-            .opacity(colorSchemeContrast == .increased ? 0.3 : 0.5)
-            .accessibilityHidden(true)
-            .accessibilityIgnoresInvertColors()
-        }
-      }
-      .overlay {
-        Label("Audio output source", systemImage: "airplay.audio")
-          .font(.title3)
-          .fontWeight(.semibold)
-          .foregroundStyle(.white.opacity(colorSchemeContrast == .increased ? 1 : 0.8))
-      }
-      .clipped()
-  }
 }
 
 private struct AudioReactiveVisualizerLayer: View {
