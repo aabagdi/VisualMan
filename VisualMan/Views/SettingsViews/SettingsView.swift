@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Dependencies
+import Intents
 
 struct SettingsView: View {
   @Environment(\.dismiss) private var dismiss
@@ -82,6 +83,8 @@ struct SettingsView: View {
           """)
       }
 
+      SiriAccessSection()
+
       Section {
         NavigationLink {
           VisualizerStatsView()
@@ -99,6 +102,48 @@ struct SettingsView: View {
         Button("Done", systemImage: "checkmark") {
           dismiss()
         }
+      }
+    }
+  }
+}
+
+private struct SiriAccessSection: View {
+  @State private var status = INPreferences.siriAuthorizationStatus()
+  @Environment(\.openURL) private var openURL
+
+  private nonisolated static func requestSiriAuthorization() async -> INSiriAuthorizationStatus {
+    await withCheckedContinuation { continuation in
+      INPreferences.requestSiriAuthorization { continuation.resume(returning: $0) }
+    }
+  }
+
+  var body: some View {
+    Section {
+      switch status {
+      case .authorized:
+        Label("Siri Can Play Music", systemImage: "checkmark.circle")
+      case .denied, .restricted:
+        Button("Open Settings", systemImage: "gear") {
+          if let url = URL(string: UIApplication.openSettingsURLString) {
+            openURL(url)
+          }
+        }
+      default:
+        Button("Allow Siri to Play Music", systemImage: "music.mic") {
+          Task { status = await Self.requestSiriAuthorization() }
+        }
+      }
+    } header: {
+      Text("Siri")
+    } footer: {
+      switch status {
+      case .denied, .restricted:
+        Text("Siri isn't allowed to use VisualMan. You can turn it on in Settings.")
+      default:
+        Text("""
+          Lets you ask Siri to play songs from your library, like “Play Come As You Are on VisualMan.” \
+          Needed when Apple Intelligence is off or not available.
+          """)
       }
     }
   }

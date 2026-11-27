@@ -103,6 +103,13 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     .frame(height: sliderHeight)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("Playback position")
+    .accessibilityInputLabels([
+      Text("Playback position"),
+      Text("Scrubber"),
+      Text("Progress"),
+      Text("Seek bar"),
+      Text("Timeline"),
+    ])
     .accessibilityValue(
       "\(elapsedSeconds.asTimeString()) of \((inRange.upperBound).asTimeString())"
     )
@@ -110,7 +117,18 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
     .accessibilityShowsLargeContentViewer {
       Text("\(elapsedSeconds.asTimeString()) of \((inRange.upperBound).asTimeString())")
     }
+    .accessibilityActivationPoint(UnitPoint(x: Double(playheadFraction), y: 0.5))
     .accessibilityAdjustableAction { adjustableActionPerformed($0) }
+    .accessibilityAction(named: "Skip forward 15 seconds") { skip(by: skipInterval) }
+    .accessibilityAction(named: "Skip back 15 seconds") { skip(by: -skipInterval) }
+  }
+
+  private var skipInterval: T { 15 }
+
+  private var playheadFraction: T {
+    let range = inRange.upperBound - inRange.lowerBound
+    guard range > 0 else { return 0 }
+    return max(min((playedSeconds - inRange.lowerBound) / range, 1), 0)
   }
 
   private func dragChanged(_ gesture: DragGesture.Value, width: CGFloat) {
@@ -135,15 +153,21 @@ struct ProgressSliderView<T: BinaryFloatingPoint>: View {
   private func adjustableActionPerformed(_ direction: AccessibilityAdjustmentDirection) {
     let range = inRange.upperBound - inRange.lowerBound
     let step = range * 0.05
-    let current = value()
     switch direction {
     case .increment:
-      setValue(min(current + step, inRange.upperBound))
+      skip(by: step)
     case .decrement:
-      setValue(max(current - step, inRange.lowerBound))
+      skip(by: -step)
     @unknown default:
       break
     }
+  }
+
+  private func skip(by offset: T) {
+    let target = max(min(value() + offset, inRange.upperBound), inRange.lowerBound)
+    onEditingChanged(true)
+    setValue(target)
+    playedSeconds = target.rounded(.down)
     onEditingChanged(false)
   }
 }

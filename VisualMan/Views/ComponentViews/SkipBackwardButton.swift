@@ -9,24 +9,24 @@ import SwiftUI
 import Dependencies
 
 struct SkipBackwardButton: View {
-  let viewModel: MusicPlayerView.MusicPlayerViewModel
+  let playback: PlaybackController
   let color: Color
 
   @Dependency(AudioEngineManager.self) private var audioManager
 
   var body: some View {
-    SkipBackwardButtonContent(viewModel: viewModel, color: color, restarts: audioManager.currentTime >= 3)
+    SkipBackwardButtonContent(playback: playback, color: color, restarts: audioManager.currentTime >= 3)
   }
 }
 
 private struct SkipBackwardButtonContent: View {
-  let viewModel: MusicPlayerView.MusicPlayerViewModel
+  let playback: PlaybackController
   let color: Color
   let restarts: Bool
 
   var body: some View {
     Button {
-      viewModel.skipBackwards()
+      playback.skipBackwards()
     } label: {
       Image(systemName: "backward")
         .foregroundStyle(color)

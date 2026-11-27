@@ -19,6 +19,10 @@ extension AudioPlaylistManager: DependencyKey {
   static var liveValue: AudioPlaylistManager { AudioPlaylistManager() }
 }
 
+extension PlaybackController: DependencyKey {
+  static var liveValue: PlaybackController { PlaybackController() }
+}
+
 extension MusicLibraryAccessManager: DependencyKey {
   static var liveValue: MusicLibraryAccessManager { MusicLibraryAccessManager() }
 }

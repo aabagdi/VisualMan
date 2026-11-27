@@ -12,6 +12,7 @@ import Observation
 final class VisualizerSelection {
   var current: VMVisualizer = .bars
   var navierStokesSolver: NavierStokesSolver = .pressureMultigrid
+  var nowPlayingRequested = false
 }
 
 enum VMVisualizer: String, CaseIterable {

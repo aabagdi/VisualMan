@@ -5,6 +5,7 @@
 //  Created by Aadit Bagdi on 7/13/25.
 //
 
+import AppIntents
 import MediaPlayer
 
 @MainActor
@@ -73,6 +74,7 @@ final class MusicLibraryAccessManager {
       compilations = snapshot.compilations
       genres = snapshot.genres
       isLoading = false
+      VisualManShortcuts.updateAppShortcutParameters()
     }
   }
 

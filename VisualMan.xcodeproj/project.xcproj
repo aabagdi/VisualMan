@@ -91,6 +91,7 @@
       "build-settings": {
         "ASSETCATALOG_COMPILER_APPICON_NAME": "VisualMan",
         "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+        "CODE_SIGN_ENTITLEMENTS": "VisualMan/VisualMan.entitlements",
         "CODE_SIGN_STYLE": "Automatic",
         "CURRENT_PROJECT_VERSION": "1",
         "DEVELOPMENT_TEAM": "3798C43WZH",

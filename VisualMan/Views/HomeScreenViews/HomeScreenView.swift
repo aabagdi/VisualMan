@@ -15,6 +15,7 @@ struct HomeScreenView: View {
   @State private var isShowingFileImporter = false
   @State private var selectedAudioSource: FileAudioSource?
   @State private var fileError: VMError?
+  @State private var path = NavigationPath()
   
   @Dependency(AudioEngineManager.self) private var audioManager
   @Dependency(MusicLibraryAccessManager.self) private var library
@@ -22,7 +23,7 @@ struct HomeScreenView: View {
   @Dependency(VisualizerSelection.self) private var visualizerSelection
   
   var body: some View {
-    NavigationStack {
+    NavigationStack(path: $path) {
       AlbumListView(albums: library.albums)
         .navigationDestination(for: NowPlayingDestination.self) { _ in
           MusicPlayerView(playlistManager.audioSources,
@@ -61,6 +62,15 @@ struct HomeScreenView: View {
       Button("Okay", role: .cancel) { }
     }
     .environment(visualizerSelection)
+    .onChange(of: visualizerSelection.nowPlayingRequested, initial: true) { _, requested in
+      nowPlayingRequested(requested)
+    }
+  }
+
+  private func nowPlayingRequested(_ requested: Bool) {
+    guard requested else { return }
+    visualizerSelection.nowPlayingRequested = false
+    path.append(NowPlayingDestination())
   }
   
   private func fileImporterCompleted(_ result: Result<URL, any Error>) {

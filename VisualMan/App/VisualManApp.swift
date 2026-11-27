@@ -11,6 +11,7 @@ import Dependencies
 
 @main
 struct VisualManApp: App {
+  @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @State private var showLowPowerAlert = false
 
   @Dependency(MusicLibraryAccessManager.self) private var musicLibraryManager

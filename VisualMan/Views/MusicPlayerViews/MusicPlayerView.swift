@@ -10,7 +10,6 @@ import Dependencies
 import os
 
 struct MusicPlayerView: View {
-  @State private var viewModel = MusicPlayerViewModel()
   @State private var isTapped: Bool = false
   @State private var showScreenshotToast = false
 
@@ -20,6 +19,7 @@ struct MusicPlayerView: View {
   @Environment(VisualizerSelection.self) private var visualizerSelection
   @Dependency(AudioEngineManager.self) private var audioManager
   @Dependency(AudioPlaylistManager.self) private var playlistManager
+  @Dependency(PlaybackController.self) private var playback
   @Environment(VisualizerRendererCache.self) private var rendererCache
   @Dependency(\.continuousClock) private var clock
   @Dependency(VisualizerSnapshotter.self) private var snapshotter
@@ -59,7 +59,7 @@ struct MusicPlayerView: View {
       .onTapGesture { visualizerTapped() }
 
       PlayerControlsLayer(
-        viewModel: viewModel,
+        playback: playback,
         isTapped: $isTapped
       )
 
@@ -78,7 +78,7 @@ struct MusicPlayerView: View {
         .accessibilityHidden(!showScreenshotToast)
     }
     .accessibilityAction(.magicTap) {
-      viewModel.togglePlayback()
+      playback.togglePlayback()
     }
     .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(ExternalDisplayAccessory())
@@ -86,7 +86,8 @@ struct MusicPlayerView: View {
     .modifier(VisualizerUsageTracking(visualizer: visualizerSelection.current))
     .environment(snapshotter)
     .onAppear {
-      viewModel.start(audioSources: audioSources, startingIndex: startingIndex)
+      playback.playerAppeared()
+      playback.start(audioSources: audioSources, startingIndex: startingIndex)
     }
     .task {
       let preWarmState = pointsOfInterest.beginInterval("Pre-Warm Renderers")
@@ -98,12 +99,12 @@ struct MusicPlayerView: View {
       seedPaletteForCurrentSong()
     }
     .onDisappear {
-      viewModel.cleanup()
+      playback.playerDisappeared()
     }
     .task(id: showScreenshotToast) { await screenshotToastChanged() }
-    .alert(viewModel.playingError?.errorDescription
+    .alert(playback.playingError?.errorDescription
            ?? String(localized: "An unknown error occurred during playback."),
-           isPresented: $viewModel.failedPlaying) {
+           isPresented: Bindable(playback).failedPlaying) {
       Button("Okay", role: .cancel) { playingErrorOkayTapped() }
     }
     .alert(audioManager.initializationError?.errorDescription
@@ -195,13 +196,14 @@ struct MusicPlayerView: View {
     pointsOfInterest.emitEvent("Visualizer Selected", "\(String(describing: type), privacy: .public)")
     if type != visualizerSelection.current {
       usageManager.recordSelection(type)
+      OpenVisualizerIntent.donate(type)
     }
     visualizerSelection.current = type
   }
 
   private func playingErrorOkayTapped() {
-    viewModel.failedPlaying = false
-    viewModel.playingError = nil
+    playback.failedPlaying = false
+    playback.playingError = nil
   }
 
   private func initializationErrorOkayTapped() {
@@ -255,7 +257,7 @@ private struct AudioReactiveVisualizerLayer: View {
 }
 
 private struct PlayerControlsLayer: View {
-  let viewModel: MusicPlayerView.MusicPlayerViewModel
+  let playback: PlaybackController
   @Binding var isTapped: Bool
 
   @Dependency(AudioEngineManager.self) private var audioManager
@@ -303,13 +305,13 @@ private struct PlayerControlsLayer: View {
       .padding(.horizontal)
 
       HStack {
-        SkipBackwardButton(viewModel: viewModel, color: normalFillColor)
+        SkipBackwardButton(playback: playback, color: normalFillColor)
           .padding()
 
         Spacer()
 
         Button {
-          viewModel.togglePlayback()
+          playback.togglePlayback()
         } label: {
           Image(systemName: audioManager.isPlaying ? "pause" : "play")
             .foregroundStyle(normalFillColor)
@@ -320,7 +322,7 @@ private struct PlayerControlsLayer: View {
         Spacer()
 
         Button {
-          viewModel.skipForwards()
+          playback.skipForwards()
         } label: {
           Image(systemName: "forward")
             .foregroundStyle(normalFillColor)

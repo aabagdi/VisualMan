@@ -6,6 +6,25 @@
 	<true/>
 	<key>CFBundleGetInfoString</key>
 	<string></string>
+	<key>INIntentsSupported</key>
+	<array>
+		<string>INPlayMediaIntent</string>
+	</array>
+	<key>INSupportedMediaCategories</key>
+	<array>
+		<string>INMediaCategoryMusic</string>
+	</array>
+	<key>NSSiriUsageDescription</key>
+	<string>Siri can play songs from your music library in VisualMan when you ask, like “Play Come As You Are on VisualMan.”</string>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Visual Man</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>visual man</string>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
