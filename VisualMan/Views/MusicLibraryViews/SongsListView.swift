@@ -40,7 +40,6 @@ struct SongsListView: View {
                                description: Text("Your music library has no songs."))
       }
     }
-    .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
     .navigationTitle("Songs")
   }

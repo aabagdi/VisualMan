@@ -7,7 +7,7 @@
 
 #if !targetEnvironment(simulator)
 import SwiftUI
-import MetalKit
+import Metal
 
 struct AbstractExpressionismVisualizerView: View {
   let isPlaying: Bool

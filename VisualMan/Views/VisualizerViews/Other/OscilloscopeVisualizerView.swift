@@ -26,6 +26,7 @@ struct OscilloscopeVisualizerView: View {
     static let crtScanlineIntensity: Float = 0.3
     static let crtVignetteStrength: Float = 0.4
     static let phosphorRetention: Float = 0.75
+    static let referenceFrameRate: Float = 120
     static let crtMaxSampleOffsetFraction = crtMaxOffsetFraction(curvature: crtCurvature)
     static let trailGlow: [(width: CGFloat, opacity: Double)] = [
       (16.0, 0.025),
@@ -54,6 +55,10 @@ struct OscilloscopeVisualizerView: View {
   @State private var phosphorTrail: [Float] = .init(repeating: 0.0, count: Constants.displayPointCount)
 
   @Dependency(AudioEngineManager.self) private var audioManager
+
+  private func retention(_ perFrame: Float, dt: Float) -> Float {
+    pow(perFrame, dt * Constants.referenceFrameRate)
+  }
 
   private func triggerIndex(in waveform: [1024 of Float]) -> Int {
     let searchLimit = 1024 - Constants.windowSamples
@@ -217,21 +222,24 @@ struct OscilloscopeVisualizerView: View {
           if v > rawPeak { rawPeak = v }
         }
 
-        let retention = Constants.phosphorRetention
+        let phosphor = retention(Constants.phosphorRetention, dt: dt)
+        let decay = retention(Constants.decayFactor, dt: dt)
+        let attack = retention(Constants.attackSmoothing, dt: dt)
+        let release = retention(Constants.releaseSmoothing, dt: dt)
         let n = Constants.displayPointCount
         var trail = phosphorTrail
         var smoothed = smoothedWaveform
         for i in 0..<n {
-          trail[i] = trail[i] * retention + smoothed[i] * (1.0 - retention)
+          trail[i] = trail[i] * phosphor + smoothed[i] * (1.0 - phosphor)
         }
 
         if rawPeak < Constants.silenceThreshold {
           for i in 0..<n {
-            smoothed[i] *= Constants.decayFactor
+            smoothed[i] *= decay
             if abs(smoothed[i]) < Constants.decayThreshold {
               smoothed[i] = 0
             }
-            trail[i] *= Constants.decayFactor
+            trail[i] *= decay
             if abs(trail[i]) < Constants.decayThreshold {
               trail[i] = 0
             }
@@ -242,7 +250,7 @@ struct OscilloscopeVisualizerView: View {
           for i in 0..<n {
             let target = downsampled[i]
             let current = smoothed[i]
-            let smooth = abs(target) > abs(current) ? Constants.attackSmoothing : Constants.releaseSmoothing
+            let smooth = abs(target) > abs(current) ? attack : release
             smoothed[i] = current * smooth + target * (1.0 - smooth)
           }
         }

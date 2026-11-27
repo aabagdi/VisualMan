@@ -68,7 +68,9 @@ struct VisualizerAudioConditioner {
     }
     let waveformGain = intensity.waveformGain
     waveform.withUnsafeElementPointer { samples in
-      if waveformGain != 1 {
+      if waveformGain > 1 {
+        Self.softLimit(samples, count: 1024, gain: waveformGain)
+      } else if waveformGain != 1 {
         Self.scale(samples, count: 1024, by: waveformGain, lower: -1, upper: 1)
       }
       limitWaveformRise(samples, maxRise: stage.maxRise)
@@ -187,6 +189,14 @@ struct VisualizerAudioConditioner {
       vDSP_vadd(state, 1, input, 1, input, 1, n)
     }
     state.update(from: input, count: count)
+  }
+
+  private static func softLimit(_ values: UnsafeMutablePointer<Float>, count: Int, gain: Float) {
+    let knee = gain - 1
+    for i in 0..<count {
+      let x = min(max(values[i], -1), 1)
+      values[i] = gain * x / (1 + knee * abs(x))
+    }
   }
 
   private static func scale(

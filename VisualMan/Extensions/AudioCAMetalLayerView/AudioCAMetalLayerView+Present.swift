@@ -58,7 +58,10 @@ extension AudioCAMetalLayerView.Coordinator {
       if let firstFrameState {
         pointsOfInterest.endInterval("Time to First Frame", firstFrameState)
       }
-      guard feedback.error == nil, gate.markGPUCompleted() else { return }
+      if let error = feedback.error {
+        blitLogger.error("Present pass failed: \(error.localizedDescription, privacy: .public)")
+      }
+      guard gate.markGPUCompleted(failed: feedback.error != nil) else { return }
       drawable.present()
       pacer?.frameCompleted(submitted: submitted)
     }

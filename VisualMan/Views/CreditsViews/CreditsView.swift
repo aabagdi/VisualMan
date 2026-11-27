@@ -146,7 +146,6 @@ struct CreditsView: View {
     }
     .listStyle(.insetGrouped)
     .navigationTitle("Credits")
-    .toolbar(.hidden, for: .tabBar)
   }
 }
 
@@ -219,7 +218,6 @@ private struct LicenseLink: View {
       }
       .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar(.hidden, for: .tabBar)
     } label: {
       LabeledContent(title, value: license)
     }

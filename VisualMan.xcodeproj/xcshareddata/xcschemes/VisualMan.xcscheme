@@ -79,7 +79,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-AbExGPUTiming YES"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-NavierStokesGPUTiming YES"

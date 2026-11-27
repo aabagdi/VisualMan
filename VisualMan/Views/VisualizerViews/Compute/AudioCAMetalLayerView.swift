@@ -7,7 +7,7 @@
 
 #if !targetEnvironment(simulator)
 import SwiftUI
-import MetalKit
+import Metal
 import QuartzCore
 import Dependencies
 import os

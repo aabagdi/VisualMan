@@ -61,7 +61,6 @@ struct VisualizerStatsView: View {
       }
     }
     .navigationTitle("Stats")
-    .toolbar(.hidden, for: .tabBar)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button("Reset", role: .destructive) {

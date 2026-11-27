@@ -17,7 +17,7 @@ actor DSPProcessor {
   private let dftSetup: OpaquePointer
   private var audioLevels: [1024 of Float] = .init(repeating: 0.0)
   private var visualizerBars: [32 of Float] = .init(repeating: 0.0)
-  private var gainHistory: [30 of Float] = .init(repeating: 0.0)
+  private var gainHistory: [120 of Float] = .init(repeating: 0.0)
   private var gainHistoryWriteIndex = 0
   private var gainHistoryCount = 0
   private var gainHistorySum: Float = 0
@@ -76,7 +76,7 @@ actor DSPProcessor {
     powerSpectrum = [1024 of Float](repeating: 0.0)
     normalizedSpectrum = [1024 of Float](repeating: 0.0)
     waveformBuffer = [1024 of Float](repeating: 0.0)
-    gainHistory = [30 of Float](repeating: 0.0)
+    gainHistory = [120 of Float](repeating: 0.0)
     gainHistoryWriteIndex = 0
     gainHistoryCount = 0
     gainHistorySum = 0
@@ -85,6 +85,28 @@ actor DSPProcessor {
   }
 
   func processSamples(_ samples: ArraySlice<Float>, sampleRate: Float) -> DSPResult {
+    let analyzed = samples.suffix(Constants.fftSize)
+    let skipped = samples.count - analyzed.count
+    if skipped > 0 {
+      writeToRing(samples.prefix(skipped))
+    }
+
+    var hopStart = analyzed.startIndex
+    var pendingSamples = skipped
+    while hopStart < analyzed.endIndex {
+      let hopEnd = min(hopStart + Constants.hopSize, analyzed.endIndex)
+      let hop = analyzed[hopStart..<hopEnd]
+      pendingSamples += hop.count
+      let dt = sampleRate > 0 ? Float(pendingSamples) / sampleRate : 1.0 / 60.0
+      analyzeHop(hop, sampleRate: sampleRate, dt: dt)
+      pendingSamples = 0
+      hopStart = hopEnd
+    }
+
+    return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars, waveform: waveformBuffer)
+  }
+
+  private func analyzeHop(_ samples: ArraySlice<Float>, sampleRate: Float, dt: Float) {
     writeToRing(samples)
 
     captureWaveform()
@@ -94,18 +116,15 @@ actor DSPProcessor {
     
     audioLevels.withUnsafeElementPointer { al in
       normalizedSpectrum.withUnsafeElementPointer { lm in
-        var interpolation: Float = Constants.interpolation
+        var interpolation: Float = 1 - exp(-max(dt, 1e-4) / Constants.levelsTau)
         vDSP_vintb(al, 1, lm, 1, &interpolation, al, 1, vDSP_Length(Constants.spectrumSize))
       }
     }
     
     let newBars = createVisualizerBars(from: audioLevels)
-    let dt = sampleRate > 0 ? Float(samples.count) / sampleRate : 1.0 / 60.0
 
     updateAutomaticGainControl(bars: newBars, dt: dt)
     smoothVisualizerBars(newBars, dt: dt)
-    
-    return DSPResult(audioLevels: audioLevels, visualizerBars: visualizerBars, waveform: waveformBuffer)
   }
   
   private func writeToRing(_ samples: ArraySlice<Float>) {

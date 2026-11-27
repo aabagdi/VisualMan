@@ -37,7 +37,6 @@ struct PlaylistListView: View {
       }
     }
     .navigationTitle("Playlists")
-    .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
   }
 }

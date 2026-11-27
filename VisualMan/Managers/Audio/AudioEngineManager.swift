@@ -6,7 +6,6 @@
 //
 
 import AVFoundation
-import Synchronization
 import Dependencies
 import Accelerate
 import os

@@ -38,7 +38,6 @@ struct ArtistListView: View {
                                description: Text("Your music library has no artists."))
       }
     }
-    .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
     .navigationTitle("Artists")
   }

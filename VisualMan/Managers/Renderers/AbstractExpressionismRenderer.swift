@@ -7,7 +7,6 @@
 
 #if !targetEnvironment(simulator)
 import Metal
-import MetalKit
 import os
 import QuartzCore
 

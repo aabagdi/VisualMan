@@ -1,5 +1,5 @@
 # VisualMan
-An audio visualizer/music player app with seven built-in real-time audio visualizers.
+An audio visualizer/music player app with fifteen built-in real-time audio visualizers.
 
 ![Home Screen](images/01.PNG)
 
@@ -9,7 +9,7 @@ An audio visualizer/music player app with seven built-in real-time audio visuali
 
 
 ## Features
-- 7 different beautiful real-time visualizers to choose from
+- 15 different beautiful real-time visualizers to choose from
 - Access music from the local music library or files directory
 - Background playback capabilities
 

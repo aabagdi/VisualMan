@@ -10,6 +10,7 @@ import Accelerate
 extension DSPProcessor {
   enum Constants {
     static let fftSize = 2048
+    static let hopSize = 512
     static let ringMask = fftSize - 1
     static let spectrumSize = 1024
     static let barCount = 32
@@ -20,13 +21,13 @@ extension DSPProcessor {
     static let presenceHighFrequency: Float = 8000.0
     static let attackTau: Float = 0.009
     static let releaseTau: Float = 0.024
-    static let gainHistorySize = 30
+    static let gainHistorySize = 120
     static let minGain: Float = 0.3
     static let maxGain: Float = 2.0
     static let targetPeak: Float = 0.75
     static let dbOffset: Float = 60.0
     static let dbRange: Float = 80.0
-    static let interpolation: Float = 0.2
+    static let levelsTau: Float = 0.208
     static let avgWeight: Float = 0.7
     static let maxWeight: Float = 0.3
     static let tanhScale: Float = 1.5

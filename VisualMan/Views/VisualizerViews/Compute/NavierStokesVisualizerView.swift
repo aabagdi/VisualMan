@@ -7,7 +7,7 @@
 
 #if !targetEnvironment(simulator)
 import SwiftUI
-import MetalKit
+import Metal
 
 struct NavierStokesVisualizerView: View {
   @Environment(VisualizerSelection.self) private var visualizerSelection

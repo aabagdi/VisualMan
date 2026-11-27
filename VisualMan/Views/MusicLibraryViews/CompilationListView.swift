@@ -36,7 +36,6 @@ struct CompilationListView: View {
                                description: Text("Your music library has no compilations."))
       }
     }
-    .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
     .navigationTitle("Compilations")
   }

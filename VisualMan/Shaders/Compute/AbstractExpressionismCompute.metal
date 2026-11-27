@@ -611,7 +611,7 @@ inline StrokeResult evaluateSplatter(float2 p, constant AbExStroke &s, float can
     float nLobe = 3.0 + floor(hash11(seed * 1.31) * 5.0);
     float lobe = sin(ang * nLobe + seed * 11.0) * 0.32
                + cos(ang * (nLobe + 2.0) + seed * 7.0) * 0.20;
-    float en   = shaderSimplex2D(float2(ang * 2.0, seed * 3.0)) * 0.22;
+    float en   = shaderSimplex2D(float2(cos(ang), sin(ang)) * 2.0 + seed * 3.0) * 0.22;
     effR = radius * (1.0 + lobe + en);
   }
 

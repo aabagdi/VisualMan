@@ -20,7 +20,6 @@ struct GenreDetailView: View {
         AlbumRowView(album: album)
       }
     }
-    .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
     .navigationTitle(genre)
   }

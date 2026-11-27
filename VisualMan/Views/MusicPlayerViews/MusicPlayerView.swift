@@ -80,7 +80,6 @@ struct MusicPlayerView: View {
     .accessibilityAction(.magicTap) {
       playback.togglePlayback()
     }
-    .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(ExternalDisplayAccessory())
     .modifier(SettingsToolbarButton())
     .modifier(VisualizerUsageTracking(visualizer: visualizerSelection.current))

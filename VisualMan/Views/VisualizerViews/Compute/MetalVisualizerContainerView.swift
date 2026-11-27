@@ -7,7 +7,7 @@
 
 #if !targetEnvironment(simulator)
 import SwiftUI
-import MetalKit
+import Metal
 
 struct MetalRendererNoConfiguration: Equatable {}
 
@@ -64,7 +64,7 @@ struct MetalVisualizerContainerView<R: MetalVisualizerRenderer, Configuration: E
         renderer = cached
       } else {
         renderer = await cache.renderer(R.self) {
-          guard let device = cache.sharedDevice ?? MTLCreateSystemDefaultDevice() else { return nil }
+          guard let device = cache.getOrCreateDevice() else { return nil }
           return await factory(device)
         }
       }

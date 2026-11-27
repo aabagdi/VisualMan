@@ -7,7 +7,7 @@
 
 #if !targetEnvironment(simulator)
 import SwiftUI
-import MetalKit
+import Metal
 
 struct LiquidLightVisualizerView: View {
   private static let config = MetalViewConfig(

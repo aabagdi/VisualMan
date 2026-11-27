@@ -90,6 +90,7 @@ nonisolated final class PresentGate: Sendable {
   private struct State {
     var drawableSignaled = false
     var gpuCompleted = false
+    var gpuFailed = false
   }
 
   private let state = OSAllocatedUnfairLock(initialState: State())
@@ -97,14 +98,15 @@ nonisolated final class PresentGate: Sendable {
   func markDrawableSignaled() -> Bool {
     state.withLock { state in
       state.drawableSignaled = true
-      return state.gpuCompleted
+      return state.gpuCompleted && !state.gpuFailed
     }
   }
 
-  func markGPUCompleted() -> Bool {
+  func markGPUCompleted(failed: Bool) -> Bool {
     state.withLock { state in
       state.gpuCompleted = true
-      return state.drawableSignaled
+      state.gpuFailed = failed
+      return state.drawableSignaled && !failed
     }
   }
 }

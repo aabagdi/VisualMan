@@ -38,7 +38,6 @@ struct GenreListView: View {
                                description: Text("Your music library has no genres."))
       }
     }
-    .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
     .navigationTitle("Genres")
   }

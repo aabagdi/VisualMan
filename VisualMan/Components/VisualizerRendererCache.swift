@@ -22,10 +22,11 @@ final class VisualizerRendererCache {
   @ObservationIgnored
   private(set) var sharedDevice: MTLDevice?
 
-  private func getOrCreateDevice() -> MTLDevice? {
+  func getOrCreateDevice() -> MTLDevice? {
     if let device = sharedDevice { return device }
-    sharedDevice = MTLCreateSystemDefaultDevice()
-    return sharedDevice
+    guard let device = MTLCreateSystemDefaultDevice(), device.supportsFamily(.metal4) else { return nil }
+    sharedDevice = device
+    return device
   }
 
   func renderer<R: MetalVisualizerRenderer>(_ type: R.Type) -> R? {

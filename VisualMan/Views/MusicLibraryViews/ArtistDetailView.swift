@@ -21,7 +21,6 @@ struct ArtistDetailView: View {
       }
     }
     .navigationTitle(artistName)
-    .toolbarVisibility(.hidden, for: .tabBar)
     .modifier(SettingsToolbarButton())
   }
 }
